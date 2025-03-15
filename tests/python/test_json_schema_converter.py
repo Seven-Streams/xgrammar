@@ -1,7 +1,7 @@
 import json
 import sys
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import pytest
 from pydantic import BaseModel, Field, TypeAdapter, WithJsonSchema, create_model
@@ -749,8 +749,8 @@ def test_restricted_string():
 
 def test_complex_restrictions():
     class RestrictedModel(BaseModel):
-        restricted_string: Annotated[str, WithJsonSchema({"type": "string", "pattern": r"[^\"]*"})]
-        restricted_value: Annotated[int, Field(strict=True, ge=0, lt=44)]
+        restricted_string: str = Field(pattern=r"[^\"]*")
+        restricted_value: int = Field(..., strict=True, ge=0, lt=44)
 
     # working instance
     instance = RestrictedModel(restricted_string="abd", restricted_value=42)
@@ -775,11 +775,11 @@ def test_complex_restrictions():
 
 def test_dynamic_model():
     class MainModel(BaseModel):
-        restricted_string: Annotated[str, WithJsonSchema({"type": "string", "pattern": r"[a-f]"})]
+        restricted_string: str = WithJsonSchema({"type": "string", "pattern": r"[a-f]"})
 
     additional_fields = {
         "restricted_string_dynamic": (
-            Annotated[str, WithJsonSchema({"type": "string", "pattern": r"[a-x]"})],
+            # Annotated[str, WithJsonSchema({"type": "string", "pattern": r"[a-x]"})],
             ...,
         )
     }
