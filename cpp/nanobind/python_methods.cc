@@ -60,7 +60,7 @@ bool GrammarMatcher_FillNextTokenBitmask(
   return matcher.FillNextTokenBitmask(&bitmask_dltensor, index, debug_print);
 }
 
-std::vector<int> Matcher_DebugGetMaskedTokensFromBitmask(
+std::vector<int> Testing_DebugGetMaskedTokensFromBitmask(
     intptr_t token_bitmask_ptr, std::vector<int64_t> shape, int32_t vocab_size, int32_t index
 ) {
   XGRAMMAR_CHECK(shape.size() == 1 || shape.size() == 2) << "token_bitmask tensor must be 1D or 2D";
@@ -80,11 +80,30 @@ std::vector<int> Matcher_DebugGetMaskedTokensFromBitmask(
   return result;
 }
 
+std::pair<bool, int> Testing_IsSingleTokenBitmask(
+    intptr_t token_bitmask_ptr, std::vector<int64_t> shape, int32_t vocab_size, int32_t index
+) {
+  XGRAMMAR_CHECK(shape.size() == 1 || shape.size() == 2) << "token_bitmask tensor must be 1D or 2D";
+
+  DLTensor bitmask_dltensor{
+      reinterpret_cast<void*>(token_bitmask_ptr),
+      DLDevice{kDLCPU, 0},
+      static_cast<int32_t>(shape.size()),
+      GetBitmaskDLType(),
+      shape.data(),
+      nullptr,
+      0
+  };
+
+  return _IsSingleTokenBitmask(bitmask_dltensor, vocab_size, index);
+}
+
 void Kernels_ApplyTokenBitmaskInplaceCPU(
     intptr_t logits_ptr,
     std::pair<int64_t, int64_t> logits_shape,
     intptr_t bitmask_ptr,
     std::pair<int64_t, int64_t> bitmask_shape,
+    int vocab_size,
     std::optional<std::vector<int>> indices
 ) {
   std::array<int64_t, 2> logits_shape_arr = {logits_shape.first, logits_shape.second};
@@ -110,7 +129,7 @@ void Kernels_ApplyTokenBitmaskInplaceCPU(
       0
   };
 
-  ApplyTokenBitmaskInplaceCPU(&logits_dltensor, bitmask_dltensor, indices);
+  ApplyTokenBitmaskInplaceCPU(&logits_dltensor, bitmask_dltensor, vocab_size, indices);
 }
 
 std::vector<int32_t> GetAllowEmptyRuleIds(const CompiledGrammar& compiled_grammar) {
