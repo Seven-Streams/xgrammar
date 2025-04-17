@@ -1877,4 +1877,19 @@ void CompactFSMWithStartEnd::GetPossibleRules(const int& state, std::unordered_s
   }
   return;
 }
+
+Result<FSMWithStartEnd> RegexIR::visit(const RegexIR::Rule& node) const {
+  if (node.rule_num < 0) {
+    return Result<FSMWithStartEnd>::Err(std::make_shared<Error>("Invalid rule number!"));
+  }
+  FSMWithStartEnd result;
+  result.start = 0;
+  result.is_dfa = true;
+  result.ends.insert(1);
+  result.fsm.edges.push_back(std::vector<FSMEdge>());
+  result.fsm.edges.push_back(std::vector<FSMEdge>());
+  result.fsm.edges[0].emplace_back(-1, node.rule_num, 1);
+  return Result<FSMWithStartEnd>::Ok(result);
+}
+
 }  // namespace xgrammar

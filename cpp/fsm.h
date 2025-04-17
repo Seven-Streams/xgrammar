@@ -504,6 +504,9 @@ class RegexIR {
     bool is_positive;
     std::vector<Node> nodes;
   };
+  struct Rule {
+    int rule_num;
+  };
   // This struct is used to represent a bracket in regex.
   std::vector<Node> nodes;
 
@@ -521,6 +524,7 @@ class RegexIR {
   Result<FSMWithStartEnd> visit(const Bracket& node) const;
   Result<FSMWithStartEnd> visit(const Repeat& node) const;
   Result<FSMWithStartEnd> visit(const LookAhead& node) const;
+  Result<FSMWithStartEnd> visit(const Rule& node) const;
 };
 
 /*!
