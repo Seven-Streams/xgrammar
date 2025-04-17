@@ -51,7 +51,7 @@ struct FSMEdge {
 };
 class CompactFSM;
 class FSM {
- private:
+ public:
   /*!
     \brief Get the epsilon closure of a state.
     \param state The current state id.
@@ -59,7 +59,6 @@ class FSM {
   */
   void GetEpsilonClosure(int state, std::unordered_set<int>* result) const;
 
- public:
   using Edge = FSMEdge;
   /*!
     \brief Transform a FSM to a compact FSM.
@@ -293,7 +292,7 @@ class FSMWithStartEnd {
 };
 
 class CompactFSM {
- private:
+ public:
   /*!
     \brief Get the epsilon closure of a state.
     \param state The current state id.
@@ -301,7 +300,6 @@ class CompactFSM {
   */
   void GetEpsilonClosure(int state, std::unordered_set<int>* result) const;
 
- public:
   /*!
    \brief Advance the FSM to the next state.
    \param from The current states.
