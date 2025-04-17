@@ -138,4 +138,50 @@ bool PythonParser::Parse(const std::string& input) {
   return !parser.current_states.empty();
 }
 
+void PythonParser::Reset() {
+  parser.Reset();
+  line_start = true;
+  last_indent = 0;
+  now_indent = 0;
+  return;
+}
+
+Result<PythonParser> GrammarToParser(const std::string& grammar, const int& indent_num) {
+  PythonParser parser;
+  parser.indent_whitespace = indent_num;
+  size_t now_parsing = 0;
+  std::vector<std::string> lines;
+  // Build the rule mapping.
+  while (grammar.find('\n', now_parsing) != std::string::npos) {
+    auto pos = grammar.find('\n', now_parsing);
+    lines.push_back(grammar.substr(now_parsing, pos - now_parsing));
+    now_parsing = pos + 1;
+  }
+  if (now_parsing != grammar.size()) {
+    lines.push_back(grammar.substr(now_parsing));
+  }
+  for (const auto& line : lines) {
+    if (line.find("::=") == std::string::npos) {
+      XGRAMMAR_LOG(FATAL) << "Invalid grammar: " << line;
+      return Result<PythonParser>::Err(std::make_shared<Error>("Invalid grammar"));
+    }
+    if (line.find_first_of("::=") != line.find_last_of("::=")) {
+      XGRAMMAR_LOG(FATAL) << "Invalid grammar: " << line;
+      return Result<PythonParser>::Err(std::make_shared<Error>("Invalid grammar"));
+    }
+    auto pos = line.find("::=");
+    auto lhs = line.substr(0, pos);
+    while ((!lhs.empty()) && (lhs.back() == ' ')) {
+      lhs.pop_back();
+    }
+    while ((!lhs.empty()) && (lhs.front() == ' ')) {
+      lhs.erase(lhs.begin());
+    }
+    parser.rule_map[lhs] = parser.rule_map.size();
+    parser.rule_name_map[parser.rule_map[lhs]] = lhs;
+  }
+  // TODO: Build the parser.
+  XGRAMMAR_LOG(FATAL) << "Not implemented yet.";
+  return Result<PythonParser>::Ok(parser);
+};
 }  // namespace xgrammar

@@ -64,6 +64,7 @@ class EarleyParser {
     \brief Reset the parser to the initial state.
   */
   void Reset();
+  void BuildMap();
 };
 class PythonParser {
  public:
@@ -72,7 +73,6 @@ class PythonParser {
   // Used for debugging.
   std::unordered_map<int, std::string> rule_name_map;
   int indent_whitespace = 4;
-  int rule_num = 0;
   // True if at the beginning of a line.
   // Used for realizing the indentation.
   bool line_start = true;
@@ -86,6 +86,11 @@ class PythonParser {
     \param input The input string.
   */
   bool Parse(const std::string& input);
+
+  /*!
+    \brief Reset the parser to the initial state.
+  */
+  void Reset();
 };
 
 Result<PythonParser> GrammarToParser(const std::string& grammar, const int& indent_num = 4);
