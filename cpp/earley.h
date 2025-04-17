@@ -16,7 +16,6 @@ struct State {
   State(int node_num, int pos, int fsm_num, bool accept)
       : node_num(node_num), pos(pos), fsm_num(fsm_num), accept(accept) {}
   State() = default;
-  State(const State& rhs) = default;
   bool operator==(const State& rhs) const {
     return node_num == rhs.node_num && pos == rhs.pos && fsm_num == rhs.fsm_num;
   }
