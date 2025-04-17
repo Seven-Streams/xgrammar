@@ -80,6 +80,7 @@ class PythonParser {
   int last_indent = 0;
   // The indentation of the current line.
   int now_indent = 0;
+  const std::string root_rule = "$";
 
   /*!
     \brief Check if the input string is accepted by the parser.
@@ -93,7 +94,22 @@ class PythonParser {
   void Reset();
 };
 
+/*!
+  \brief Convert a grammar string to a PythonParser.
+  \param grammar The grammar string.
+  \param indent_num The number of spaces for indentation.
+  \return The PythonParser object.
+*/
 Result<PythonParser> GrammarToParser(const std::string& grammar, const int& indent_num = 4);
+
+/*!
+  \brief Convert a string to a RegexIR.
+  \param regex The regex string.
+  \return The IR.
+*/
+Result<RegexIR> RuleToIR(
+    const std::string& rule, const std::unordered_map<std::string, int>& rule_map
+);
 }  // namespace xgrammar
 
 #endif

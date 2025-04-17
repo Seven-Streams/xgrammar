@@ -1,11 +1,18 @@
 #include "earley.h"
 
+#include <cstddef>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "fsm.h"
 #include "support/logging.h"
+#include "support/utils.h"
 namespace xgrammar {
+Result<RegexIR> RulestoIR(
+    const std::vector<std::string>& rules, const std::unordered_map<std::string, int>& rule_map
+);
 void EarleyParser::Complete(const State& state) {
   auto& state_map = states[state.pos];
   if (state_map.find(state.fsm_num) == state_map.end()) {
@@ -151,6 +158,7 @@ Result<PythonParser> GrammarToParser(const std::string& grammar, const int& inde
   parser.indent_whitespace = indent_num;
   size_t now_parsing = 0;
   std::vector<std::string> lines;
+  std::unordered_map<int, std::vector<std::string>> rules;
   // Build the rule mapping.
   while (grammar.find('\n', now_parsing) != std::string::npos) {
     auto pos = grammar.find('\n', now_parsing);
@@ -171,17 +179,81 @@ Result<PythonParser> GrammarToParser(const std::string& grammar, const int& inde
     }
     auto pos = line.find("::=");
     auto lhs = line.substr(0, pos);
+    auto rhs = line.substr(pos + 3);
     while ((!lhs.empty()) && (lhs.back() == ' ')) {
       lhs.pop_back();
     }
     while ((!lhs.empty()) && (lhs.front() == ' ')) {
       lhs.erase(lhs.begin());
     }
-    parser.rule_map[lhs] = parser.rule_map.size();
-    parser.rule_name_map[parser.rule_map[lhs]] = lhs;
+    if (parser.rule_map.find(lhs) == parser.rule_map.end()) {
+      if (lhs == parser.root_rule) {
+        parser.parser.root_fsm_num = parser.rule_map.size();
+      }
+      parser.rule_map[lhs] = parser.rule_map.size();
+      parser.rule_name_map[parser.rule_map[lhs]] = lhs;
+      rules[parser.rule_map[lhs]] = std::vector<std::string>({rhs});
+    } else {
+      rules[parser.rule_map[lhs]].push_back(rhs);
+    }
   }
-  // TODO: Build the parser.
+  for (const auto& rule : rules) {
+    auto ir = RulestoIR(rule.second, parser.rule_map);
+    if (ir.IsErr()) {
+      return Result<PythonParser>::Err(ir.UnwrapErr());
+    }
+    auto built = ir.Unwrap().Build();
+    if (built.IsErr()) {
+      return Result<PythonParser>::Err(built.UnwrapErr());
+    }
+    auto fsm = built.Unwrap();
+    fsm.SimplifyEpsilon();
+    fsm.SimplifyTransition();
+    CompactFSMWithStartEnd compact_fsm;
+    compact_fsm.fsm = fsm.fsm.ToCompact();
+    compact_fsm.ends = std::move(fsm.ends);
+    compact_fsm.start = std::move(fsm.start);
+    parser.parser.fsms.push_back(std::move(compact_fsm));
+  }
   XGRAMMAR_LOG(FATAL) << "Not implemented yet.";
   return Result<PythonParser>::Ok(parser);
 };
+
+Result<RegexIR> RulestoIR(
+    const std::vector<std::string>& rules, const std::unordered_map<std::string, int>& rule_map
+) {
+  if (rules.empty()) {
+    return Result<RegexIR>::Err(std::make_shared<Error>("Empty rules."));
+  }
+  if (rules.size() == 1) {
+    return RuleToIR(rules[0], rule_map);
+  }
+  std::vector<RegexIR> irs;
+  for (const auto& rule : rules) {
+    auto ir = RuleToIR(rule, rule_map);
+    if (ir.IsErr()) {
+      return ir;
+    }
+    irs.push_back(ir.Unwrap());
+  }
+  RegexIR::Union union_node;
+  union_node.nodes.reserve(irs.size());
+  for (const auto& ir : irs) {
+    RegexIR::Bracket bracket;
+    for (const auto& node : ir.nodes) {
+      bracket.nodes.push_back(node);
+    }
+    union_node.nodes.push_back(std::move(bracket));
+  }
+  RegexIR result;
+  result.nodes.push_back(std::move(union_node));
+  return Result<RegexIR>::Ok(result);
+}
+
+Result<RegexIR> RuleToIR(
+    const std::string& rule, const std::unordered_map<std::string, int>& rule_map
+) {
+  // TODO:
+  return Result<RegexIR>::Err(std::make_shared<Error>("Not implemented yet."));
+}
 }  // namespace xgrammar
