@@ -107,7 +107,12 @@ inline bool EarleyParser::IsAccepted(const State& state, const uint8_t& ch) cons
                         << static_cast<int>(current_element.type);
   }
 }
-
+inline void MoveToNextPosition(State& state) {
+  state.element_id += 1;
+  state.element_in_string = 0;
+  state.left_utf8_bytes = 0;
+  return;
+}
 inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   if (IsAccepted(state, ch)) {
     auto current_sequence = grammar_->GetRuleExpr(state.sequence_id);
@@ -163,9 +168,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           history_states.back().emplace_back(new_state);
           return;
         } else if (state.left_utf8_bytes == 1) {
-          new_state.element_id += 1;
-          new_state.left_utf8_bytes = 0;
-          new_state.element_in_string = 0;
+          MoveToNextPosition(new_state);
           history_states.back().emplace_back(new_state);
           return;
         }
@@ -178,9 +181,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           history_states.back().emplace_back(new_state);
           return;
         }
-        new_state.element_id += 1;
-        new_state.left_utf8_bytes = 0;
-        new_state.element_in_string = 0;
+        MoveToNextPosition(new_state);
         history_states.back().emplace_back(new_state);
         return;
       }
@@ -202,9 +203,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           history_states.back().emplace_back(new_state);
           return;
         }
-        new_state.element_id += 1;
-        new_state.element_in_string = 0;
-        new_state.left_utf8_bytes = 0;
+        MoveToNextPosition(new_state);
         history_states.back().emplace_back(new_state);
         return;
       }
