@@ -6,6 +6,7 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "xgrammar/grammar.h"
@@ -29,23 +30,41 @@ struct State {
 
   /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
    * rule starts to match the string.*/
-  int32_t parent_id = -1;
-
+  int32_t parent_pos = -1;
+  /*! \brief Store all the possible predictions rule_ids. Used for completion. */
+  std::optional<std::vector<int32_t>> predictions = std::nullopt;
   /*! \brief A parent_id value of kNoParent means this StackElement is the root of the tree. */
   static constexpr int32_t kNoParent = -1;
 
   constexpr State() = default;
   constexpr State(
-      int32_t rule_id, int32_t sequence_id, int32_t element_id, int32_t parent_id = kNoParent
+      int32_t rule_id, int32_t sequence_id, int32_t element_id, int32_t parent_pos = kNoParent
   )
-      : rule_id(rule_id), sequence_id(sequence_id), element_id(element_id), parent_id(parent_id) {}
+      : rule_id(rule_id),
+        sequence_id(sequence_id),
+        element_id(element_id),
+        parent_pos(parent_pos) {}
 
+  constexpr State(
+      int32_t rule_id,
+      int32_t sequence_id,
+      int32_t element_id,
+      int32_t left_utf8_bytes,
+      int32_t element_in_string,
+      int32_t parent_pos
+  )
+      : rule_id(rule_id),
+        sequence_id(sequence_id),
+        element_id(element_id),
+        left_utf8_bytes(left_utf8_bytes),
+        element_in_string(element_in_string),
+        parent_pos(parent_pos) {}
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
 
   bool operator==(const State& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
-           element_id == other.element_id && parent_id == other.parent_id &&
+           element_id == other.element_id && parent_pos == other.parent_pos &&
            left_utf8_bytes == other.left_utf8_bytes && element_in_string == other.element_in_string;
   }
 };
@@ -53,7 +72,7 @@ class StateHash {
  public:
   size_t operator()(const State& state) const {
     return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
-           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_id);
+           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_pos);
   }
 };
 class EarleyParser {
@@ -74,17 +93,17 @@ class EarleyParser {
   /*!
     \brief The scanning operation of the Earley parser.
   */
-  bool Scan(const State& state, const uint8_t& ch) const;
+  bool Scan(const State& state, const uint8_t& ch);
 
   /*!
       \brief The prediction operation of the Earley parser.
   */
-  void Predict(const State& state) const;
+  void Predict(const State& state);
 
   /*!
       \brief The completion operation of the Earley parser.
   */
-  void Complete(const State& state) const;
+  void Complete(const State& state);
 
   /*!
     \brief Check if the state is the end of the grammar.

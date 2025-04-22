@@ -9,7 +9,7 @@
 namespace xgrammar {
 
 inline bool EarleyParser::IsEndOfGrammar(const State& stack_element) const {
-  if (stack_element.parent_id != State::kNoParent) {
+  if (stack_element.parent_pos != State::kNoParent) {
     return false;
   }
   auto seq_expr = grammar_->GetRuleExpr(stack_element.sequence_id);
@@ -36,13 +36,37 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   return;
 }
 
-inline void EarleyParser::Complete(const State& state) const {
+inline void EarleyParser::Complete(const State& state) {
+  auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  if ((cur_rule.size() != state.element_id) || (state.parent_pos == State::kNoParent)) {
+    return;
+  }
+  const auto& parent_states_list = states[state.parent_pos];
+  for (const auto& parent_state : parent_states_list) {
+    if (!parent_state.predictions.has_value()) {
+      continue;
+    }
+    bool in_vec =
+        std::find(parent_state.predictions->begin(), parent_state.predictions->end(), state) !=
+        parent_state.predictions->end();
+    if (!in_vec) {
+      continue;
+    }
+    history_states.back().emplace_back(
+        parent_state.rule_id,
+        parent_state.sequence_id,
+        parent_state.element_id + 1,
+        parent_state.left_utf8_bytes,
+        parent_state.element_in_string,
+        parent_state.parent_pos
+    );
+  }
+  return;
+}
+inline void EarleyParser::Predict(const State& state) {
   // TODO:
 }
-inline void EarleyParser::Predict(const State& state) const {
-  // TODO:
-}
-inline bool EarleyParser::Scan(const State& state, const uint8_t& ch) const {
+inline bool EarleyParser::Scan(const State& state, const uint8_t& ch) {
   // TODO:
   XGRAMMAR_LOG(FATAL) << "Scan is not implemented yet.";
 }
