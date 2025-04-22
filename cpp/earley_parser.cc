@@ -47,8 +47,9 @@ inline void EarleyParser::Complete(const State& state) {
       continue;
     }
     bool in_vec =
-        std::find(parent_state.predictions->begin(), parent_state.predictions->end(), state) !=
-        parent_state.predictions->end();
+        std::find(
+            parent_state.predictions->begin(), parent_state.predictions->end(), state.rule_id
+        ) != parent_state.predictions->end();
     if (!in_vec) {
       continue;
     }
