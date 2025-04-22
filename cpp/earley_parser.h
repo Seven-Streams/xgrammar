@@ -91,9 +91,13 @@ class EarleyParser {
   };
 
   /*!
+    \brief Check if a character is accepted by the current state.
+  */
+  bool IsAccepted(const State& state, const uint8_t& ch) const;
+  /*!
     \brief The scanning operation of the Earley parser.
   */
-  bool Scan(const State& state, const uint8_t& ch);
+  void Scan(const State& state, const uint8_t& ch);
 
   /*!
       \brief The prediction operation of the Earley parser.
