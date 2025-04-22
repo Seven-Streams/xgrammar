@@ -1,6 +1,8 @@
 #include "earley_parser.h"
 
 #include <cstdint>
+#include <unordered_set>
+#include <vector>
 
 #include "grammar_data_structure.h"
 namespace xgrammar {
@@ -31,5 +33,37 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   states.erase(states.end() - cnt, states.end());
   history_states.erase(history_states.end() - cnt, history_states.end());
   return;
+}
+
+inline void EarleyParser::Complete(const State& state) const {}
+bool EarleyParser::Advance(const uint8_t& ch) {
+  std::vector<State> state_queue = states.back();
+  class StateHash {
+   public:
+    size_t operator()(const State& state) const {
+      return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
+             std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_id);
+    }
+  };
+  std::unordered_set<State, StateHash> visited;
+  history_states.push_back(std::vector<State>());
+  states.push_back(std::vector<State>());
+  while (!state_queue.empty()) {
+    auto state = state_queue.back();
+    state_queue.pop_back();
+    if (visited.find(state) != visited.end()) {
+      continue;
+    }
+    visited.insert(state);
+    Predict(state);
+    Complete(state);
+    Scan(state, ch);
+  }
+  if (history_states.back().empty()) {
+    history_states.pop_back();
+    states.pop_back();
+    return false;
+  }
+  return true;
 }
 }  // namespace xgrammar
