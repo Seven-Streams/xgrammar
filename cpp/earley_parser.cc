@@ -310,4 +310,25 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   }
   return true;
 }
+
+EarleyParser::EarleyParser(const Grammar& grammar) : grammar_(grammar) {
+  states.push_back(std::vector<State>());
+  history_states.push_back(std::vector<State>());
+  history_states.back().emplace_back(
+      grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent
+  );
+  std::unordered_set<State, StateHash> visited;
+  auto check_queue = history_states.back();
+  while (!check_queue.empty()) {
+    const auto& state = check_queue.back();
+    if (visited.find(check_queue.back()) != visited.end()) {
+      check_queue.pop_back();
+      continue;
+    }
+    visited.insert(state);
+    Complete(state);
+    Predict(state);
+    check_queue.pop_back();
+  }
+}
 }  // namespace xgrammar

@@ -136,6 +136,8 @@ class EarleyParser {
     \return True if the root rule is completed, false otherwise.
   */
   bool CanReachEnd() const;
+
+  EarleyParser(const Grammar& grammar);
 };
 }  // namespace xgrammar
 #endif  // XGRAMMAR_EARLEY_PARSER_H_
