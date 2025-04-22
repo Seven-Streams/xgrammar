@@ -1,5 +1,6 @@
 #include "earley_parser.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
@@ -44,7 +45,17 @@ void EarleyParser::PopBackStates(int32_t cnt) {
 
 inline void EarleyParser::Complete(const State& state) {
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-  if ((cur_rule.size() != state.element_id) || (state.parent_pos == State::kNoParent)) {
+  /*
+    Case 1: The current state is the end of the rule.
+    Case 2: The current rule can be empty.
+    If neither of the above two cases is true, we return.
+  */
+  if (((cur_rule.size() != state.element_id) || (state.parent_pos == State::kNoParent)) &&
+      (std::find(
+           grammar_->allow_empty_rule_ids.begin(),
+           grammar_->allow_empty_rule_ids.end(),
+           state.rule_id
+       ) == grammar_->allow_empty_rule_ids.end())) {
     return;
   }
   const auto& parent_states_list = states[state.parent_pos];
@@ -71,7 +82,54 @@ inline void EarleyParser::Complete(const State& state) {
   return;
 }
 inline void EarleyParser::Predict(const State& state) {
-  // TODO:
+  // Step 1. Handle unexpanded rules.
+  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+    auto cur_rule_id = state.rule_id;
+    auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
+    auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
+
+    if (cur_rule_body.type == RuleExprType::kTagDispatch) {
+      history_states.back().emplace_back(
+          cur_rule_id,
+          cur_rule_body_id,
+          grammar_->root_tag_dispatch_fsm->StartNode(),
+          state.parent_pos
+      );
+      return;
+    } else {
+      XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
+      for (auto sequence_id : cur_rule_body) {
+        auto ref_rule_sequence = grammar_->GetRuleExpr(sequence_id);
+        if (ref_rule_sequence.type == RuleExprType::kEmptyStr &&
+            state.parent_pos != State::kNoParent) {
+          // If the empty string is in a root rule, it indicates the end of the grammar and we
+          // just add it as a stack top to indicate the matching ends.
+          continue;
+        }
+        history_states.back().emplace_back(cur_rule_id, sequence_id, 0, state.parent_pos);
+      }
+      return;
+    }
+  }
+
+  auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
+
+  auto current_element = grammar_->GetRuleExpr(cur_sequence[state.element_id]);
+
+  // Step 3. Iterate into sub rules
+  if (current_element.type == RuleExprType::kRuleRef) {
+    State sub_rule =
+        State(current_element[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1);
+    history_states.back().push_back(sub_rule);
+    auto parent = std::find(states.back().begin(), states.back().end(), state);
+    if (parent == states.back().end()) {
+      auto state_copy = state;
+      state_copy.predictions = std::vector<int32_t>({current_element[0]});
+    } else {
+      parent->predictions->push_back(current_element[0]);
+    }
+  }
+  return;
 }
 inline bool EarleyParser::IsAccepted(const State& state, const uint8_t& ch) const {
   auto current_sequence = grammar_->GetRuleExpr(state.sequence_id);
