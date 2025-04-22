@@ -21,6 +21,7 @@ inline bool EarleyParser::IsEndOfGrammar(const State& stack_element) const {
 }
 
 bool EarleyParser::CanReachEnd() const {
+  const auto& current_states = history_states.back();
   return std::any_of(current_states.begin(), current_states.end(), [&](const State& state) {
     return IsEndOfGrammar(state);
   });
@@ -45,27 +46,41 @@ inline bool EarleyParser::Scan(const State& state, const uint8_t& ch) const {
   // TODO:
   XGRAMMAR_LOG(FATAL) << "Scan is not implemented yet.";
 }
+/*!
+  \note The workflow of Advance is as follows:
+  1. Scan all the states in the latest states. Add all the possible states
+  to the next states.
+  2. If the next states are empty, then the character is not accepted.
+  3. If the next states are not empty, then the character is accepted. Moreover,
+  we need to complete and predict the next states.
 
+  \note Thus, when initializing the Earley parser, we need to add the initial state
+  to the history_states[0], and perform prediction and completion on the initial state.
+*/
 bool EarleyParser::Advance(const uint8_t& ch) {
-  current_states.clear();
-  std::vector<State> state_queue = states.back();
+  const auto& latest_states = history_states.back();
   history_states.push_back(std::vector<State>());
-  states.push_back(std::vector<State>());
-  while (!state_queue.empty()) {
-    auto state = state_queue.back();
-    state_queue.pop_back();
-    if (current_states.find(state) != current_states.end()) {
-      continue;
-    }
-    current_states.insert(state);
-    Predict(state);
-    Complete(state);
+  for (const auto& state : latest_states) {
     Scan(state, ch);
   }
   if (history_states.back().empty()) {
     history_states.pop_back();
-    states.pop_back();
     return false;
+  }
+  states.push_back(std::vector<State>());
+  std::unordered_set<State, StateHash> visited;
+  // We need a copy of the states, since we need to rollback the states.
+  auto check_queue = history_states.back();
+  while (!check_queue.empty()) {
+    const auto& state = check_queue.back();
+    if (visited.find(check_queue.back()) != visited.end()) {
+      check_queue.pop_back();
+      continue;
+    }
+    visited.insert(state);
+    Complete(state);
+    Predict(state);
+    check_queue.pop_back();
   }
   return true;
 }

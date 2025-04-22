@@ -6,7 +6,6 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
-#include <unordered_set>
 #include <vector>
 
 #include "xgrammar/grammar.h"
@@ -28,12 +27,9 @@ struct State {
    * a byte string. */
   int32_t element_in_string = 0;
 
-  /*! \brief The id of the parent node in the PersistentStack. */
+  /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
+   * rule starts to match the string.*/
   int32_t parent_id = -1;
-
-  /*! \brief The reference count of this StackElement. If reduces to zero, the node will be
-   * removed from the StackElementBuffer. */
-  int reference_count = 0;
 
   /*! \brief A parent_id value of kNoParent means this StackElement is the root of the tree. */
   static constexpr int32_t kNoParent = -1;
@@ -75,7 +71,6 @@ class EarleyParser {
       std::vector<State>(),
   };
 
-  std::unordered_set<State, StateHash> current_states;
   /*!
     \brief The scanning operation of the Earley parser.
   */
