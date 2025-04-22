@@ -6,6 +6,7 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
+#include <unordered_set>
 #include <vector>
 
 #include "xgrammar/grammar.h"
@@ -52,6 +53,13 @@ struct State {
            left_utf8_bytes == other.left_utf8_bytes && element_in_string == other.element_in_string;
   }
 };
+class StateHash {
+ public:
+  size_t operator()(const State& state) const {
+    return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
+           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_id);
+  }
+};
 class EarleyParser {
  private:
   /*! \brief The grammar to be parsed. */
@@ -67,6 +75,7 @@ class EarleyParser {
       std::vector<State>(),
   };
 
+  std::unordered_set<State, StateHash> current_states;
   /*!
     \brief The scanning operation of the Earley parser.
   */

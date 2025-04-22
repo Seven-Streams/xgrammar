@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "grammar_data_structure.h"
+#include "support/logging.h"
 namespace xgrammar {
 
 inline bool EarleyParser::IsEndOfGrammar(const State& stack_element) const {
@@ -20,7 +21,6 @@ inline bool EarleyParser::IsEndOfGrammar(const State& stack_element) const {
 }
 
 bool EarleyParser::CanReachEnd() const {
-  const auto& current_states = states.back();
   return std::any_of(current_states.begin(), current_states.end(), [&](const State& state) {
     return IsEndOfGrammar(state);
   });
@@ -35,26 +35,29 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   return;
 }
 
-inline void EarleyParser::Complete(const State& state) const {}
+inline void EarleyParser::Complete(const State& state) const {
+  // TODO:
+}
+inline void EarleyParser::Predict(const State& state) const {
+  // TODO:
+}
+inline bool EarleyParser::Scan(const State& state, const uint8_t& ch) const {
+  // TODO:
+  XGRAMMAR_LOG(FATAL) << "Scan is not implemented yet.";
+}
+
 bool EarleyParser::Advance(const uint8_t& ch) {
+  current_states.clear();
   std::vector<State> state_queue = states.back();
-  class StateHash {
-   public:
-    size_t operator()(const State& state) const {
-      return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
-             std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_id);
-    }
-  };
-  std::unordered_set<State, StateHash> visited;
   history_states.push_back(std::vector<State>());
   states.push_back(std::vector<State>());
   while (!state_queue.empty()) {
     auto state = state_queue.back();
     state_queue.pop_back();
-    if (visited.find(state) != visited.end()) {
+    if (current_states.find(state) != current_states.end()) {
       continue;
     }
-    visited.insert(state);
+    current_states.insert(state);
     Predict(state);
     Complete(state);
     Scan(state, ch);
