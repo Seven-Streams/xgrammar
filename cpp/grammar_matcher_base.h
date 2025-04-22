@@ -36,7 +36,7 @@ class GrammarMatcherBase {
    */
   GrammarMatcherBase(
       const Grammar& grammar,
-      State init_stack_element = kInvalidStackElement,
+      StackElement init_stack_element = kInvalidStackElement,
       bool expand_init_stack_element = true
   )
       : grammar_(grammar), persistent_stack_(grammar), stack_tops_history_(&persistent_stack_) {
@@ -67,20 +67,20 @@ class GrammarMatcherBase {
    * locations. See ExpandEquivalentStackElements. Only meaningful when init_stack_element is not
    * kInvalidStackElement.
    */
-  void PushInitialState(const State& init_stack_element, bool expand_init_stack_element);
+  void PushInitialState(const StackElement& init_stack_element, bool expand_init_stack_element);
 
   // Check if the character is accepted by the current stack element.
-  bool CheckIfAccepted(const State& stack_element, uint8_t char_value) const;
+  bool CheckIfAccepted(const StackElement& stack_element, uint8_t char_value) const;
 
   /*!
    * \brief Move to the next position in the current rule, and return the updated stack element.
    */
-  State MoveToNextPosition(const State& stack_element);
+  StackElement MoveToNextPosition(const StackElement& stack_element);
 
   /*!
    * \brief Return the updated stack element after accepting the character.
    */
-  State AdvanceStackElementWithChar(const State& stack_element, uint8_t char_value);
+  StackElement AdvanceStackElementWithChar(const StackElement& stack_element, uint8_t char_value);
 
   /*!
    * \brief Expand the given stack element to all possible positions approachable in the grammar.
@@ -102,7 +102,7 @@ class GrammarMatcherBase {
    * at the end of the rule. Only used in its self recursion.
    */
   void ExpandEquivalentStackElements(
-      const State& cur_stack_element,
+      const StackElement& cur_stack_element,
       std::vector<int32_t>* new_stack_tops,
       int32_t cur_stack_element_id = -1,
       bool consider_parent = true

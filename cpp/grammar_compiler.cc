@@ -204,12 +204,12 @@ class GrammarMatcherForTokenMaskCache : public GrammarMatcherBase {
  public:
   // Do not expand the initial stack element: we want to find the accepted/rejected tokens
   // that exactly start from the initial stack element.
-  GrammarMatcherForTokenMaskCache(const Grammar& grammar, State init_stack_element)
+  GrammarMatcherForTokenMaskCache(const Grammar& grammar, StackElement init_stack_element)
       : GrammarMatcherBase(grammar, init_stack_element, false),
         init_rule_id(init_stack_element.rule_id) {}
 
   /*!
-   * \brief Get the adaptive token mask for the given State.
+   * \brief Get the adaptive token mask for the given StackElement.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
    * no uncertain tokens. Useful for the root rule.
    */
@@ -243,7 +243,7 @@ bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
   if (lookahead_assertion_id == -1) {
     return true;
   }
-  auto lookahead_stack_element = State(-1, lookahead_assertion_id, 0);
+  auto lookahead_stack_element = StackElement(-1, lookahead_assertion_id, 0);
   PushInitialState(lookahead_stack_element, true);
   int token_len = token.size();
 
@@ -522,7 +522,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     adaptive_token_mask_cache_mutex.emplace();
   }
 
-  auto add_adaptive_token_mask = [&](const State& stack_element, bool is_root_rule) {
+  auto add_adaptive_token_mask = [&](const StackElement& stack_element, bool is_root_rule) {
     auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, stack_element);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(), tokenizer_info_.GetSortedDecodedVocab(), is_root_rule
@@ -537,7 +537,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     }
   };
 
-  auto add_task_adaptive_token_mask = [&](const State& stack_element, bool is_root_rule) {
+  auto add_task_adaptive_token_mask = [&](const StackElement& stack_element, bool is_root_rule) {
     // Execute depending on whether we use thread_pool
     if (max_threads_ > 1) {
       thread_pool->Execute([add_adaptive_token_mask, stack_element, is_root_rule]() {
@@ -553,7 +553,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     auto rule_body = grammar->GetRuleExpr(rule.body_expr_id);
 
     if (rule_body.type == RuleExprType::kTagDispatch) {
-      auto cur_stack_element = State(rule_id, rule.body_expr_id, 0);
+      auto cur_stack_element = StackElement(rule_id, rule.body_expr_id, 0);
       for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
         cur_stack_element.element_id = i;
         add_task_adaptive_token_mask(cur_stack_element, rule_id == root_rule_id);
@@ -573,7 +573,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
         if (element.type == RuleExprType::kRuleRef) {
           continue;
         }
-        auto cur_stack_element = State(rule_id, sequence_id, element_id);
+        auto cur_stack_element = StackElement(rule_id, sequence_id, element_id);
         if (element.type == RuleExprType::kByteString) {
           for (int idx = 0; idx < element.size(); ++idx) {
             cur_stack_element.element_in_string = idx;

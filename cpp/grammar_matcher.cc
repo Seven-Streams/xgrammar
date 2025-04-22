@@ -161,9 +161,9 @@ void ApplyTokenBitmaskInplaceCPU(
  * during matching.
  *
  * ## Stack Structure (see grammar_matcher_state.h)
- * The element of every stack is a State object, referring a position in the grammar. If a
- * State points to a RuleRef element (referring to another rule), the next element of the
- * stack will be a position in this rule. If a State is a CharacterClass element, it will be
+ * The element of every stack is a StackElement object, referring a position in the grammar. If a
+ * StackElement points to a RuleRef element (referring to another rule), the next element of the
+ * stack will be a position in this rule. If a StackElement is a CharacterClass element, it will be
  * the last in the stack, meaning *the next* character to match.
  *
  * ## Matching Process (see grammar_matcher_base.h)
@@ -528,7 +528,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     auto cur_stack_element = persistent_stack_[top];
     auto cur_sequence = grammar_->GetRuleExpr(cur_stack_element.sequence_id);
     if (cur_sequence.type != RuleExprType::kTagDispatch &&
-        cur_stack_element.parent_id == State::kNoParent &&
+        cur_stack_element.parent_id == StackElement::kNoParent &&
         cur_stack_element.element_id == cur_sequence.size()) {
       continue;
     }
@@ -673,7 +673,7 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
       }
 
       // The state comes to the end of the grammar
-      if (stack_element.parent_id == State::kNoParent &&
+      if (stack_element.parent_id == StackElement::kNoParent &&
           stack_element.element_id == cur_sequence.size()) {
         can_find_next_char = false;
         break;

@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-// matcher_data_structure.h is included to use State
+// matcher_data_structure.h is included to use StackElement
 #include "persistent_stack.h"
 #include "support/dynamic_bitset.h"
 #include "support/utils.h"
@@ -25,10 +25,10 @@ namespace xgrammar {
 /******************* CompiledGrammar Datastructures *******************/
 
 /*!
- * \brief Preprocessed information, for a given specific State, divides the token set
+ * \brief Preprocessed information, for a given specific StackElement, divides the token set
  * into three categories: accepted, rejected, and uncertain.
- * Accepted: tokens that can be determined by the current State to be acceptable
- * Rejected: tokens that can be determined by the current State to be unacceptable
+ * Accepted: tokens that can be determined by the current StackElement to be acceptable
+ * Rejected: tokens that can be determined by the current StackElement to be unacceptable
  * Uncertain: tokens that need the state of the parent StackElements to determine if acceptable
  *
  * \note uncertain indices are stored directly. Accepted / rejected indices have three ways to
@@ -92,7 +92,7 @@ class CompiledGrammar::Impl {
   /******************* The adaptive token mask cache *******************/
 
   struct StackElementEqual {
-    std::size_t operator()(const State& lhs, const State& rhs) const noexcept {
+    std::size_t operator()(const StackElement& lhs, const StackElement& rhs) const noexcept {
       return lhs.sequence_id == rhs.sequence_id && lhs.element_id == rhs.element_id &&
              lhs.left_utf8_bytes == rhs.left_utf8_bytes &&
              lhs.element_in_string == rhs.element_in_string;
@@ -100,7 +100,7 @@ class CompiledGrammar::Impl {
   };
 
   struct StackElementHash {
-    std::size_t operator()(const State& stack_element) const noexcept {
+    std::size_t operator()(const StackElement& stack_element) const noexcept {
       return HashCombine(
           stack_element.sequence_id,
           stack_element.element_id,
@@ -111,7 +111,7 @@ class CompiledGrammar::Impl {
   };
 
   /*! \brief Mapping from the stack top element to the adaptive token mask. */
-  std::unordered_map<State, AdaptiveTokenMask, StackElementHash, StackElementEqual>
+  std::unordered_map<StackElement, AdaptiveTokenMask, StackElementHash, StackElementEqual>
       adaptive_token_mask_cache;
 
   Grammar GetGrammar() const { return grammar; }

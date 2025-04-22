@@ -23,16 +23,17 @@ constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
 constexpr int32_t kDispatchedTagDispatchElementId = -1;
 
 /*! \brief Check the codepoint is contained in the character class. */
-bool GrammarMatcherBase::CheckIfAccepted(const State& stack_element, uint8_t char_value) const {
+bool GrammarMatcherBase::CheckIfAccepted(const StackElement& stack_element, uint8_t char_value)
+    const {
   auto current_sequence = grammar_->GetRuleExpr(stack_element.sequence_id);
   if (current_sequence.type == Grammar::Impl::RuleExprType::kTagDispatch) {
     XGRAMMAR_DCHECK(stack_element.element_id != -1);
     return true;
   }
 
-  if (stack_element.parent_id == State::kNoParent &&
+  if (stack_element.parent_id == StackElement::kNoParent &&
       current_sequence.size() == stack_element.element_id) {
-    // This State means previous elements has matched the complete rule.
+    // This StackElement means previous elements has matched the complete rule.
     // But we are still need to accept a new character, so this stack will become invalid.
     return false;
   }
@@ -65,8 +66,8 @@ bool GrammarMatcherBase::CheckIfAccepted(const State& stack_element, uint8_t cha
   }
 }
 
-State GrammarMatcherBase::MoveToNextPosition(const State& stack_element) {
-  State new_stack_element = stack_element;
+StackElement GrammarMatcherBase::MoveToNextPosition(const StackElement& stack_element) {
+  StackElement new_stack_element = stack_element;
   new_stack_element.element_id += 1;
   new_stack_element.element_in_string = 0;
   new_stack_element.left_utf8_bytes = 0;
@@ -77,8 +78,8 @@ State GrammarMatcherBase::MoveToNextPosition(const State& stack_element) {
   return new_stack_element;
 }
 
-State GrammarMatcherBase::AdvanceStackElementWithChar(
-    const State& stack_element, uint8_t char_value
+StackElement GrammarMatcherBase::AdvanceStackElementWithChar(
+    const StackElement& stack_element, uint8_t char_value
 ) {
   auto current_sequence = grammar_->GetRuleExpr(stack_element.sequence_id);
   if (current_sequence.type == Grammar::Impl::RuleExprType::kTagDispatch) {
@@ -111,13 +112,13 @@ State GrammarMatcherBase::AdvanceStackElementWithChar(
           << "The end node of the tag dispatch fsm does not correspond to any rule id";
       auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(next_node);
       new_stack_element =
-          State(refered_rule_id, kUnexpandedRuleStartSequenceId, 0, new_stack_element_id);
+          StackElement(refered_rule_id, kUnexpandedRuleStartSequenceId, 0, new_stack_element_id);
     }
     return new_stack_element;
   }
 
   auto current_element = grammar_->GetRuleExpr(current_sequence[stack_element.element_id]);
-  State new_stack_element = stack_element;
+  StackElement new_stack_element = stack_element;
   switch (current_element.type) {
     case RuleExprType::kCharacterClass: {
       if (stack_element.left_utf8_bytes > 1) {
@@ -161,7 +162,7 @@ State GrammarMatcherBase::AdvanceStackElementWithChar(
 }
 
 void GrammarMatcherBase::ExpandEquivalentStackElements(
-    const State& cur_stack_element,
+    const StackElement& cur_stack_element,
     std::vector<int32_t>* new_stack_tops,
     int32_t cur_stack_element_id,
     bool consider_parent
@@ -181,7 +182,7 @@ void GrammarMatcherBase::ExpandEquivalentStackElements(
     auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
 
     if (cur_rule_body.type == RuleExprType::kTagDispatch) {
-      auto new_stack_element = State(
+      auto new_stack_element = StackElement(
           cur_rule_id,
           cur_rule_body_id,
           grammar_->root_tag_dispatch_fsm->StartNode(),
@@ -194,12 +195,13 @@ void GrammarMatcherBase::ExpandEquivalentStackElements(
       for (auto sequence_id : cur_rule_body) {
         auto ref_rule_sequence = grammar_->GetRuleExpr(sequence_id);
         if (ref_rule_sequence.type == RuleExprType::kEmptyStr &&
-            cur_stack_element.parent_id != State::kNoParent) {
+            cur_stack_element.parent_id != StackElement::kNoParent) {
           // If the empty string is in a root rule, it indicates the end of the grammar and we
           // just add it as a stack top to indicate the matching ends.
           continue;
         }
-        auto new_stack_element = State(cur_rule_id, sequence_id, 0, cur_stack_element.parent_id);
+        auto new_stack_element =
+            StackElement(cur_rule_id, sequence_id, 0, cur_stack_element.parent_id);
         ExpandEquivalentStackElements(new_stack_element, new_stack_tops, -1, false);
       }
       return;
@@ -216,7 +218,7 @@ void GrammarMatcherBase::ExpandEquivalentStackElements(
 
   // Step 2. The stack element points to the end of a rule.
   if (cur_sequence.size() == cur_stack_element.element_id) {
-    if (cur_stack_element.parent_id == State::kNoParent) {
+    if (cur_stack_element.parent_id == StackElement::kNoParent) {
       // Case 2.1. The stack element points to the end of the grammar (meaning the matching
       // succeeded). Insert it and add as a stack top.
       new_stack_tops->push_back(f_add_current_stack_element());
@@ -243,7 +245,7 @@ void GrammarMatcherBase::ExpandEquivalentStackElements(
   // Step 3. Iterate into sub rules
   if (current_element.type == RuleExprType::kRuleRef) {
     ExpandEquivalentStackElements(
-        State(current_element[0], kUnexpandedRuleStartSequenceId, 0, stack_element_id),
+        StackElement(current_element[0], kUnexpandedRuleStartSequenceId, 0, stack_element_id),
         new_stack_tops,
         -1,
         false
@@ -335,12 +337,13 @@ std::string GrammarMatcherBase::PrintStackState(int steps_before_latest) const {
 }
 
 void GrammarMatcherBase::PushInitialState(
-    const State& init_stack_element, bool expand_init_stack_element
+    const StackElement& init_stack_element, bool expand_init_stack_element
 ) {
   if (init_stack_element == kInvalidStackElement) {
     // Initialize the stack with the root rule.
-    auto init_stack_element =
-        State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent);
+    auto init_stack_element = StackElement(
+        grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, StackElement::kNoParent
+    );
     tmp_new_stack_tops_.clear();
     ExpandEquivalentStackElements(init_stack_element, &tmp_new_stack_tops_);
     stack_tops_history_.PushHistory(tmp_new_stack_tops_);
