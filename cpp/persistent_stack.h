@@ -18,7 +18,7 @@
 namespace xgrammar {
 
 /*! \brief Specifies a stack element. It is mainly a position in a rule. */
-struct StackElement {
+struct State {
   /*! \brief The rule's id. Used for debug purposes. */
   int32_t rule_id = -1;
   /*! \brief Which choice in this rule is selected. */
@@ -37,15 +37,15 @@ struct StackElement {
   /*! \brief The id of the parent node in the PersistentStack. */
   int32_t parent_id = -1;
 
-  /*! \brief The reference count of this StackElement. If reduces to zero, the node will be
+  /*! \brief The reference count of this State. If reduces to zero, the node will be
    * removed from the StackElementBuffer. */
   int reference_count = 0;
 
-  /*! \brief A parent_id value of kNoParent means this StackElement is the root of the tree. */
+  /*! \brief A parent_id value of kNoParent means this State is the root of the tree. */
   static constexpr int32_t kNoParent = -1;
 
-  constexpr StackElement() = default;
-  constexpr StackElement(
+  constexpr State() = default;
+  constexpr State(
       int32_t rule_id, int32_t sequence_id, int32_t element_id, int32_t parent_id = kNoParent
   )
       : rule_id(rule_id), sequence_id(sequence_id), element_id(element_id), parent_id(parent_id) {}
@@ -53,24 +53,24 @@ struct StackElement {
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
 
-  bool operator==(const StackElement& other) const {
+  bool operator==(const State& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
            element_id == other.element_id && parent_id == other.parent_id &&
            left_utf8_bytes == other.left_utf8_bytes && element_in_string == other.element_in_string;
   }
 };
 
-/*! \brief A special value for invalid StackElement. */
-inline constexpr StackElement kInvalidStackElement(-1, -1, -1, -1);
+/*! \brief A special value for invalid State. */
+inline constexpr State kInvalidStackElement(-1, -1, -1, -1);
 
 /*! \brief A buffer to manage all StackElements. */
 class StackElementBuffer {
  public:
   /*!
-   * \brief Allocate a new StackElement. with given initial value.
+   * \brief Allocate a new State. with given initial value.
    * \returns The id of the allocated node.
    */
-  int32_t Allocate(StackElement stack_element) {
+  int32_t Allocate(State stack_element) {
     int32_t id;
     if (free_nodes_.empty()) {
       buffer_.emplace_back();
@@ -85,7 +85,7 @@ class StackElementBuffer {
     return id;
   }
 
-  /*! \brief Free the StackElement with the given id. */
+  /*! \brief Free the State with the given id. */
   void Free(int32_t id) {
     XGRAMMAR_DCHECK(!buffer_[id].IsInvalid());
     buffer_[id] = kInvalidStackElement;
@@ -101,13 +101,13 @@ class StackElementBuffer {
     return buffer_.size() - free_nodes_.size();
   }
 
-  /*! \brief Get the StackElement with the given id. */
-  StackElement& operator[](int32_t id) {
+  /*! \brief Get the State with the given id. */
+  State& operator[](int32_t id) {
     XGRAMMAR_DCHECK(id >= 0 && id < static_cast<int32_t>(buffer_.size()));
     XGRAMMAR_DCHECK(!buffer_[id].IsInvalid());
     return buffer_[id];
   }
-  const StackElement& operator[](int32_t id) const {
+  const State& operator[](int32_t id) const {
     XGRAMMAR_DCHECK(id >= 0 && id < static_cast<int32_t>(buffer_.size()));
     XGRAMMAR_DCHECK(!buffer_[id].IsInvalid());
     return buffer_[id];
@@ -122,7 +122,7 @@ class StackElementBuffer {
 
  private:
   /*! \brief The buffer to store all StackElements. */
-  std::vector<StackElement> buffer_;
+  std::vector<State> buffer_;
   /*! \brief A stack to store all free node ids. */
   std::vector<int32_t> free_nodes_;
 };
@@ -137,16 +137,16 @@ class PersistentStack {
   PersistentStack(const Grammar& grammar) : grammar_(grammar) {}
 
   /*!
-   * \brief Create a new node with the given StackElement. The reference count of the new node
+   * \brief Create a new node with the given State. The reference count of the new node
    * is zero.
    *
    * \note Later, this node should either be pointed by some child rule, or become a stack top
    * node (so it will be pointed to by an attached pointer) to be maintained in the
    * reference-counting based memory management.
    */
-  int32_t NewNode(const StackElement& stack_element) {
+  int32_t NewNode(const State& stack_element) {
     auto id = node_buffer_.Allocate(stack_element);
-    if (stack_element.parent_id != StackElement::kNoParent) {
+    if (stack_element.parent_id != State::kNoParent) {
       XGRAMMAR_DCHECK(
           stack_element.parent_id < static_cast<int32_t>(node_buffer_.Capacity()) &&
           !node_buffer_[stack_element.parent_id].IsInvalid()
@@ -157,24 +157,24 @@ class PersistentStack {
   }
 
   /*!
-   * \brief Check if the given StackElement points to the end of the grammar. For a stack element,
+   * \brief Check if the given State points to the end of the grammar. For a stack element,
    * if its rule id is the root rule id, and the element id equals to the length of the sequence it
    * refers to, it would be the end of the grammar.
    */
-  bool IsEndOfGrammar(const StackElement& stack_element) const;
+  bool IsEndOfGrammar(const State& stack_element) const;
 
   /*! \brief Attach an additional reference to the node with the given id. */
   void AttachRefTo(int32_t id) {
-    XGRAMMAR_DCHECK(id != StackElement::kNoParent);
+    XGRAMMAR_DCHECK(id != State::kNoParent);
     node_buffer_[id].reference_count++;
   }
 
   /*! \brief Remove a reference to the node with the given id. If the reference count becomes zero,
    * free the node and recursively all its ancestors with zero reference count. */
   void RemoveRefTo(int32_t id) {
-    XGRAMMAR_DCHECK(id != StackElement::kNoParent);
+    XGRAMMAR_DCHECK(id != State::kNoParent);
     auto cur_node = id;
-    while (cur_node != StackElement::kNoParent) {
+    while (cur_node != State::kNoParent) {
       node_buffer_[cur_node].reference_count--;
       if (node_buffer_[cur_node].reference_count != 0) {
         break;
@@ -185,15 +185,15 @@ class PersistentStack {
     }
   }
 
-  /*! \brief Get the StackElement with the given id. */
-  const StackElement& operator[](int32_t id) const {
-    XGRAMMAR_DCHECK(id != StackElement::kNoParent);
+  /*! \brief Get the State with the given id. */
+  const State& operator[](int32_t id) const {
+    XGRAMMAR_DCHECK(id != State::kNoParent);
     XGRAMMAR_DCHECK(!node_buffer_[id].IsInvalid());
     return node_buffer_[id];
   }
 
   /*! \brief Print the given stack_element to a string. */
-  std::string PrintStackElement(const StackElement& stack_element) const;
+  std::string PrintStackElement(const State& stack_element) const;
 
   /*! \brief Print the stack_element associated with the given id to a string. */
   std::string PrintStackElement(int32_t id) const;
@@ -325,8 +325,8 @@ class StackTopsHistory {
   std::deque<std::vector<int32_t>> stack_tops_history_;
 };
 
-inline bool PersistentStack::IsEndOfGrammar(const StackElement& stack_element) const {
-  if (stack_element.parent_id != StackElement::kNoParent) {
+inline bool PersistentStack::IsEndOfGrammar(const State& stack_element) const {
+  if (stack_element.parent_id != State::kNoParent) {
     return false;
   }
   auto seq_expr = grammar_->GetRuleExpr(stack_element.sequence_id);
@@ -341,9 +341,9 @@ inline std::string PersistentStack::PrintStackElement(int32_t id) const {
   return "id: " + std::to_string(id) + ", " + PrintStackElement(node_buffer_[id]);
 }
 
-inline std::string PersistentStack::PrintStackElement(const StackElement& stack_element) const {
+inline std::string PersistentStack::PrintStackElement(const State& stack_element) const {
   std::stringstream ss;
-  ss << "StackElement: rule " << stack_element.rule_id;
+  ss << "State: rule " << stack_element.rule_id;
   if (stack_element.rule_id != -1) {
     ss << ": " << grammar_->GetRule(stack_element.rule_id).name;
   }
@@ -371,8 +371,7 @@ inline std::string PersistentStack::PrintStackElement(const StackElement& stack_
 inline std::string PersistentStack::PrintStackByTopId(int32_t top_id) const {
   std::stringstream ss;
   std::vector<int32_t> stack;
-  for (auto cur_id = top_id; cur_id != StackElement::kNoParent;
-       cur_id = node_buffer_[cur_id].parent_id) {
+  for (auto cur_id = top_id; cur_id != State::kNoParent; cur_id = node_buffer_[cur_id].parent_id) {
     stack.push_back(cur_id);
   }
   ss << "{\n";
@@ -405,7 +404,7 @@ inline void PersistentStack::CheckWellFormed(const std::vector<int32_t>& outside
     auto cur_id = visit_queue.front();
     visit_queue.pop();
     const auto& stack_element = buffer[cur_id];
-    if (stack_element.parent_id != StackElement::kNoParent) {
+    if (stack_element.parent_id != State::kNoParent) {
       XGRAMMAR_CHECK(stack_element.parent_id >= 0 && stack_element.parent_id < buffer_size);
       XGRAMMAR_CHECK(!buffer[stack_element.parent_id].IsInvalid());
       new_reference_counter[stack_element.parent_id]++;
