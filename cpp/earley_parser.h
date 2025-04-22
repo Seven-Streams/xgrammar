@@ -57,13 +57,15 @@ class EarleyParser {
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
   /*! \brief The tree storing all states. It's used for completation. */
-  std::vector<std::vector<State>> states;
+  std::vector<std::vector<State>> states = {std::vector<State>()};
   /*!
       \brief The history of states. i.e. the i-th(0-base) vector
       will store the states after matching i characters. It's used
       for rollback.
    */
-  std::vector<std::vector<State>> history_states;
+  std::vector<std::vector<State>> history_states = {
+      std::vector<State>(),
+  };
 
   /*!
     \brief The scanning operation of the Earley parser.
@@ -79,6 +81,13 @@ class EarleyParser {
       \brief The completion operation of the Earley parser.
   */
   void Complete(const State& state) const;
+
+  /*!
+    \brief Check if the state is the end of the grammar.
+    \param state The state to be checked.
+    \return True if the state is the end of the grammar, false otherwise.
+  */
+  bool IsEndOfGrammar(const State& state) const;
 
  public:
   /*!
