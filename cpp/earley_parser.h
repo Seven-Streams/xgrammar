@@ -7,6 +7,7 @@
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
 #include <optional>
+#include <queue>
 #include <vector>
 
 #include "xgrammar/grammar.h"
@@ -90,10 +91,7 @@ class EarleyParser {
       std::vector<State>(),
   };
 
-  /*!
-    \brief Check if a character is accepted by the current state.
-  */
-  bool IsAccepted(const State& state, const uint8_t& ch) const;
+  std::queue<State> queue;
   /*!
     \brief The scanning operation of the Earley parser.
   */
