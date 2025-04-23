@@ -32,8 +32,9 @@ struct State {
   /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
    * rule starts to match the string.*/
   int32_t parent_pos = -1;
-  /*! \brief Store all the possible predictions rule_ids. Used for completion. */
-  std::optional<std::vector<int32_t>> predictions = std::nullopt;
+  /*! \brief Store all the possible predictions rule_ids. Used for completion.
+   *   The first element is the rule_id, and  the second element is the sequence_id.*/
+  std::optional<std::vector<std::pair<int32_t, int32_t>>> predictions = std::nullopt;
   /*! \brief A parent_id value of kNoParent means this StackElement is the root of the tree. */
   static constexpr int32_t kNoParent = -1;
 

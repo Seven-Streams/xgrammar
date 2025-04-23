@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "grammar_data_structure.h"
@@ -49,23 +50,19 @@ inline void EarleyParser::Complete(const State& state) {
     Case 2: The current rule can be empty.
     If neither of the above two cases is true, we return.
   */
-  if (((cur_rule.size() != state.element_id) || (state.parent_pos == State::kNoParent)) &&
-      (std::find(
-           grammar_->allow_empty_rule_ids.begin(),
-           grammar_->allow_empty_rule_ids.end(),
-           state.rule_id
-       ) == grammar_->allow_empty_rule_ids.end())) {
+  if ((!((cur_rule.size() != state.element_id) || (state.parent_pos == State::kNoParent))) &&
+      (cur_rule.type != RuleExprType::kEmptyStr) &&
+      (cur_rule.type != RuleExprType::kCharacterClassStar)) {
     return;
   }
   const auto& parent_states_list = states[state.parent_pos];
   for (const auto& parent_state : parent_states_list) {
-    if (!parent_state.predictions.has_value()) {
-      continue;
-    }
-    bool in_vec =
-        std::find(
-            parent_state.predictions->begin(), parent_state.predictions->end(), state.rule_id
-        ) != parent_state.predictions->end();
+    XGRAMMAR_DCHECK(parent_state.predictions.has_value());
+    bool in_vec = std::find(
+                      parent_state.predictions->begin(),
+                      parent_state.predictions->end(),
+                      std::make_pair(state.rule_id, state.sequence_id)
+                  ) != parent_state.predictions->end();
     if (!in_vec) {
       continue;
     }
@@ -77,47 +74,76 @@ inline void EarleyParser::Complete(const State& state) {
         parent_state.element_in_string,
         parent_state.parent_pos
     );
-    in_vec = std::find(history_states.back().begin(), history_states.back().end(), new_state) !=
-             history_states.back().end();
-    if (!in_vec) {
-      history_states.back().push_back(new_state);
-      queue.push(new_state);
-    }
+    queue.push(new_state);
   }
   return;
 }
 inline void EarleyParser::Predict(const State& state) {
+  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+    // TODO: Do something for unexpanded rules.
+  }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-  auto crrent_element = grammar_->GetRuleExpr(cur_rule[state.element_id]);
   switch (cur_rule.type) {
+    // These types will never predict other new rules.
     case RuleExprType::kByteString:
     case RuleExprType::kCharacterClass:
     case RuleExprType::kCharacterClassStar:
     case RuleExprType::kEmptyStr:
       return;
-    // These types will never predict other new rules.
+    // If the type if kRuleRef, then:
+    // 1. Add the new rule into the queue.
+    // 2. Mark the new rule as a prediction of the current state.
     case RuleExprType::kRuleRef: {
       const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
       bool in_vec = ptr != states.back().end();
       if (in_vec) {
-        ptr->predictions->push_back(crrent_element[0]);
+        ptr->predictions->emplace_back(std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId));
       } else {
         states.back().push_back(state);
-        states.back().back().predictions = std::vector<int32_t>();
-        states.back().back().predictions->push_back(crrent_element[0]);
+        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
+        states.back().back().predictions->emplace_back(
+            std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)
+        );
       }
-      history_states.back().emplace_back(
-          crrent_element[0], kUnexpandedRuleStartSequenceId, 0, state.rule_id
-      );
+      queue.emplace(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1);
       break;
     }
+    // If the type if kSequence, then:
+    // 1. Add the new rule_expr into the queue.
+    // 2. Mark the new rule_expr as a prediction of the current state.
     case RuleExprType::kSequence: {
+      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
+      bool in_vec = ptr != states.back().end();
+      if (in_vec) {
+        ptr->predictions->emplace_back(std::make_pair(state.rule_id, cur_rule[state.element_id]));
+      } else {
+        states.back().push_back(state);
+        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
+        states.back().back().predictions->emplace_back(
+            std::make_pair(state.rule_id, cur_rule[state.element_id])
+        );
+      }
+      queue.emplace(state.rule_id, cur_rule[state.element_id], 0, states.size() - 1);
       break;
     }
+      // If the type if kSequence, then:
+    // 1. Add all the new rule_exprs into the queue.
+    // 2. Mark the new rule_exprs as predictions of the current state.
     case RuleExprType::kChoices: {
+      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
+      bool in_vec = ptr != states.back().end();
+      if (!in_vec) {
+        states.back().push_back(state);
+        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
+      }
+      for (const auto& sequence_id : cur_rule) {
+        states.back().back().predictions->emplace_back(std::make_pair(state.rule_id, sequence_id));
+        queue.emplace(state.rule_id, sequence_id, 0, states.size() - 1);
+      }
       break;
     }
     case RuleExprType::kTagDispatch: {
+      // TODO:
       break;
     }
   }
@@ -129,7 +155,22 @@ inline void MoveToNextPosition(State& state) {
   return;
 }
 inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
-  // TODO:
+  auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  switch (cur_rule.type) {
+    // These types can never accept a character directly.
+    case (RuleExprType::kRuleRef):
+    case (RuleExprType::kChoices):
+    case (RuleExprType::kSequence):
+    case (RuleExprType::kEmptyStr):
+      return;
+    case (RuleExprType::kCharacterClass):
+    case (RuleExprType::kCharacterClassStar):
+    case (RuleExprType::kByteString):
+    case (RuleExprType::kTagDispatch):
+      // TODO:
+      break;
+  }
+  return;
 }
 /*!
   \note The workflow of Advance is as follows:
@@ -144,20 +185,16 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
   const auto& latest_states = history_states.back();
-  history_states.push_back(std::vector<State>());
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
-  if (history_states.back().empty()) {
-    history_states.pop_back();
+  if (queue.empty()) {
     return false;
   }
+  history_states.push_back(std::vector<State>());
   states.push_back(std::vector<State>());
   std::unordered_set<State, StateHash> visited;
   // We need a copy of the states, since we need to rollback the states.
-  for (const auto& state : history_states.back()) {
-    queue.push(state);
-  }
   while (!queue.empty()) {
     const auto& state = queue.front();
     if (visited.find(queue.back()) != visited.end()) {
@@ -165,6 +202,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
       continue;
     }
     visited.insert(state);
+    history_states.back().push_back(state);
     Complete(state);
     Predict(state);
     queue.pop();
@@ -187,6 +225,7 @@ EarleyParser::EarleyParser(const Grammar& grammar) : grammar_(grammar) {
       continue;
     }
     visited.insert(state);
+    history_states.back().push_back(state);
     Complete(state);
     Predict(state);
     queue.pop();
