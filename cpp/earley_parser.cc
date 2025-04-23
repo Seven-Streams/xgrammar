@@ -112,7 +112,40 @@ inline void EarleyParser::Complete(const State& state) {
 }
 inline void EarleyParser::Predict(const State& state) {
   if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
-    // TODO: Do something for unexpanded rules.
+    auto cur_rule_id = state.rule_id;
+    auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
+    auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
+    if (cur_rule_body.type == RuleExprType::kTagDispatch) {
+      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
+      bool in_vec = ptr != states.back().end();
+      if (in_vec) {
+        ptr->predictions->emplace_back(std::make_pair(cur_rule_body, cur_rule_body_id));
+      } else {
+        states.back().push_back(state);
+        states.back().back().predictions =
+            std::vector<std::pair<int32_t, int32_t>>({std::make_pair(cur_rule_id, cur_rule_body_id)}
+            );
+      }
+      queue.emplace(
+          State(cur_rule_id, cur_rule_body_id, grammar_->root_tag_dispatch_fsm->StartNode()),
+          states.size() - 1
+      );
+      return;
+    } else {
+      XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
+      bool in_vec =
+          std::find(states.back().begin(), states.back().end(), state) != states.back().end();
+      if (!in_vec) {
+        states.back().push_back(state);
+        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
+      }
+      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
+      for (auto sequence_id : cur_rule_body) {
+        ptr->predictions->emplace_back(std::make_pair(cur_rule_id, sequence_id));
+        queue.push(State(cur_rule_id, sequence_id, 0, states.size() - 1));
+      }
+      return;
+    }
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   switch (cur_rule.type) {
@@ -156,7 +189,7 @@ inline void EarleyParser::Predict(const State& state) {
         );
       }
       queue.emplace(state.rule_id, cur_rule[state.element_id], 0, states.size() - 1);
-      break;
+      return;
     }
       // If the type if kSequence, then:
     // 1. Add all the new rule_exprs into the queue.
@@ -167,16 +200,21 @@ inline void EarleyParser::Predict(const State& state) {
       if (!in_vec) {
         states.back().push_back(state);
         states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
+        for (const auto& sequence_id : cur_rule) {
+          states.back().back().predictions->emplace_back(std::make_pair(state.rule_id, sequence_id)
+          );
+          queue.emplace(state.rule_id, sequence_id, 0, states.size() - 1);
+        }
+      } else {
+        for (const auto& sequence_id : cur_rule) {
+          ptr->predictions->emplace_back(std::make_pair(state.rule_id, sequence_id));
+          queue.emplace(state.rule_id, sequence_id, 0, states.size() - 1);
+        }
       }
-      for (const auto& sequence_id : cur_rule) {
-        states.back().back().predictions->emplace_back(std::make_pair(state.rule_id, sequence_id));
-        queue.emplace(state.rule_id, sequence_id, 0, states.size() - 1);
-      }
-      break;
+      return;
     }
     case RuleExprType::kTagDispatch: {
-      // TODO:
-      break;
+      // TODO: Maybe we need some special check?
     }
   }
 }
