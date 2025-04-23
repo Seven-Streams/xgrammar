@@ -216,7 +216,26 @@ inline void EarleyParser::Predict(const State& state) {
       return;
     }
     case RuleExprType::kTagDispatch: {
-      // TODO:
+      const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
+      if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
+        XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(state.element_id))
+            << "The end node of the tag dispatch fsm does not correspond to any rule id";
+        auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
+        const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
+        bool in_vec = ptr != states.back().end();
+        if (!in_vec) {
+          states.back().push_back(state);
+          states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>(
+              {std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)}
+          );
+        } else {
+          ptr->predictions->emplace_back(
+              std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)
+          );
+        }
+        queue.emplace(State(refered_rule_id, kUnexpandedRuleStartSequenceId, 0, states.size() - 1));
+      }
+      return;
     }
   }
 }
