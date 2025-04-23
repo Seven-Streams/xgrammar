@@ -21,14 +21,6 @@ struct State {
   /*! \brief Which element of the choice sequence is to be visited. When the current sequence is
    * a tag dispatch rule, this element id the currently visited node. */
   int32_t element_id = -1;
-
-  /*! \brief The number of left utf8 bytes in the current element. Used when the element is
-   * a character class or a character class star. */
-  int32_t left_utf8_bytes = 0;
-  /*! \brief The next position to match in the current byte string. Used when the element is
-   * a byte string. */
-  int32_t element_in_string = 0;
-
   /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
    * rule starts to match the string.*/
   int32_t parent_pos = -1;
@@ -47,27 +39,12 @@ struct State {
         element_id(element_id),
         parent_pos(parent_pos) {}
 
-  constexpr State(
-      int32_t rule_id,
-      int32_t sequence_id,
-      int32_t element_id,
-      int32_t left_utf8_bytes,
-      int32_t element_in_string,
-      int32_t parent_pos
-  )
-      : rule_id(rule_id),
-        sequence_id(sequence_id),
-        element_id(element_id),
-        left_utf8_bytes(left_utf8_bytes),
-        element_in_string(element_in_string),
-        parent_pos(parent_pos) {}
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
 
   bool operator==(const State& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
-           element_id == other.element_id && parent_pos == other.parent_pos &&
-           left_utf8_bytes == other.left_utf8_bytes && element_in_string == other.element_in_string;
+           element_id == other.element_id && parent_pos == other.parent_pos;
   }
 };
 class StateHash {
@@ -114,6 +91,11 @@ class EarleyParser {
     \return True if the state is the end of the grammar, false otherwise.
   */
   bool IsEndOfGrammar(const State& state) const;
+
+  /*!
+    \brief Check if a character can be accepted.
+  */
+  bool IsAccepted(const State& state, uint8_t ch) const;
 
  public:
   /*!

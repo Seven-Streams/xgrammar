@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "grammar_data_structure.h"
+#include "support/encoding.h"
 #include "support/logging.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
@@ -48,11 +49,12 @@ inline void EarleyParser::Complete(const State& state) {
   /*
     Case 1: The current state is the end of the rule.
     Case 2: The current rule can be empty.
-    If neither of the above two cases is true, we return.
+    Case 3: The type is kCharacterClassStar, and the element_id == 0.
+    If none of the above cases is true, we return.
   */
   if ((!((cur_rule.size() != state.element_id) || (state.parent_pos == State::kNoParent))) &&
       (cur_rule.type != RuleExprType::kEmptyStr) &&
-      (cur_rule.type != RuleExprType::kCharacterClassStar)) {
+      (!((cur_rule.type == RuleExprType::kCharacterClassStar) && (state.element_id == 0)))) {
     return;
   }
   const auto& parent_states_list = states[state.parent_pos];
@@ -66,15 +68,45 @@ inline void EarleyParser::Complete(const State& state) {
     if (!in_vec) {
       continue;
     }
-    State new_state = State(
-        parent_state.rule_id,
-        parent_state.sequence_id,
-        parent_state.element_id + 1,
-        parent_state.left_utf8_bytes,
-        parent_state.element_in_string,
-        parent_state.parent_pos
-    );
-    queue.push(new_state);
+    if (parent_state.sequence_id == kUnexpandedRuleStartSequenceId) {
+      queue.emplace(State{
+          parent_state.rule_id,
+          parent_state.sequence_id,
+          parent_state.element_id + 1,
+          parent_state.parent_pos
+      });
+    }
+    auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
+    switch (parent_expr.type) {
+      case RuleExprType::kByteString:
+      case RuleExprType::kCharacterClass:
+      case RuleExprType::kCharacterClassStar:
+      case RuleExprType::kEmptyStr:
+        XGRAMMAR_DCHECK(false);
+      case RuleExprType::kRuleRef:
+      case RuleExprType::kSequence: {
+        queue.emplace(State{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            parent_state.element_id + 1,
+            parent_state.parent_pos
+        });
+        break;
+      }
+      case RuleExprType::kChoices: {
+        queue.emplace(State{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            parent_expr.size(),
+            parent_state.parent_pos
+        });
+        break;
+      }
+      case RuleExprType::kTagDispatch: {
+        // TODO:
+        break;
+      }
+    }
   }
   return;
 }
@@ -148,12 +180,6 @@ inline void EarleyParser::Predict(const State& state) {
     }
   }
 }
-inline void MoveToNextPosition(State& state) {
-  state.element_id += 1;
-  state.element_in_string = 0;
-  state.left_utf8_bytes = 0;
-  return;
-}
 inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   switch (cur_rule.type) {
@@ -163,9 +189,55 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
     case (RuleExprType::kSequence):
     case (RuleExprType::kEmptyStr):
       return;
-    case (RuleExprType::kCharacterClass):
-    case (RuleExprType::kCharacterClassStar):
-    case (RuleExprType::kByteString):
+    // In kCharacterClass, we use a negative integer to represent how many UTF-8 codes
+    // are left.
+    case (RuleExprType::kCharacterClass): {
+      if (IsAccepted(state, ch)) {
+        // It can still match at least one UTF-8 code.
+        if (state.element_id < -1) {
+          queue.emplace(
+              State{state.rule_id, state.sequence_id, state.element_id + 1, state.parent_pos}
+          );
+          return;
+        }
+        // The UTF-8 codes have been matched. The sequence is complete.
+        if (state.element_id == -1) {
+          queue.emplace(State{state.rule_id, state.sequence_id, cur_rule.size(), state.parent_pos});
+          return;
+        }
+        // It's a brand new sequence.
+        auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+        if (num_bytes > 1) {
+          queue.emplace(State{state.rule_id, state.sequence_id, -(num_bytes - 1), state.parent_pos}
+          );
+        } else {
+          queue.emplace(State{state.rule_id, state.sequence_id, cur_rule.size(), state.parent_pos});
+        }
+      }
+      return;
+    }
+    case (RuleExprType::kCharacterClassStar): {
+      if (state.element_id <= -1) {
+        queue.emplace(
+            State{state.rule_id, state.sequence_id, state.element_id + 1, state.parent_pos}
+        );
+      } else {
+        XGRAMMAR_DCHECK(state.element_id == 0);
+        auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+        XGRAMMAR_DCHECK(accepted);
+        queue.emplace(State{state.rule_id, state.sequence_id, num_bytes - 1, state.parent_pos});
+      }
+      return;
+    }
+    case (RuleExprType::kByteString): {
+      if (cur_rule.size() >= state.element_id) {
+        return;
+      }
+      if (ch == cur_rule[state.element_id]) {
+        queue.emplace(state.rule_id, state.sequence_id, state.element_id + 1, state.parent_pos);
+      }
+      return;
+    }
     case (RuleExprType::kTagDispatch):
       // TODO:
       break;
@@ -229,6 +301,44 @@ EarleyParser::EarleyParser(const Grammar& grammar) : grammar_(grammar) {
     Complete(state);
     Predict(state);
     queue.pop();
+  }
+}
+inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
+  auto current_sequence = grammar_->GetRuleExpr(state.sequence_id);
+  if (current_sequence.type == Grammar::Impl::RuleExprType::kTagDispatch) {
+    return true;
+  }
+
+  if (state.parent_pos == State::kNoParent && current_sequence.size() == state.element_id) {
+    // This StackElement means previous elements has matched the complete rule.
+    // But we are still need to accept a new character, so this stack will become invalid.
+    return false;
+  }
+
+  if (current_sequence.type == RuleExprType::kCharacterClass ||
+      current_sequence.type == RuleExprType::kCharacterClassStar) {
+    if (state.element_id < 0) {
+      return (ch & 0xC0) == 0x80;
+    }
+    auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+    if (!accepted) {
+      return false;
+    }
+    bool is_negative = static_cast<bool>(current_sequence[0]);
+    if (num_bytes > 1) {
+      return is_negative;
+    }
+    for (int i = 1; i < current_sequence.size(); i += 2) {
+      if (current_sequence[i] <= ch && ch <= current_sequence[i + 1]) {
+        return !is_negative;
+      }
+    }
+    return is_negative;
+  } else if (current_sequence.type == RuleExprType::kByteString) {
+    return current_sequence[state.element_id] == ch;
+  } else {
+    XGRAMMAR_LOG(FATAL) << "Unexpected RuleExprType in CheckIfAccepted: "
+                        << static_cast<int>(current_sequence.type);
   }
 }
 }  // namespace xgrammar
