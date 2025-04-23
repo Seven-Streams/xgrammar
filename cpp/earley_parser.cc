@@ -103,7 +103,12 @@ inline void EarleyParser::Complete(const State& state) {
         break;
       }
       case RuleExprType::kTagDispatch: {
-        // TODO:
+        queue.emplace(State{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            parent_expr.size(),
+            parent_state.parent_pos
+        });
         break;
       }
     }
@@ -150,6 +155,10 @@ inline void EarleyParser::Predict(const State& state) {
     }
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  // If the current state is the end of the rule, we do not need to predict.
+  if (state.element_id == cur_rule.size()) {
+    return;
+  }
   switch (cur_rule.type) {
     // These types will never predict other new rules.
     case RuleExprType::kByteString:
@@ -241,6 +250,10 @@ inline void EarleyParser::Predict(const State& state) {
 }
 inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  // If the current state is the end of the rule, we do not need to scan.
+  if (state.element_id == cur_rule.size()) {
+    return;
+  }
   switch (cur_rule.type) {
     // These types can never accept a character directly.
     case (RuleExprType::kRuleRef):
@@ -322,20 +335,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         new_stack_element.element_id = next_node;
         queue.emplace(new_stack_element);
         return;
-      }  // else {
-         //  Case 3. The new char can continue to be accepted by the tag dispatch fsm.
-         //  We need to dispatch the tag dispatch fsm to the end node.
-         //  We need to create a new stack element to represent the dispatched tag dispatch.
-      //   new_stack_element.element_id = kDispatchedTagDispatchElementId;
-      //   auto new_stack_element_id = persistent_stack_.NewNode(new_stack_element);
-      //   XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(next_node))
-      //       << "The end node of the tag dispatch fsm does not correspond to any rule id";
-      //   auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(next_node);
-      //   new_stack_element =
-      //       StackElement(refered_rule_id, kUnexpandedRuleStartSequenceId, 0,
-      //       new_stack_element_id);
-      // }
-      // This part will be handled in the Predict function.
+      }
     }
   }
   return;
