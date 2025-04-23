@@ -33,7 +33,8 @@ class ThreadPool {
    * \param num_threads Number of worker threads to create. Defaults to hardware concurrency.
    * \note The pool starts the worker threads immediately upon construction.
    */
-  ThreadPool(size_t num_threads = std::thread::hardware_concurrency()) {
+  ThreadPool(size_t num_threads) {
+    num_threads = 1;
     // Initialize thread pool with num_threads threads
     for (size_t i = 0; i < num_threads; ++i) {
       workers_.emplace_back([this] {

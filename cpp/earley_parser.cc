@@ -279,6 +279,8 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
     return;
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  XGRAMMAR_LOG(INFO) << "Scan: " << state << ", type is " << int(cur_rule.type)
+                     << ", the element size is " << cur_rule.size() << std::endl;
   // If the current state is the end of the rule, we do not need to scan.
   if (state.element_id == cur_rule.size()) {
     return;
@@ -331,9 +333,11 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       return;
     }
     case (RuleExprType::kByteString): {
-      if (cur_rule.size() >= state.element_id) {
+      if (cur_rule.size() == state.element_id) {
         return;
       }
+      XGRAMMAR_LOG(INFO) << "Now checking the byte string: " << cur_rule[state.element_id]
+                         << ", and the ch is " << ch << std::endl;
       if (ch == cur_rule[state.element_id]) {
         queue.emplace(state.rule_id, state.sequence_id, state.element_id + 1, state.parent_pos);
       }
@@ -382,13 +386,16 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
   const auto& latest_states = history_states.back();
-  // Xgrammar_LOG(INFO) << "Start Scan: " << ch << ", the " << history_states.size() << "th
-  // character"
-  //   << std::endl;
+  XGRAMMAR_LOG(INFO) << "Start Advance: " << ch << ", the " << history_states.size()
+                     << "th character"
+                     << ", there are " << latest_states.size() << " states." << std::endl;
   for (const auto& state : latest_states) {
+    XGRAMMAR_LOG(INFO) << "Scanning State: " << state << std::endl;
     Scan(state, ch);
+    XGRAMMAR_LOG(INFO) << "After Scan, the size of queue is " << queue.size() << std::endl;
   }
   if (queue.empty()) {
+    XGRAMMAR_LOG(INFO) << "The queue is empty, the character is not accepted." << std::endl;
     return false;
   }
   // We need a copy of the states, since we need to rollback the states.
@@ -409,6 +416,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     queue.pop();
   }
   can_reach_end.push_back(CanReachEnd());
+  XGRAMMAR_LOG(INFO) << "The queue is not empty, the character is accepted." << std::endl;
   return true;
 }
 
