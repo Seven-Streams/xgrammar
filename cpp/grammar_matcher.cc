@@ -537,7 +537,10 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       have_tag_dispatch = true;
     }
 
-    auto adaptive_token_mask_it = adaptive_token_mask_cache.find(cur_stack_element);
+    // TODO(Linzhang): It's just used for compiling!
+    auto adaptive_token_mask_it = adaptive_token_mask_cache.find(State{
+        cur_stack_element.rule_id, cur_stack_element.sequence_id, cur_stack_element.element_id
+    });
     XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end())
         << "The adaptive token mask is not found for stack element: "
         << persistent_stack_.PrintStackElement(cur_stack_element);

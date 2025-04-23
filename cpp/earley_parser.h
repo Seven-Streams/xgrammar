@@ -6,9 +6,9 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
+#include <list>
 #include <optional>
 #include <ostream>
-#include <queue>
 #include <vector>
 
 #include "xgrammar/grammar.h"
@@ -44,9 +44,10 @@ struct State {
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
 
+  // TODO: Check parent_pos == other.parent_pos if proper.
   bool operator==(const State& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
-           element_id == other.element_id && parent_pos == other.parent_pos;
+           element_id == other.element_id;
   }
   friend std::ostream& operator<<(std::ostream& os, const State& state) {
     os << "State(rule_id=" << state.rule_id << ", sequence_id=" << state.sequence_id
@@ -58,7 +59,7 @@ class StateHash {
  public:
   size_t operator()(const State& state) const {
     return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
-           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_pos);
+           std::hash<int32_t>()(state.element_id);
   }
 };
 class EarleyParser {
@@ -78,7 +79,7 @@ class EarleyParser {
   std::vector<bool> can_reach_end;
 
   /*! \brief It's the processing queue of the earley parser.*/
-  std::queue<State> queue;
+  std::list<State> queue;
   /*!
     \brief The scanning operation of the Earley parser.
   */

@@ -205,8 +205,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
   // Do not expand the initial stack element: we want to find the accepted/rejected tokens
   // that exactly start from the initial stack element.
-  GrammarMatcherForTokenMaskCache(const Grammar& grammar, StackElement init_stack_element)
-      : EarleyParser(grammar), init_rule_id(init_stack_element.rule_id) {}
+  GrammarMatcherForTokenMaskCache(const Grammar& grammar, const State& init_state)
+      : EarleyParser(grammar, init_state), init_rule_id(init_state.rule_id) {}
 
   /*!
    * \brief Get the adaptive token mask for the given StackElement.
@@ -520,29 +520,27 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     adaptive_token_mask_cache_mutex.emplace();
   }
 
-  auto add_adaptive_token_mask = [&](const StackElement& stack_element, bool is_root_rule) {
-    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, stack_element);
+  auto add_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
+    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(), tokenizer_info_.GetSortedDecodedVocab(), is_root_rule
     );
     if (max_threads_ > 1) {
       std::lock_guard<std::mutex> lock(adaptive_token_mask_cache_mutex.value());
-      compiled_grammar_impl->adaptive_token_mask_cache[stack_element] =
-          cur_adaptive_token_mask_cache;
+      compiled_grammar_impl->adaptive_token_mask_cache[state] = cur_adaptive_token_mask_cache;
     } else {
-      compiled_grammar_impl->adaptive_token_mask_cache[stack_element] =
-          cur_adaptive_token_mask_cache;
+      compiled_grammar_impl->adaptive_token_mask_cache[state] = cur_adaptive_token_mask_cache;
     }
   };
 
-  auto add_task_adaptive_token_mask = [&](const StackElement& stack_element, bool is_root_rule) {
+  auto add_task_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
     // Execute depending on whether we use thread_pool
     if (max_threads_ > 1) {
-      thread_pool->Execute([add_adaptive_token_mask, stack_element, is_root_rule]() {
-        add_adaptive_token_mask(stack_element, is_root_rule);
+      thread_pool->Execute([add_adaptive_token_mask, state, is_root_rule]() {
+        add_adaptive_token_mask(state, is_root_rule);
       });
     } else {
-      add_adaptive_token_mask(stack_element, is_root_rule);
+      add_adaptive_token_mask(state, is_root_rule);
     }
   };
 
@@ -551,10 +549,10 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     auto rule_body = grammar->GetRuleExpr(rule.body_expr_id);
 
     if (rule_body.type == RuleExprType::kTagDispatch) {
-      auto cur_stack_element = StackElement(rule_id, rule.body_expr_id, 0);
+      auto state = State(rule_id, rule.body_expr_id, 0);
       for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
-        cur_stack_element.element_id = i;
-        add_task_adaptive_token_mask(cur_stack_element, rule_id == root_rule_id);
+        state.element_id = i;
+        add_task_adaptive_token_mask(state, rule_id == root_rule_id);
       }
       continue;
     }
@@ -571,11 +569,11 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
         if (element.type == RuleExprType::kRuleRef) {
           continue;
         }
-        auto cur_stack_element = StackElement(rule_id, sequence_id, element_id);
+        auto cur_state = State(rule_id, sequence[element_id], 0);
         if (element.type == RuleExprType::kByteString) {
           for (int idx = 0; idx < element.size(); ++idx) {
-            cur_stack_element.element_in_string = idx;
-            add_task_adaptive_token_mask(cur_stack_element, rule_id == root_rule_id);
+            cur_state.element_id = idx;
+            add_task_adaptive_token_mask(cur_state, rule_id == root_rule_id);
           }
         } else {
           XGRAMMAR_DCHECK(
@@ -583,8 +581,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
               element.type == RuleExprType::kCharacterClass
           );
           for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
-            cur_stack_element.left_utf8_bytes = left_utf8_bytes;
-            add_task_adaptive_token_mask(cur_stack_element, rule_id == root_rule_id);
+            cur_state.element_id = -left_utf8_bytes;
+            add_task_adaptive_token_mask(cur_state, rule_id == root_rule_id);
           }
         }
       }
