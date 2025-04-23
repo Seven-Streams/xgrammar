@@ -420,10 +420,14 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   return true;
 }
 
-EarleyParser::EarleyParser(const Grammar& grammar) : grammar_(grammar) {
-  PushInitialState(
-      State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
-  );
+EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state) : grammar_(grammar) {
+  if (init_state.IsInvalid()) {
+    PushInitialState(
+        State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
+    );
+  } else {
+    PushInitialState(init_state);
+  }
 }
 inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   auto current_sequence = grammar_->GetRuleExpr(state.sequence_id);
