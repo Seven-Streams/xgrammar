@@ -12,10 +12,9 @@
 #include "xgrammar/grammar.h"
 namespace xgrammar {
 constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
-
-// constexpr int32_t kDispatchedTagDispatchElementId = -1;
 using RuleExprType = Grammar::Impl::RuleExprType;
 using RuleExpr = Grammar::Impl::RuleExpr;
+
 inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   if (state.parent_pos != State::kNoParent) {
     return false;
@@ -389,26 +388,9 @@ bool EarleyParser::Advance(const uint8_t& ch) {
 }
 
 EarleyParser::EarleyParser(const Grammar& grammar) : grammar_(grammar) {
-  states.push_back(std::vector<State>());
-  history_states.push_back(std::vector<State>());
-  history_states.back().emplace_back(
-      grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent
+  PushInitialState(
+      State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
   );
-  std::unordered_set<State, StateHash> visited;
-  queue.push(history_states[0][0]);
-  while (!queue.empty()) {
-    const auto& state = queue.front();
-    if (visited.find(queue.back()) != visited.end()) {
-      queue.pop();
-      continue;
-    }
-    visited.insert(state);
-    history_states.back().push_back(state);
-    Complete(state);
-    Predict(state);
-    queue.pop();
-  }
-  can_reach_end.push_back(CanReachEnd());
 }
 inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   auto current_sequence = grammar_->GetRuleExpr(state.sequence_id);
@@ -448,5 +430,26 @@ inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
                         << static_cast<int>(current_sequence.type);
   }
   return false;
+}
+
+void EarleyParser::PushInitialState(const State& stack_element) {
+  history_states.push_back(std::vector<State>());
+  states.push_back(std::vector<State>());
+  queue.push(stack_element);
+  std::unordered_set<State, StateHash> visited;
+  while (!queue.empty()) {
+    const auto& state = queue.front();
+    if (visited.find(queue.back()) != visited.end()) {
+      queue.pop();
+      continue;
+    }
+    visited.insert(state);
+    history_states.back().push_back(state);
+    Complete(state);
+    Predict(state);
+    queue.pop();
+  }
+  can_reach_end.push_back(CanReachEnd());
+  return;
 }
 }  // namespace xgrammar

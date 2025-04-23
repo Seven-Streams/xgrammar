@@ -121,6 +121,12 @@ class EarleyParser {
   */
   bool CanReachEnd() const;
 
+  /*!
+    \brief Push the initial state into the Earley parser.
+    \param state The initial state to be pushed.
+  */
+  void PushInitialState(const State& state);
+
   EarleyParser(const Grammar& grammar);
 };
 }  // namespace xgrammar
