@@ -41,6 +41,7 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   }
   states.erase(states.end() - cnt, states.end());
   history_states.erase(history_states.end() - cnt, history_states.end());
+  can_reach_end.erase(can_reach_end.end() - cnt, can_reach_end.end());
   return;
 }
 
@@ -367,10 +368,10 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   if (queue.empty()) {
     return false;
   }
+  // We need a copy of the states, since we need to rollback the states.
   history_states.push_back(std::vector<State>());
   states.push_back(std::vector<State>());
   std::unordered_set<State, StateHash> visited;
-  // We need a copy of the states, since we need to rollback the states.
   while (!queue.empty()) {
     const auto& state = queue.front();
     if (visited.find(queue.back()) != visited.end()) {
@@ -383,6 +384,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     Predict(state);
     queue.pop();
   }
+  can_reach_end.push_back(CanReachEnd());
   return true;
 }
 
@@ -406,6 +408,7 @@ EarleyParser::EarleyParser(const Grammar& grammar) : grammar_(grammar) {
     Predict(state);
     queue.pop();
   }
+  can_reach_end.push_back(CanReachEnd());
 }
 inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   auto current_sequence = grammar_->GetRuleExpr(state.sequence_id);
