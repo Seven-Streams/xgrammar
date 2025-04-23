@@ -57,6 +57,7 @@ inline void EarleyParser::Complete(const State& state) {
       (!((cur_rule.type == RuleExprType::kCharacterClassStar) && (state.element_id == 0)))) {
     return;
   }
+  // Check all the possible parent states.
   const auto& parent_states_list = states[state.parent_pos];
   for (const auto& parent_state : parent_states_list) {
     XGRAMMAR_DCHECK(parent_state.predictions.has_value());
@@ -68,6 +69,7 @@ inline void EarleyParser::Complete(const State& state) {
     if (!in_vec) {
       continue;
     }
+    // The parent state indeed has a prediction for the current state.
     if (parent_state.sequence_id == kUnexpandedRuleStartSequenceId) {
       queue.emplace(State{
           parent_state.rule_id,
@@ -78,11 +80,16 @@ inline void EarleyParser::Complete(const State& state) {
     }
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
     switch (parent_expr.type) {
+      // These types can never predict other new rules, Thus
+      // They will never be a legal parent state.
       case RuleExprType::kByteString:
       case RuleExprType::kCharacterClass:
       case RuleExprType::kCharacterClassStar:
       case RuleExprType::kEmptyStr:
-        return;
+        XGRAMMAR_LOG(FATAL) << "Unexpected RuleExprType in Complete: "
+                            << static_cast<int>(parent_expr.type);
+      // These two types can predict other new rules. We need to
+      // to move to the next element.
       case RuleExprType::kRuleRef:
       case RuleExprType::kSequence: {
         queue.emplace(State{
@@ -93,15 +100,10 @@ inline void EarleyParser::Complete(const State& state) {
         });
         break;
       }
-      case RuleExprType::kChoices: {
-        queue.emplace(State{
-            parent_state.rule_id,
-            parent_state.sequence_id,
-            parent_expr.size(),
-            parent_state.parent_pos
-        });
-        break;
-      }
+      // These two types can predict other new rules, and have a
+      // completion is enough to complete the parent state.
+      // We need to move to the end of the element. i.e. complete the parent state.
+      case RuleExprType::kChoices:
       case RuleExprType::kTagDispatch: {
         queue.emplace(State{
             parent_state.rule_id,
@@ -116,6 +118,8 @@ inline void EarleyParser::Complete(const State& state) {
   return;
 }
 inline void EarleyParser::Predict(const State& state) {
+  // If it's an unexpanded rule, we need to expand it,
+  // and add all the possible rules into the queue.
   if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
     auto cur_rule_id = state.rule_id;
     auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
@@ -252,6 +256,10 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   // If the current state is the end of the rule, we do not need to scan.
   if (state.element_id == cur_rule.size()) {
+    return;
+  }
+  // An unexpanded rule cannot be scanned.
+  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
     return;
   }
   switch (cur_rule.type) {
