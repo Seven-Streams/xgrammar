@@ -7,6 +7,7 @@
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
 #include <optional>
+#include <ostream>
 #include <queue>
 #include <vector>
 
@@ -47,6 +48,11 @@ struct State {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
            element_id == other.element_id && parent_pos == other.parent_pos;
   }
+  friend std::ostream& operator<<(std::ostream& os, const State& state) {
+    os << "State(rule_id=" << state.rule_id << ", sequence_id=" << state.sequence_id
+       << ", element_id=" << state.element_id << ", parent_pos=" << state.parent_pos << ")";
+    return os;
+  }
 };
 class StateHash {
  public:
@@ -56,7 +62,7 @@ class StateHash {
   }
 };
 class EarleyParser {
- private:
+ protected:
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
   /*! \brief The tree storing all states. It's used for completation. */

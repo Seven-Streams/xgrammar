@@ -1,6 +1,7 @@
 #include "earley_parser.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <unordered_set>
 #include <utility>
@@ -12,11 +13,16 @@
 #include "xgrammar/grammar.h"
 namespace xgrammar {
 constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
+constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
 using RuleExprType = Grammar::Impl::RuleExprType;
 using RuleExpr = Grammar::Impl::RuleExpr;
 
 inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
-  if (state.parent_pos != State::kNoParent) {
+  // The root rule.
+  if (state.parent_pos == State::kNoParent) {
+    return true;
+  }
+  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
     return false;
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
@@ -45,22 +51,30 @@ void EarleyParser::PopBackStates(int32_t cnt) {
 }
 
 inline void EarleyParser::Complete(const State& state) {
-  auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-  /*
-    Case 1: The current state is the end of the rule.
-    Case 2: The current rule can be empty.
-    Case 3: The type is kCharacterClassStar, and the element_id == 0.
-    If none of the above cases is true, we return.
-  */
-  if ((!((cur_rule.size() != state.element_id) || (state.parent_pos == State::kNoParent))) &&
-      (cur_rule.type != RuleExprType::kEmptyStr) &&
-      (!((cur_rule.type == RuleExprType::kCharacterClassStar) && (state.element_id == 0)))) {
-    return;
+  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+    if (state.element_id != kUnexpandedRuleFinishElementId) {
+      return;
+    }
+  } else {
+    auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+    // Xgrammar_LOG(INFO) << "Complete: " << state << ", type is " << int(cur_rule.type)
+    //   << ", the element size is " << cur_rule.size() << std::endl;
+    /*
+      Case 1: The current state is the end of the rule.
+      Case 2: The current rule can be empty.
+      Case 3: The type is kCharacterClassStar, and the element_id == 0.
+      If none of the above cases is true, we return.
+    */
+    if ((!((cur_rule.size() == state.element_id) || (state.parent_pos == State::kNoParent))) &&
+        (cur_rule.type != RuleExprType::kEmptyStr) &&
+        (!((cur_rule.type == RuleExprType::kCharacterClassStar) && (state.element_id == 0)))) {
+      return;
+    }
   }
   // Check all the possible parent states.
   const auto& parent_states_list = states[state.parent_pos];
   for (const auto& parent_state : parent_states_list) {
-    XGRAMMAR_DCHECK(parent_state.predictions.has_value());
+    // XGRAMMAR_DCHECK(parent_state.predictions.has_value());
     bool in_vec = std::find(
                       parent_state.predictions->begin(),
                       parent_state.predictions->end(),
@@ -70,13 +84,15 @@ inline void EarleyParser::Complete(const State& state) {
       continue;
     }
     // The parent state indeed has a prediction for the current state.
+
     if (parent_state.sequence_id == kUnexpandedRuleStartSequenceId) {
       queue.emplace(State{
           parent_state.rule_id,
           parent_state.sequence_id,
-          parent_state.element_id + 1,
+          kUnexpandedRuleFinishElementId,
           parent_state.parent_pos
       });
+      return;
     }
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
     switch (parent_expr.type) {
@@ -143,7 +159,7 @@ inline void EarleyParser::Predict(const State& state) {
       ));
       return;
     } else {
-      XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
+      // XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
       bool in_vec =
           std::find(states.back().begin(), states.back().end(), state) != states.back().end();
       if (!in_vec) {
@@ -159,7 +175,8 @@ inline void EarleyParser::Predict(const State& state) {
     }
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-  // If the current state is the end of the rule, we do not need to predict.
+  // Xgrammar_LOG(INFO) << "Predict: " << state << ", type is " << int(cur_rule.type) << std::endl;
+  //  If the current state is the end of the rule, we do not need to predict.
   if (state.element_id == cur_rule.size()) {
     return;
   }
@@ -168,8 +185,11 @@ inline void EarleyParser::Predict(const State& state) {
     case RuleExprType::kByteString:
     case RuleExprType::kCharacterClass:
     case RuleExprType::kCharacterClassStar:
-    case RuleExprType::kEmptyStr:
+    case RuleExprType::kEmptyStr: {
+      // Xgrammar_LOG(INFO) << "Predict: " << state << ", type is " << int(cur_rule.type)
+      //   << ", and returned." << std::endl;
       return;
+    }
     // If the type if kRuleRef, then:
     // 1. Add the new rule into the queue.
     // 2. Mark the new rule as a prediction of the current state.
@@ -231,8 +251,8 @@ inline void EarleyParser::Predict(const State& state) {
     case RuleExprType::kTagDispatch: {
       const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
       if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
-        XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(state.element_id))
-            << "The end node of the tag dispatch fsm does not correspond to any rule id";
+        // XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(state.element_id))
+        // << "The end node of the tag dispatch fsm does not correspond to any rule id";
         auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
         const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
         bool in_vec = ptr != states.back().end();
@@ -253,13 +273,14 @@ inline void EarleyParser::Predict(const State& state) {
   }
 }
 inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
+  // Xgrammar_LOG(INFO) << "Scan: " << state << ", ch is " << ch << std::endl;
+  //  An unexpanded rule cannot be scanned.
+  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+    return;
+  }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   // If the current state is the end of the rule, we do not need to scan.
   if (state.element_id == cur_rule.size()) {
-    return;
-  }
-  // An unexpanded rule cannot be scanned.
-  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
     return;
   }
   switch (cur_rule.type) {
@@ -302,9 +323,9 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             State{state.rule_id, state.sequence_id, state.element_id + 1, state.parent_pos}
         );
       } else {
-        XGRAMMAR_DCHECK(state.element_id == 0);
+        // XGRAMMAR_DCHECK(state.element_id == 0);
         auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-        XGRAMMAR_DCHECK(accepted);
+        // XGRAMMAR_DCHECK(accepted);
         queue.emplace(State{state.rule_id, state.sequence_id, num_bytes - 1, state.parent_pos});
       }
       return;
@@ -361,6 +382,9 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
   const auto& latest_states = history_states.back();
+  // Xgrammar_LOG(INFO) << "Start Scan: " << ch << ", the " << history_states.size() << "th
+  // character"
+  //   << std::endl;
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
@@ -372,6 +396,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   states.push_back(std::vector<State>());
   std::unordered_set<State, StateHash> visited;
   while (!queue.empty()) {
+    // Xgrammar_LOG(INFO) << "Now Size: " << queue.size() << std::endl;
     const auto& state = queue.front();
     if (visited.find(queue.back()) != visited.end()) {
       queue.pop();
@@ -439,17 +464,24 @@ void EarleyParser::PushInitialState(const State& stack_element) {
   std::unordered_set<State, StateHash> visited;
   while (!queue.empty()) {
     const auto& state = queue.front();
+    // Xgrammar_LOG(INFO) << "Now Size: " << queue.size() << ", " << state << std::endl;
     if (visited.find(queue.back()) != visited.end()) {
+      std::cout << state << " is skipped!" << std::endl;
       queue.pop();
       continue;
     }
     visited.insert(state);
     history_states.back().push_back(state);
+    // Xgrammar_LOG(INFO) << "Completion" << std::endl;
     Complete(state);
+    // Xgrammar_LOG(INFO) << "Prediction" << std::endl;
     Predict(state);
+    // Xgrammar_LOG(INFO) << "Prediction Done" << std::endl;
     queue.pop();
   }
+  // Xgrammar_LOG(INFO) << "Loop Done" << std::endl;
   can_reach_end.push_back(CanReachEnd());
+  // Xgrammar_LOG(INFO) << "INIT END" << std::endl;
   return;
 }
 }  // namespace xgrammar
