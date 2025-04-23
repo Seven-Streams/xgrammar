@@ -82,7 +82,7 @@ inline void EarleyParser::Complete(const State& state) {
       case RuleExprType::kCharacterClass:
       case RuleExprType::kCharacterClassStar:
       case RuleExprType::kEmptyStr:
-        XGRAMMAR_DCHECK(false);
+        return;
       case RuleExprType::kRuleRef:
       case RuleExprType::kSequence: {
         queue.emplace(State{
@@ -119,17 +119,19 @@ inline void EarleyParser::Predict(const State& state) {
       const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
       bool in_vec = ptr != states.back().end();
       if (in_vec) {
-        ptr->predictions->emplace_back(std::make_pair(cur_rule_body, cur_rule_body_id));
+        ptr->predictions->emplace_back(std::make_pair(cur_rule_id, cur_rule_body_id));
       } else {
         states.back().push_back(state);
         states.back().back().predictions =
             std::vector<std::pair<int32_t, int32_t>>({std::make_pair(cur_rule_id, cur_rule_body_id)}
             );
       }
-      queue.emplace(
-          State(cur_rule_id, cur_rule_body_id, grammar_->root_tag_dispatch_fsm->StartNode()),
+      queue.emplace(State(
+          cur_rule_id,
+          cur_rule_body_id,
+          grammar_->root_tag_dispatch_fsm->StartNode(),
           states.size() - 1
-      );
+      ));
       return;
     } else {
       XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
@@ -170,7 +172,7 @@ inline void EarleyParser::Predict(const State& state) {
             std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)
         );
       }
-      queue.emplace(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1);
+      queue.emplace(State(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1));
       break;
     }
     // If the type if kSequence, then:
@@ -214,7 +216,7 @@ inline void EarleyParser::Predict(const State& state) {
       return;
     }
     case RuleExprType::kTagDispatch: {
-      // TODO: Maybe we need some special check?
+      // TODO:
     }
   }
 }
@@ -276,9 +278,46 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       }
       return;
     }
-    case (RuleExprType::kTagDispatch):
-      // TODO:
-      break;
+    case (RuleExprType::kTagDispatch): {
+      auto root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
+      if (!root_tag_dispatch_fsm) {
+        XGRAMMAR_LOG(FATAL
+        ) << "The grammar does not have a root tag dispatch rule; it is not built.";
+        XGRAMMAR_UNREACHABLE();
+      }
+      auto start_node = root_tag_dispatch_fsm->StartNode();
+      auto next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
+      auto new_stack_element = state;
+      if (next_node == CompactFSM::NO_TRANSITION) {
+        // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
+        // We try to accept the new char from the start node. If accepted, we go to the target node.
+        // If it still cannot be accepted, we stay at the start node.
+        auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
+        new_stack_element.element_id =
+            new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
+        queue.emplace(new_stack_element);
+        return;
+      } else {
+        // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
+        // We need to update the element id to the next node.
+        new_stack_element.element_id = next_node;
+        queue.emplace(new_stack_element);
+        return;
+      }  // else {
+         //  Case 3. The new char can continue to be accepted by the tag dispatch fsm.
+         //  We need to dispatch the tag dispatch fsm to the end node.
+         //  We need to create a new stack element to represent the dispatched tag dispatch.
+      //   new_stack_element.element_id = kDispatchedTagDispatchElementId;
+      //   auto new_stack_element_id = persistent_stack_.NewNode(new_stack_element);
+      //   XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(next_node))
+      //       << "The end node of the tag dispatch fsm does not correspond to any rule id";
+      //   auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(next_node);
+      //   new_stack_element =
+      //       StackElement(refered_rule_id, kUnexpandedRuleStartSequenceId, 0,
+      //       new_stack_element_id);
+      // }
+      // This part will be handled in the Predict function.
+    }
   }
   return;
 }
@@ -378,5 +417,6 @@ inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
     XGRAMMAR_LOG(FATAL) << "Unexpected RuleExprType in CheckIfAccepted: "
                         << static_cast<int>(current_sequence.type);
   }
+  return false;
 }
 }  // namespace xgrammar
