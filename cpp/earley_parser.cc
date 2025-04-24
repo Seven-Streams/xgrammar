@@ -19,10 +19,18 @@ using RuleExpr = Grammar::Impl::RuleExpr;
 
 inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   // The root rule.
-  if (state.parent_pos == State::kNoParent && state.element_id == kUnexpandedRuleFinishElementId) {
-    return true;
+  if (state.parent_pos != State::kNoParent) {
+    return false;
   }
-  return false;
+  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+    return state.element_id == kUnexpandedRuleFinishElementId;
+  }
+  auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
+  if (seq_expr.type == Grammar::Impl::RuleExprType::kTagDispatch) {
+    return state.element_id != -1;
+  } else {
+    return seq_expr.size() == state.element_id;
+  }
 }
 
 bool EarleyParser::CanReachEnd() const {
@@ -533,7 +541,7 @@ void EarleyParser::PushInitialState(const State& stack_element) {
     const auto& state = queue.front();
     // XGRAMMAR_LOG(INFO) << "Now Size: " << queue.size() << ", " << state << std::endl;
     if (visited.find(queue.front()) != visited.end()) {
-      std::cout << state << " is skipped!" << std::endl;
+      XGRAMMAR_LOG(INFO) << state << " is skipped!" << std::endl;
       queue.pop_front();
       continue;
     }

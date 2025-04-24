@@ -355,7 +355,9 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       // 2. If a token cannot pass the lookahead assertion, it is rejected.
       tmp_uncertain_indices_.push_back(i);
     } else {
-      XGRAMMAR_LOG(INFO) << "Token " << token << " is rejected!" << std::endl;
+      XGRAMMAR_LOG(INFO) << "Token " << token << " is rejected!"
+                         << ", can_reach_end: " << can_reach_end
+                         << ", is_root_rule: " << is_root_rule << std::endl;
       tmp_rejected_indices_.push_back(i);
     }
   }
