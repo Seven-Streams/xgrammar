@@ -55,6 +55,21 @@ void EarleyParser::PopBackStates(int32_t cnt) {
 
 inline void EarleyParser::Complete(const State& state) {
   if (state.parent_pos == State::kNoParent) {
+    if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+      return;
+    }
+    auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+    if (cur_rule.type == RuleExprType::kTagDispatch) {
+      if (state.element_id != -1) {
+        return;
+      }
+      queue.emplace_back(State{
+          state.rule_id,
+          state.sequence_id,
+          grammar_->root_tag_dispatch_fsm->StartNode(),
+          state.parent_pos
+      });
+    }
     return;
   }
   if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
@@ -317,10 +332,10 @@ inline void EarleyParser::Predict(const State& state) {
       const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
       // XGRAMMAR_LOG(INFO) << state;
       if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
-        // XGRAMMAR_LOG(INFO) << "KTag " << state;
         XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(state.element_id))
             << "The end node of the tag dispatch fsm does not correspond to any rule id";
         auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
+        // XGRAMMAR_LOG(INFO) << "KTag " << state << ", new rule id is" << refered_rule_id;
         const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
         bool in_vec = ptr != states.back().end();
         if (!in_vec) {
@@ -436,6 +451,10 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         ) << "The grammar does not have a root tag dispatch rule; it is not built.";
         XGRAMMAR_UNREACHABLE();
       }
+      if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
+        // The tag has been dispatched.
+        return;
+      }
       auto start_node = root_tag_dispatch_fsm->StartNode();
       auto next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
       auto new_stack_element = state;
@@ -477,24 +496,24 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   // XGRAMMAR_LOG(INFO) << "States size " << states.size() << ", history size "
   //                    << history_states.size();
   const auto& latest_states = history_states.back();
-  XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
-                     << history_states.size() << "th character";
+  // XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
+  //  << history_states.size() << "th character";
   //                    << ", there are " << latest_states.size() << " states.";
   // for (const auto& state : latest_states) {
   //   XGRAMMAR_LOG(INFO) << "Checking " << state;
   // }
-  XGRAMMAR_LOG(INFO) << "The states size is " << latest_states.size();
+  // XGRAMMAR_LOG(INFO) << "The states size is " << latest_states.size();
   for (const auto& state : latest_states) {
-    // // XGRAMMAR_LOG(INFO) << "Scanning State: " << state << std::endl;
+    // XGRAMMAR_LOG(INFO) << "Scanning State: " << state;
     Scan(state, ch);
-    // // XGRAMMAR_LOG(INFO) << "After Scan, the size of queue is " << queue.size() << std::endl;
+    // XGRAMMAR_LOG(INFO) << "After Scan, the size of queue is " << queue.size() << std::endl;
   }
   if (queue.empty()) {
-    // XGRAMMAR_LOG(INFO) << "The queue is empty, the character " << ch << " is not accepted."
+    // XGRAMMAR_LOG(INFO) << "The queue is empty, the character " << ch << " is not accepted.";
     //  << std::endl;
     return false;
   }
-  // XGRAMMAR_LOG(INFO) << "The queue is not empty, the character " << ch << " is accepted, "
+  // XGRAMMAR_LOG(INFO) << "The queue is not empty, the character " << ch << " is accepted, ";
   //                    << "there are " << queue.size() << " states in the queue.";
   // for (const auto& state : queue) {
   //   XGRAMMAR_LOG(INFO) << "In queue: " << state;
@@ -522,10 +541,10 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     queue.pop_front();
   }
   can_reach_end.push_back(CanReachEnd());
-  XGRAMMAR_LOG(INFO) << "After Advance, the size of states is " << history_states.back().size();
-  for (const auto& state : history_states.back()) {
-    XGRAMMAR_LOG(INFO) << "In history: " << state;
-  }
+  // XGRAMMAR_LOG(INFO) << "After Advance, the size of states is " << history_states.back().size();
+  // for (const auto& state : history_states.back()) {
+  //   XGRAMMAR_LOG(INFO) << "In history: " << state;
+  // }
   // XGRAMMAR_LOG(INFO) << "After Advance, the size of states is " <<
   // history_states.back().size(); XGRAMMAR_LOG(INFO) << "The queue is not empty, the character"
   // << ch << "is accepted."
@@ -591,8 +610,12 @@ void EarleyParser::PushInitialState(const State& stack_element) {
     queue.push_back(
         State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
     );
+    // XGRAMMAR_LOG(INFO
+    // ) << "Initial State: "
+    //   << State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent);
   } else {
     queue.push_back(stack_element);
+    // XGRAMMAR_LOG(INFO) << "Initial State: " << stack_element;
   }
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {

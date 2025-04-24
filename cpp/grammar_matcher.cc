@@ -359,10 +359,7 @@ bool GrammarMatcher::Impl::IsTerminated() const {
   return IsStopTokenAccepted();
 }
 
-bool GrammarMatcher::Impl::IsStopTokenAccepted() const {
-  XGRAMMAR_LOG(INFO) << history_states.back().size();
-  return history_states.back().empty();
-}
+bool GrammarMatcher::Impl::IsStopTokenAccepted() const { return history_states.back().empty(); }
 
 // TODO(yixin): Polish verbose logging
 bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
@@ -429,7 +426,6 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
 }
 
 bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool debug_print) {
-  debug_print = true;
   if (IsStopTokenAccepted()) {
     if (debug_print) {
       XGRAMMAR_LOG(INFO) << "The matcher has terminated after accepting the stop token, but is "
@@ -551,6 +547,10 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     //                    << ", the full size=" << cur_sequence.size() << std::endl;
     if (cur_sequence.type == RuleExprType::kTagDispatch) {
       have_tag_dispatch = true;
+      if (state.element_id == -1 ||
+          (grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id))) {
+        continue;
+      }
     }
 
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
@@ -584,7 +584,10 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
     const std::string* prev_token = nullptr;
     int prev_matched_size = 0;
-
+    if (debug_print) {
+      XGRAMMAR_LOG(INFO) << "The state is " << state << ", the mask is "
+                         << adaptive_token_mask.Print(tokenizer_info_);
+    }
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
       // XGRAMMAR_LOG(INFO) << "Now is trying to test " << cur_token

@@ -206,8 +206,10 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   // Do not expand the initial stack element: we want to find the accepted/rejected tokens
   // that exactly start from the initial stack element.
   GrammarMatcherForTokenMaskCache(const Grammar& grammar, const State& init_state)
-      : EarleyParser(grammar, init_state), init_rule_id(init_state.rule_id) {}
-
+      : EarleyParser(grammar, init_state),
+        init_state(init_state),
+        init_rule_id(init_state.rule_id) {}
+  State init_state;
   /*!
    * \brief Get the adaptive token mask for the given StackElement.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
