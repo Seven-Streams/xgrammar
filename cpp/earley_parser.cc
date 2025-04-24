@@ -529,7 +529,7 @@ void EarleyParser::PushInitialState(const State& stack_element) {
   while (!queue.empty()) {
     const auto& state = queue.front();
     // XGRAMMAR_LOG(INFO) << "Now Size: " << queue.size() << ", " << state << std::endl;
-    if (visited.find(queue.back()) != visited.end()) {
+    if (visited.find(queue.front()) != visited.end()) {
       std::cout << state << " is skipped!" << std::endl;
       queue.pop_front();
       continue;
