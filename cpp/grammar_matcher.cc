@@ -11,7 +11,6 @@
 #include "compiled_grammar_data_structure.h"
 #include "earley_parser.h"
 #include "grammar_data_structure.h"
-#include "grammar_matcher_base.h"
 #include "persistent_stack.h"
 #include "support/dynamic_bitset.h"
 #include "support/encoding.h"
@@ -23,7 +22,7 @@ namespace xgrammar {
 
 /******************* Tool functions for token mask *******************/
 constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
-constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
+// constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
 using RuleExprType = Grammar::Impl::RuleExprType;
 
 int32_t GetBitmaskSize(int vocab_size) { return DynamicBitset::GetBufferSize(vocab_size); }
@@ -525,10 +524,10 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
                        << ", num of stacks=" << latest_states.size();
   }
 
-  int stack_top_cnt = -1;
+  // int stack_top_cnt = -1;
 
   for (auto state : latest_states) {
-    ++stack_top_cnt;
+    // ++stack_top_cnt;
     if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
       continue;
     }
@@ -676,10 +675,12 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
     // 1. Check that for every stack top, the next possible char is unique and the same
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;
-    for (auto state : states) {
-      auto stack_element = persistent_stack_[stack_top];
-      auto cur_sequence = grammar_->GetRuleExpr(stack_element.sequence_id);
-
+    for (const auto& state : states) {
+      if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+        can_find_next_char = false;
+        break;
+      }
+      auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
       // We cannot deduce the next char for tag dispatch
       if (cur_sequence.type == RuleExprType::kTagDispatch) {
         can_find_next_char = false;
@@ -687,34 +688,36 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
       }
 
       // The state comes to the end of the grammar
-      if (stack_element.parent_id == StackElement::kNoParent &&
-          stack_element.element_id == cur_sequence.size()) {
+      if (state.parent_pos == StackElement::kNoParent && state.element_id == cur_sequence.size()) {
         can_find_next_char = false;
         break;
       }
+      if (cur_sequence.type == RuleExprType::kChoices ||
+          cur_sequence.type == RuleExprType::kSequence ||
+          cur_sequence.type == RuleExprType::kEmptyStr) {
+        continue;
+      }
 
-      auto cur_element = grammar_->GetRuleExpr(cur_sequence[stack_element.element_id]);
-
-      if (cur_element.type == RuleExprType::kByteString) {
-        XGRAMMAR_DCHECK(stack_element.element_in_string < cur_element.size());
+      if (cur_sequence.type == RuleExprType::kByteString) {
+        XGRAMMAR_DCHECK(state.element_id < cur_sequence.size());
         if (next_char == -1) {
-          next_char = cur_element[stack_element.element_in_string];
-        } else if (next_char != cur_element[stack_element.element_in_string]) {
+          next_char = cur_sequence[state.element_id];
+        } else if (next_char != cur_sequence[state.element_id]) {
           can_find_next_char = false;
           break;
         }
       } else {
         XGRAMMAR_DCHECK(
-            cur_element.type == RuleExprType::kCharacterClass ||
-            cur_element.type == RuleExprType::kCharacterClassStar
+            cur_sequence.type == RuleExprType::kCharacterClass ||
+            cur_sequence.type == RuleExprType::kCharacterClassStar
         );
-        if (stack_element.left_utf8_bytes > 0 || cur_element.size() != 3 || cur_element[0] != 0 ||
-            cur_element[1] != cur_element[2]) {
+        if (state.element_id < 0 || cur_sequence.size() != 3 || cur_sequence[0] != 0 ||
+            cur_sequence[1] != cur_sequence[2]) {
           can_find_next_char = false;
           break;
         } else if (next_char == -1) {
-          next_char = cur_element[1];
-        } else if (next_char != cur_element[1]) {
+          next_char = cur_sequence[1];
+        } else if (next_char != cur_sequence[1]) {
           can_find_next_char = false;
           break;
         }
@@ -728,19 +731,7 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
     // 2. If found, accept the char and iterate to the next position
     if (can_find_next_char) {
       result += static_cast<uint8_t>(next_char);
-
-      tmp_new_stack_tops_.clear();
-      for (auto stack_top : stack_tops) {
-        auto cur_stack_element = persistent_stack_[stack_top];
-        auto new_stack_element = AdvanceStackElementWithChar(cur_stack_element, next_char);
-
-        if (new_stack_element == cur_stack_element) {
-          ExpandEquivalentStackElements(new_stack_element, &tmp_new_stack_tops_, stack_top);
-        } else {
-          ExpandEquivalentStackElements(new_stack_element, &tmp_new_stack_tops_);
-        }
-      }
-      stack_tops_history_.PushHistory(tmp_new_stack_tops_);
+      Advance(next_char);
       ++num_accepted_chars;
     }
   }
