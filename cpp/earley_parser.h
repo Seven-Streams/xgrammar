@@ -62,6 +62,22 @@ class StateHash {
            std::hash<int32_t>()(state.element_id);
   }
 };
+
+class CheckingStateEqual {
+ public:
+  bool operator()(const State& lhs, const State& rhs) const {
+    return lhs.rule_id == rhs.rule_id && lhs.sequence_id == rhs.sequence_id &&
+           lhs.element_id == rhs.element_id && lhs.parent_pos == rhs.parent_pos;
+  }
+};
+
+class CheckingStateHash {
+ public:
+  size_t operator()(const State& state) const {
+    return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
+           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_pos);
+  }
+};
 class EarleyParser {
  protected:
   /*! \brief The grammar to be parsed. */
