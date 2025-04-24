@@ -9,6 +9,7 @@
 #include <xgrammar/matcher.h>
 
 #include "compiled_grammar_data_structure.h"
+#include "earley_parser.h"
 #include "grammar_data_structure.h"
 #include "grammar_matcher_base.h"
 #include "persistent_stack.h"
@@ -21,6 +22,9 @@
 namespace xgrammar {
 
 /******************* Tool functions for token mask *******************/
+constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
+constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
+using RuleExprType = Grammar::Impl::RuleExprType;
 
 int32_t GetBitmaskSize(int vocab_size) { return DynamicBitset::GetBufferSize(vocab_size); }
 
@@ -247,7 +251,7 @@ void ApplyTokenBitmaskInplaceCPU(
  */
 
 /* \brief The concrete implementation of GrammarMatcherNode. */
-class GrammarMatcher::Impl : public GrammarMatcherBase {
+class GrammarMatcher::Impl : public EarleyParser {
  public:
   Impl(
       const CompiledGrammar& compiled_grammar,
@@ -255,7 +259,7 @@ class GrammarMatcher::Impl : public GrammarMatcherBase {
       bool terminate_without_stop_token = false,
       int max_rollback_tokens = 0
   )
-      : GrammarMatcherBase(compiled_grammar->grammar),
+      : EarleyParser(compiled_grammar->grammar, State{-1, -1, -1}),
         compiled_grammar_(compiled_grammar),
         tokenizer_info_(compiled_grammar->tokenizer_info),
         stop_token_ids_(override_stop_tokens.value_or(tokenizer_info_.GetStopTokenIds())),
@@ -277,9 +281,11 @@ class GrammarMatcher::Impl : public GrammarMatcherBase {
   bool IsTerminated() const;
 
   void Reset() {
-    stack_tops_history_.Reset();
+    states.clear();
+    history_states.clear();
+    queue.clear();
     token_length_history.clear();
-    PushInitialState(kInvalidStackElement, true);
+    PushInitialState(State{-1, -1, -1});
   }
 
   int GetMaxRollbackTokens() const { return max_rollback_tokens_; }
@@ -346,7 +352,7 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
   if (!CanReachEnd()) {
     return false;
   }
-  stack_tops_history_.PushHistory({});  // Terminate the matcher by setting the stack to empty
+  history_states.push_back({});
   token_length_history.push_back(1);  // When rolling back a stop token, we need to rollback 1 state
   return true;
 }
@@ -358,9 +364,7 @@ bool GrammarMatcher::Impl::IsTerminated() const {
   return IsStopTokenAccepted();
 }
 
-bool GrammarMatcher::Impl::IsStopTokenAccepted() const {
-  return stack_tops_history_.GetLatest().empty();
-}
+bool GrammarMatcher::Impl::IsStopTokenAccepted() const { return history_states.back().empty(); }
 
 // TODO(yixin): Polish verbose logging
 bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
@@ -376,12 +380,12 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   XGRAMMAR_CHECK(token_id >= 0 && token_id < tokenizer_info_.GetVocabSize())
       << "Invalid token id " << token_id << " for GrammarMatcher";
 
-  if (debug_print) {
-    XGRAMMAR_LOG(INFO) << "Accepting token id " << token_id << ", string: \""
-                       << PrintAsEscapedUTF8(tokenizer_info_.GetDecodedVocab()[token_id])
-                       << "\", state state:\n"
-                       << PrintStackState();
-  }
+  // if (debug_print) {
+  //   XGRAMMAR_LOG(INFO) << "Accepting token id " << token_id << ", string: \""
+  //                      << PrintAsEscapedUTF8(tokenizer_info_.GetDecodedVocab()[token_id])
+  //                      << "\", state state:\n"
+  //                      << PrintStackState();
+  // }
 
   // Handle the stop token
   if (std::find(stop_token_ids_.begin(), stop_token_ids_.end(), token_id) !=
@@ -405,24 +409,24 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   const auto& token = tokenizer_info_.GetDecodedVocab()[token_id];
   int pos = 0;
   for (auto char_value : token) {
-    if (!AcceptChar(char_value, debug_print)) {
+    if (!Advance(char_value)) {
       if (debug_print) {
         XGRAMMAR_LOG(INFO) << "The token is rejected at position " << pos << ", character "
                            << PrintAsEscapedUTF8(char_value);
       }
-      RollbackChars(pos);
+      PopBackStates(pos);
       return false;
     }
     ++pos;
   }
   token_length_history.push_back(token.size());
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
-    DiscardEarliestChars(token_length_history.front());
+    // DiscardEarliestChars(token_length_history.front());
     token_length_history.pop_front();
   }
-  if (debug_print) {
-    XGRAMMAR_LOG(INFO) << "The token is accepted. State after accepting:\n" << PrintStackState();
-  }
+  // if (debug_print) {
+  //   XGRAMMAR_LOG(INFO) << "The token is accepted. State after accepting:\n" << PrintStackState();
+  // }
   return true;
 }
 
@@ -438,25 +442,25 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
 
   int accepted_cnt = 0;
   for (auto char_value : input_str) {
-    if (!AcceptChar(char_value, debug_print)) {
+    if (!Advance(char_value)) {
       if (debug_print) {
         XGRAMMAR_LOG(INFO) << "Matching failed after accepting " << accepted_cnt << " characters";
       }
-      RollbackChars(accepted_cnt);
+      PopBackStates(accepted_cnt);
       return false;
     }
     ++accepted_cnt;
   }
   token_length_history.push_back(input_str.size());
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
-    DiscardEarliestChars(token_length_history.front());
+    // DiscardEarliestChars(token_length_history.front());
     token_length_history.pop_front();
   }
-  if (debug_print) {
-    XGRAMMAR_LOG(INFO) << "String \"" << PrintAsEscapedUTF8(input_str)
-                       << "\" is accepted. State after accepting:\n"
-                       << PrintStackState();
-  }
+  // if (debug_print) {
+  //   XGRAMMAR_LOG(INFO) << "String \"" << PrintAsEscapedUTF8(input_str)
+  //                      << "\" is accepted. State after accepting:\n"
+  //                      << PrintStackState();
+  // }
   return true;
 }
 
@@ -500,7 +504,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       CheckAndGetBitmaskPtr(*next_token_bitmask, tokenizer_info_.GetVocabSize(), index);
   const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
   const auto& adaptive_token_mask_cache = compiled_grammar_->adaptive_token_mask_cache;
-  const auto& latest_stack_tops = stack_tops_history_.GetLatest();
+  const auto& latest_states = history_states.back();
 
   // We check all the stacks one by one, and find the accepted token set or the rejected token set
   // for each stack. We will try to find the small one of the two sets.
@@ -518,18 +522,27 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
   if (debug_print) {
     XGRAMMAR_LOG(INFO) << "FillNextTokenBitmask: index=" << index
-                       << ", num of stacks=" << latest_stack_tops.size();
+                       << ", num of stacks=" << latest_states.size();
   }
 
   int stack_top_cnt = -1;
 
-  for (auto top : latest_stack_tops) {
+  for (auto state : latest_states) {
     ++stack_top_cnt;
-    auto cur_stack_element = persistent_stack_[top];
-    auto cur_sequence = grammar_->GetRuleExpr(cur_stack_element.sequence_id);
+    if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+      continue;
+    }
+    auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
+
     if (cur_sequence.type != RuleExprType::kTagDispatch &&
-        cur_stack_element.parent_id == StackElement::kNoParent &&
-        cur_stack_element.element_id == cur_sequence.size()) {
+        state.parent_pos == StackElement::kNoParent && state.element_id == cur_sequence.size()) {
+      continue;
+    }
+
+    if (cur_sequence.type == RuleExprType::kSequence ||
+        cur_sequence.type == RuleExprType::kRuleRef ||
+        cur_sequence.type == RuleExprType::kChoices ||
+        cur_sequence.type == RuleExprType::kEmptyStr) {
       continue;
     }
 
@@ -538,21 +551,19 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     }
 
     // TODO(Linzhang): It's just used for compiling!
-    auto adaptive_token_mask_it = adaptive_token_mask_cache.find(State{
-        cur_stack_element.rule_id, cur_stack_element.sequence_id, cur_stack_element.element_id
-    });
-    XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end())
-        << "The adaptive token mask is not found for stack element: "
-        << persistent_stack_.PrintStackElement(cur_stack_element);
+    auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
+    // XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end())
+    //     << "The adaptive token mask is not found for stack element: "
+    //     << persistent_stack_.PrintStackElement(cur_stack_element);
 
     const auto& adaptive_token_mask = adaptive_token_mask_it->second;
 
-    if (debug_print) {
-      XGRAMMAR_LOG(INFO) << "FillNextTokenBitmask: Stack #" << stack_top_cnt
-                         << ", num_uncertain_tokens="
-                         << adaptive_token_mask.uncertain_indices.size() << ": "
-                         << persistent_stack_.PrintStackByTopId(top) << "\n";
-    }
+    // if (debug_print) {
+    //   XGRAMMAR_LOG(INFO) << "FillNextTokenBitmask: Stack #" << stack_top_cnt
+    //                      << ", num_uncertain_tokens="
+    //                      << adaptive_token_mask.uncertain_indices.size() << ": "
+    //                      << persistent_stack_.PrintStackByTopId(top) << "\n";
+    // }
 
     // For each stack, we will check every uncertain token and put them into the accepted or
     // rejected list.
@@ -566,7 +577,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     tmp_rejected_indices_delta_.clear();
 
     // Examine only the current one stack
-    stack_tops_history_.PushHistory({persistent_stack_.NewNode(cur_stack_element)});
+    PushInitialState(state);
 
     const std::string* prev_token = nullptr;
     int prev_matched_size = 0;
@@ -586,7 +597,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         if (lcp_len > prev_matched_size) {
           accepted = false;
         } else if (lcp_len < prev_matched_size) {
-          RollbackChars(prev_matched_size - lcp_len);
+          PopBackStates(prev_matched_size - lcp_len);
         }
         prev_matched_size = std::min(prev_matched_size, lcp_len);
       }
@@ -594,7 +605,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       // Step 2.2. Find if the current token is accepted or rejected.
       if (accepted) {
         for (int j = prev_matched_size; j < static_cast<int>(cur_token.size()); ++j) {
-          if (!AcceptChar(cur_token[j], false)) {
+          if (!Advance(cur_token[j])) {
             accepted = false;
             break;
           }
@@ -617,7 +628,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       prev_token = &cur_token;
     }
 
-    RollbackChars(prev_matched_size + 1);
+    PopBackStates(prev_matched_size + 1);
 
     // Step 3. Update the accepted_indices or rejected_indices
     if (adaptive_token_mask.store_type == StoreType::kAcceptedBitset) {
@@ -660,12 +671,12 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
   bool can_find_next_char = true;
 
   while (can_find_next_char) {
-    const auto& stack_tops = stack_tops_history_.GetLatest();
+    const auto& states = history_states.back();
 
     // 1. Check that for every stack top, the next possible char is unique and the same
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;
-    for (auto stack_top : stack_tops) {
+    for (auto state : states) {
       auto stack_element = persistent_stack_[stack_top];
       auto cur_sequence = grammar_->GetRuleExpr(stack_element.sequence_id);
 
@@ -735,7 +746,7 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
   }
 
   // Rollback all chars accepted
-  RollbackChars(num_accepted_chars);
+  PopBackStates(num_accepted_chars);
   return result;
 }
 
@@ -745,7 +756,7 @@ void GrammarMatcher::Impl::Rollback(int num_tokens) {
       << token_length_history.size() << " steps of history are saved";
   while (num_tokens > 0) {
     int steps = token_length_history.back();
-    RollbackChars(steps);
+    PopBackStates(steps);
     token_length_history.pop_back();
     --num_tokens;
   }
