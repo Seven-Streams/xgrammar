@@ -279,13 +279,7 @@ class GrammarMatcher::Impl : public EarleyParser {
 
   bool IsTerminated() const;
 
-  void Reset() {
-    states.clear();
-    history_states.clear();
-    queue.clear();
-    token_length_history.clear();
-    PushInitialState(State{-1, -1, -1});
-  }
+  void Reset() { ParserReset(); }
 
   int GetMaxRollbackTokens() const { return max_rollback_tokens_; }
 

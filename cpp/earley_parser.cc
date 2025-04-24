@@ -542,7 +542,13 @@ inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
 void EarleyParser::PushInitialState(const State& stack_element) {
   history_states.push_back(std::vector<State>());
   states.push_back(std::vector<State>());
-  queue.push_back(stack_element);
+  if (stack_element.IsInvalid()) {
+    queue.push_back(
+        State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
+    );
+  } else {
+    queue.push_back(stack_element);
+  }
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {
     const auto& state = queue.front();
@@ -565,5 +571,15 @@ void EarleyParser::PushInitialState(const State& stack_element) {
   can_reach_end.push_back(CanReachEnd());
   // // XGRAMMAR_LOG(INFO) << "INIT END" << std::endl;
   return;
+}
+
+void EarleyParser::ParserReset() {
+  states.clear();
+  history_states.clear();
+  queue.clear();
+  can_reach_end.clear();
+  PushInitialState(
+      State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
+  );
 }
 }  // namespace xgrammar

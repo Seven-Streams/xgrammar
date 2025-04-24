@@ -151,6 +151,8 @@ class EarleyParser {
   void PushInitialState(const State& state);
 
   EarleyParser(const Grammar& grammar, const State& initial_state);
+
+  void ParserReset();
 };
 }  // namespace xgrammar
 #endif  // XGRAMMAR_EARLEY_PARSER_H_
