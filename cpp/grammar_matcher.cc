@@ -346,6 +346,8 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
     return false;
   }
   history_states.push_back({});
+  states.push_back({});
+  can_reach_end.push_back(false);
   token_length_history.push_back(1);  // When rolling back a stop token, we need to rollback 1 state
   return true;
 }

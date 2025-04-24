@@ -80,6 +80,7 @@ inline void EarleyParser::Complete(const State& state) {
   // XGRAMMAR_LOG(INFO) << "Now is completing " << state << std::endl;
   // Check all the possible parent states.
   const auto& parent_states_list = states[state.parent_pos];
+  // XGRAMMAR_LOG(INFO) << "Parent list size is: " << parent_states_list.size();
   for (const auto& parent_state : parent_states_list) {
     XGRAMMAR_DCHECK(parent_state.predictions.has_value());
     bool in_vec = std::find(
@@ -445,10 +446,16 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   to the history_states[0], and perform prediction and completion on the initial state.
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
+  // assert(history_states.size() == states.size());
+  // XGRAMMAR_LOG(INFO) << "States size " << states.size() << ", history size "
+  //                    << history_states.size();
   const auto& latest_states = history_states.back();
   // XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
-  //  << history_states.size() << "th character"
-  //  << ", there are " << latest_states.size() << " states." << std::endl;
+  //                    << history_states.size() << "th character"
+  //                    << ", there are " << latest_states.size() << " states.";
+  // for (const auto& state : latest_states) {
+  //   XGRAMMAR_LOG(INFO) << "Checking " << state;
+  // }
   for (const auto& state : latest_states) {
     // // XGRAMMAR_LOG(INFO) << "Scanning State: " << state << std::endl;
     Scan(state, ch);
@@ -459,15 +466,18 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     //  << std::endl;
     return false;
   }
-  // XGRAMMAR_LOG(INFO) << "The queue is not empty, the character " << ch << " is accepted."
-  //  << std::endl;
+  // XGRAMMAR_LOG(INFO) << "The queue is not empty, the character " << ch << " is accepted, "
+  //                    << "there are " << queue.size() << " states in the queue.";
+  // for (const auto& state : queue) {
+  //   XGRAMMAR_LOG(INFO) << "In queue: " << state;
+  // }
   // We need a copy of the states, since we need to rollback the states.
   history_states.push_back(std::vector<State>());
   states.push_back(std::vector<State>());
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {
     const auto& state = queue.front();
-    // XGRAMMAR_LOG(INFO) << "CHECKING " << state << std::endl;
+    // XGRAMMAR_LOG(INFO) << "CHECKING " << state;
     if (visited.find(queue.front()) != visited.end()) {
       //
       // XGRAMMAR_LOG(INFO) << state << " is skipped!" << std::endl;
@@ -476,13 +486,16 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     }
     visited.insert(state);
     history_states.back().push_back(state);
-    // XGRAMMAR_LOG(INFO) << "Now complete " << state << std::endl;
+    // XGRAMMAR_LOG(INFO) << "Now complete " << state;
     Complete(state);
-    // XGRAMMAR_LOG(INFO) << "Now predict " << state << std::endl;
+    // XGRAMMAR_LOG(INFO) << "After Complete, the size of queue is " << queue.size();
+    // XGRAMMAR_LOG(INFO) << "Now predict " << state;
     Predict(state);
+    // XGRAMMAR_LOG(INFO) << "After Predict, the size of states is " << queue.size();
     queue.pop_front();
   }
   can_reach_end.push_back(CanReachEnd());
+  // XGRAMMAR_LOG(INFO) << "After Advance, the size of states is " << history_states.back().size();
   // XGRAMMAR_LOG(INFO) << "The queue is not empty, the character" << ch << "is accepted."
   //  << std::endl;
   return true;
