@@ -19,7 +19,7 @@ using RuleExpr = Grammar::Impl::RuleExpr;
 
 inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   // The root rule.
-  if (state.parent_pos == State::kNoParent) {
+  if (state.parent_pos == State::kNoParent && state.element_id == kUnexpandedRuleFinishElementId) {
     return true;
   }
   return false;
@@ -431,18 +431,21 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
   const auto& latest_states = history_states.back();
-  XGRAMMAR_LOG(INFO) << "Start Advance: " << ch << ", the " << history_states.size()
-                     << "th character"
+  XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
+                     << history_states.size() << "th character"
                      << ", there are " << latest_states.size() << " states." << std::endl;
   for (const auto& state : latest_states) {
-    XGRAMMAR_LOG(INFO) << "Scanning State: " << state << std::endl;
+    // XGRAMMAR_LOG(INFO) << "Scanning State: " << state << std::endl;
     Scan(state, ch);
-    XGRAMMAR_LOG(INFO) << "After Scan, the size of queue is " << queue.size() << std::endl;
+    // XGRAMMAR_LOG(INFO) << "After Scan, the size of queue is " << queue.size() << std::endl;
   }
   if (queue.empty()) {
-    XGRAMMAR_LOG(INFO) << "The queue is empty, the character is not accepted." << std::endl;
+    XGRAMMAR_LOG(INFO) << "The queue is empty, the character " << ch << " is not accepted."
+                       << std::endl;
     return false;
   }
+  XGRAMMAR_LOG(INFO) << "The queue is not empty, the character " << ch << " is accepted."
+                     << std::endl;
   // We need a copy of the states, since we need to rollback the states.
   history_states.push_back(std::vector<State>());
   states.push_back(std::vector<State>());

@@ -497,6 +497,7 @@ bool GrammarMatcher::Impl::IsTokenBitmaskAllTrue(int32_t* bitmask_data_ptr) {
 bool GrammarMatcher::Impl::FillNextTokenBitmask(
     DLTensor* next_token_bitmask, int index, bool debug_print
 ) {
+  debug_print = true;
   XGRAMMAR_CHECK(!IsStopTokenAccepted())
       << "GrammarMatcher has terminated after accepting the stop token, but is trying to "
          "find the next token mask";
@@ -522,7 +523,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
   if (debug_print) {
     XGRAMMAR_LOG(INFO) << "FillNextTokenBitmask: index=" << index
-                       << ", num of stacks=" << latest_states.size();
+                       << ", num of states=" << latest_states.size();
   }
 
   // int stack_top_cnt = -1;
@@ -533,9 +534,8 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       continue;
     }
     auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
-
-    if (cur_sequence.type != RuleExprType::kTagDispatch &&
-        state.parent_pos == StackElement::kNoParent && state.element_id == cur_sequence.size()) {
+    if (state.element_id == cur_sequence.size() &&
+        (cur_sequence.type != RuleExprType::kTagDispatch)) {
       continue;
     }
 
@@ -545,19 +545,21 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         cur_sequence.type == RuleExprType::kEmptyStr) {
       continue;
     }
-
+    // XGRAMMAR_LOG(INFO) << "Now is trying to test " << state
+    //                    << ", the type=" << int(cur_sequence.type)
+    //                    << ", the full size=" << cur_sequence.size() << std::endl;
     if (cur_sequence.type == RuleExprType::kTagDispatch) {
       have_tag_dispatch = true;
     }
 
-    // TODO(Linzhang): It's just used for compiling!
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
-    // XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end())
+    XGRAMMAR_LOG(INFO) << "The state is " << state << ", the mask is "
+                       << adaptive_token_mask_it->second.Print(tokenizer_info_) << std::endl;
+    XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end());
     //     << "The adaptive token mask is not found for stack element: "
     //     << persistent_stack_.PrintStackElement(cur_stack_element);
 
     const auto& adaptive_token_mask = adaptive_token_mask_it->second;
-
     // if (debug_print) {
     //   XGRAMMAR_LOG(INFO) << "FillNextTokenBitmask: Stack #" << stack_top_cnt
     //                      << ", num_uncertain_tokens="
@@ -584,6 +586,8 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
+      XGRAMMAR_LOG(INFO) << "Now is trying to test " << cur_token
+                         << ", the size=" << cur_token.size() << std::endl;
       bool accepted = true;
 
       // Step 2.1. Find the longest common prefix with the accepted part of the previous token.
@@ -629,7 +633,6 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     }
 
     PopBackStates(prev_matched_size + 1);
-
     // Step 3. Update the accepted_indices or rejected_indices
     if (adaptive_token_mask.store_type == StoreType::kAcceptedBitset) {
       tmp_accepted_bitset_ |= adaptive_token_mask.accepted_bitset;
