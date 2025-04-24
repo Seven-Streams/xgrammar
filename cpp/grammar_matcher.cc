@@ -430,6 +430,7 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
 }
 
 bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool debug_print) {
+  debug_print = true;
   if (IsStopTokenAccepted()) {
     if (debug_print) {
       XGRAMMAR_LOG(INFO) << "The matcher has terminated after accepting the stop token, but is "
@@ -447,6 +448,8 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
       }
       PopBackStates(accepted_cnt);
       return false;
+    } else {
+      XGRAMMAR_LOG(INFO) << "Matching Succeeded after accepting " << accepted_cnt << " characters";
     }
     ++accepted_cnt;
   }
@@ -455,11 +458,9 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
     // DiscardEarliestChars(token_length_history.front());
     token_length_history.pop_front();
   }
-  // if (debug_print) {
-  //   XGRAMMAR_LOG(INFO) << "String \"" << PrintAsEscapedUTF8(input_str)
-  //                      << "\" is accepted. State after accepting:\n"
-  //                      << PrintStackState();
-  // }
+  if (debug_print) {
+    XGRAMMAR_LOG(INFO) << "String Accepted!" << std::endl;
+  }
   return true;
 }
 
