@@ -11,7 +11,6 @@
 #include "compiled_grammar_data_structure.h"
 #include "earley_parser.h"
 #include "grammar_data_structure.h"
-#include "persistent_stack.h"
 #include "support/dynamic_bitset.h"
 #include "support/encoding.h"
 #include "support/int_set.h"
@@ -22,7 +21,7 @@ namespace xgrammar {
 
 /******************* Tool functions for token mask *******************/
 constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
-// constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
+constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
 using RuleExprType = Grammar::Impl::RuleExprType;
 
 int32_t GetBitmaskSize(int vocab_size) { return DynamicBitset::GetBufferSize(vocab_size); }
@@ -444,7 +443,10 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
       PopBackStates(accepted_cnt);
       return false;
     } else {
-      XGRAMMAR_LOG(INFO) << "Matching Succeeded after accepting " << accepted_cnt << " characters";
+      if (debug_print) {
+        XGRAMMAR_LOG(INFO) << "Matching Succeeded after accepting " << accepted_cnt
+                           << " characters";
+      }
     }
     ++accepted_cnt;
   }
@@ -674,25 +676,30 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;
     for (const auto& state : states) {
-      if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+      if (state.element_id == kUnexpandedRuleFinishElementId &&
+          state.parent_pos == State::kNoParent) {
         can_find_next_char = false;
         break;
+      }
+      if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+        continue;
       }
       auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
       // We cannot deduce the next char for tag dispatch
       if (cur_sequence.type == RuleExprType::kTagDispatch) {
-        can_find_next_char = false;
-        continue;
-      }
-
-      // The state comes to the end of the grammar
-      if (state.parent_pos == StackElement::kNoParent && state.element_id == cur_sequence.size()) {
+        XGRAMMAR_LOG(INFO) << "Failed with kTag!";
         can_find_next_char = false;
         break;
       }
+
+      // The state comes to the end of the grammar
+      if (state.element_id == cur_sequence.size()) {
+        continue;
+      }
       if (cur_sequence.type == RuleExprType::kChoices ||
           cur_sequence.type == RuleExprType::kSequence ||
-          cur_sequence.type == RuleExprType::kEmptyStr) {
+          cur_sequence.type == RuleExprType::kEmptyStr ||
+          cur_sequence.type == RuleExprType::kRuleRef) {
         continue;
       }
 
@@ -702,6 +709,9 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
           next_char = cur_sequence[state.element_id];
         } else if (next_char != cur_sequence[state.element_id]) {
           can_find_next_char = false;
+          XGRAMMAR_LOG(INFO) << "Failed with a BString!, The next char is " << next_char
+                             << " And the demanded char is " << cur_sequence[state.element_id]
+                             << std::endl;
           break;
         }
       } else {
@@ -712,10 +722,12 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
         if (state.element_id < 0 || cur_sequence.size() != 3 || cur_sequence[0] != 0 ||
             cur_sequence[1] != cur_sequence[2]) {
           can_find_next_char = false;
+          XGRAMMAR_LOG(INFO) << "Failed with class!";
           break;
         } else if (next_char == -1) {
           next_char = cur_sequence[1];
         } else if (next_char != cur_sequence[1]) {
+          XGRAMMAR_LOG(INFO) << "Failed with class!";
           can_find_next_char = false;
           break;
         }
