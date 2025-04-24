@@ -430,7 +430,6 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
 }
 
 bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool debug_print) {
-  debug_print = true;
   if (IsStopTokenAccepted()) {
     if (debug_print) {
       XGRAMMAR_LOG(INFO) << "The matcher has terminated after accepting the stop token, but is "
@@ -497,7 +496,6 @@ bool GrammarMatcher::Impl::IsTokenBitmaskAllTrue(int32_t* bitmask_data_ptr) {
 bool GrammarMatcher::Impl::FillNextTokenBitmask(
     DLTensor* next_token_bitmask, int index, bool debug_print
 ) {
-  debug_print = true;
   XGRAMMAR_CHECK(!IsStopTokenAccepted())
       << "GrammarMatcher has terminated after accepting the stop token, but is trying to "
          "find the next token mask";
@@ -553,8 +551,8 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     }
 
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
-    XGRAMMAR_LOG(INFO) << "The state is " << state << ", the mask is "
-                       << adaptive_token_mask_it->second.Print(tokenizer_info_) << std::endl;
+    // XGRAMMAR_LOG(INFO) << "The state is " << state << ", the mask is "
+    //                    << adaptive_token_mask_it->second.Print(tokenizer_info_) << std::endl;
     XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end());
     //     << "The adaptive token mask is not found for stack element: "
     //     << persistent_stack_.PrintStackElement(cur_stack_element);
@@ -586,8 +584,8 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
-      XGRAMMAR_LOG(INFO) << "Now is trying to test " << cur_token
-                         << ", the size=" << cur_token.size() << std::endl;
+      // XGRAMMAR_LOG(INFO) << "Now is trying to test " << cur_token
+      //                    << ", the size=" << cur_token.size() << std::endl;
       bool accepted = true;
 
       // Step 2.1. Find the longest common prefix with the accepted part of the previous token.

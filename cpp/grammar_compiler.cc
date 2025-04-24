@@ -294,8 +294,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   tmp_can_reach_end_stack_.assign({CanReachEnd()});
   tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
   int prev_matched_size = 0;
-  XGRAMMAR_LOG(INFO) << "Size of sorted_decoded_vocab: " << sorted_decoded_vocab.size()
-                     << std::endl;
+  // XGRAMMAR_LOG(INFO) << "Size of sorted_decoded_vocab: " << sorted_decoded_vocab.size()
+  //                    << std::endl;
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
     const auto& token = sorted_decoded_vocab[i].second;
     bool accepted = true;
@@ -345,19 +345,19 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
 
     if (accepted) {
-      XGRAMMAR_LOG(INFO) << "Token " << token << " is accepted!" << std::endl;
+      // XGRAMMAR_LOG(INFO) << "Token " << token << " is accepted!" << std::endl;
       tmp_accepted_indices_.push_back(i);
     } else if (can_reach_end && !is_root_rule) {
-      XGRAMMAR_LOG(INFO) << "Token " << token << " is uncertain!" << std::endl;
+      // XGRAMMAR_LOG(INFO) << "Token " << token << " is uncertain!" << std::endl;
       // IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
       // 1. If the current rule is the root rule (is_root_rule=true), there are no
       // uncertain tokens. Not accepted tokens are just rejected.
       // 2. If a token cannot pass the lookahead assertion, it is rejected.
       tmp_uncertain_indices_.push_back(i);
     } else {
-      XGRAMMAR_LOG(INFO) << "Token " << token << " is rejected!"
-                         << ", can_reach_end: " << can_reach_end
-                         << ", is_root_rule: " << is_root_rule << std::endl;
+      // XGRAMMAR_LOG(INFO) << "Token " << token << " is rejected!"
+      //                    << ", can_reach_end: " << can_reach_end
+      //                    << ", is_root_rule: " << is_root_rule << std::endl;
       tmp_rejected_indices_.push_back(i);
     }
   }
