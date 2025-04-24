@@ -71,10 +71,22 @@ inline void EarleyParser::Complete(const State& state) {
       Case 3: The type is kCharacterClassStar, and the element_id == 0.
       If none of the above cases is true, we return.
     */
-    if ((!((cur_rule.size() == state.element_id) || (state.parent_pos == State::kNoParent))) &&
-        (cur_rule.type != RuleExprType::kEmptyStr) &&
-        (!((cur_rule.type == RuleExprType::kCharacterClassStar) && (state.element_id == 0)))) {
-      return;
+    if (cur_rule.type == RuleExprType::kTagDispatch) {
+      if (state.element_id != -1) {
+        return;
+      }
+      queue.emplace_back(State{
+          state.rule_id,
+          state.sequence_id,
+          grammar_->root_tag_dispatch_fsm->StartNode(),
+          state.parent_pos
+      });
+    } else {
+      if ((!((cur_rule.size() == state.element_id) || (state.parent_pos == State::kNoParent))) &&
+          (cur_rule.type != RuleExprType::kEmptyStr) &&
+          (!((cur_rule.type == RuleExprType::kCharacterClassStar) && (state.element_id == 0)))) {
+        return;
+      }
     }
   }
   // XGRAMMAR_LOG(INFO) << "Now is completing " << state << std::endl;
@@ -136,22 +148,19 @@ inline void EarleyParser::Complete(const State& state) {
       // completion is enough to complete the parent state.
       // We need to move to the end of the element. i.e. complete the parent state.
       case RuleExprType::kChoices:
-      case RuleExprType::kRuleRef:
-      case RuleExprType::kTagDispatch: {
+      case RuleExprType::kRuleRef: {
         queue.emplace_back(State{
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_expr.size(),
             parent_state.parent_pos
         });
-        // XGRAMMAR_LOG(INFO) << "The state is advanced to: "
-        //  << State(
-        //         parent_state.rule_id,
-        //         parent_state.sequence_id,
-        //         parent_expr.size(),
-        //         parent_state.parent_pos
-        //     )
-        //  << std::endl;
+        break;
+      }
+      case RuleExprType::kTagDispatch: {
+        queue.emplace_back(
+            State{parent_state.rule_id, parent_state.sequence_id, -1, parent_state.parent_pos}
+        );
         break;
       }
     }
@@ -210,8 +219,14 @@ inline void EarleyParser::Predict(const State& state) {
   // // XGRAMMAR_LOG(INFO) << "Predict: " << state << ", type is " << int(cur_rule.type) <<
   // std::endl;
   //  If the current state is the end of the rule, we do not need to predict.
-  if (state.element_id == cur_rule.size()) {
-    return;
+  if (cur_rule.type == RuleExprType::kTagDispatch) {
+    if (state.element_id == -1) {
+      return;
+    }
+  } else {
+    if (state.element_id == cur_rule.size()) {
+      return;
+    }
   }
   switch (cur_rule.type) {
     // These types will never predict other new rules.
@@ -295,8 +310,14 @@ inline void EarleyParser::Predict(const State& state) {
       return;
     }
     case RuleExprType::kTagDispatch: {
+      if (state.element_id == -1) {
+        // The tag has been dispatched.
+        return;
+      }
       const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
+      // XGRAMMAR_LOG(INFO) << state;
       if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
+        // XGRAMMAR_LOG(INFO) << "KTag " << state;
         XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(state.element_id))
             << "The end node of the tag dispatch fsm does not correspond to any rule id";
         auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
@@ -405,6 +426,10 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       return;
     }
     case (RuleExprType::kTagDispatch): {
+      if (state.element_id == -1) {
+        // The tag has been dispatched.
+        return;
+      }
       auto root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
       if (!root_tag_dispatch_fsm) {
         XGRAMMAR_LOG(FATAL
@@ -416,8 +441,8 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       auto new_stack_element = state;
       if (next_node == CompactFSM::NO_TRANSITION) {
         // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
-        // We try to accept the new char from the start node. If accepted, we go to the target node.
-        // If it still cannot be accepted, we stay at the start node.
+        // We try to accept the new char from the start node. If accepted, we go to the target
+        // node. If it still cannot be accepted, we stay at the start node.
         auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
         new_stack_element.element_id =
             new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
@@ -427,6 +452,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
         // We need to update the element id to the next node.
         new_stack_element.element_id = next_node;
+        // XGRAMMAR_LOG(INFO) << "The char is " << ch << " " << new_stack_element;
         queue.emplace_back(new_stack_element);
         return;
       }
@@ -446,16 +472,18 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   to the history_states[0], and perform prediction and completion on the initial state.
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
+  // XGRAMMAR_LOG(INFO) << history_states.size() << " " << states.size();
   // assert(history_states.size() == states.size());
   // XGRAMMAR_LOG(INFO) << "States size " << states.size() << ", history size "
   //                    << history_states.size();
   const auto& latest_states = history_states.back();
-  // XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
-  //                    << history_states.size() << "th character"
+  XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
+                     << history_states.size() << "th character";
   //                    << ", there are " << latest_states.size() << " states.";
   // for (const auto& state : latest_states) {
   //   XGRAMMAR_LOG(INFO) << "Checking " << state;
   // }
+  XGRAMMAR_LOG(INFO) << "The states size is " << latest_states.size();
   for (const auto& state : latest_states) {
     // // XGRAMMAR_LOG(INFO) << "Scanning State: " << state << std::endl;
     Scan(state, ch);
@@ -479,8 +507,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     const auto& state = queue.front();
     // XGRAMMAR_LOG(INFO) << "CHECKING " << state;
     if (visited.find(queue.front()) != visited.end()) {
-      //
-      // XGRAMMAR_LOG(INFO) << state << " is skipped!" << std::endl;
+      // XGRAMMAR_LOG(INFO) << state << " is skipped!";
       queue.pop_front();
       continue;
     }
@@ -495,8 +522,13 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     queue.pop_front();
   }
   can_reach_end.push_back(CanReachEnd());
-  // XGRAMMAR_LOG(INFO) << "After Advance, the size of states is " << history_states.back().size();
-  // XGRAMMAR_LOG(INFO) << "The queue is not empty, the character" << ch << "is accepted."
+  XGRAMMAR_LOG(INFO) << "After Advance, the size of states is " << history_states.back().size();
+  for (const auto& state : history_states.back()) {
+    XGRAMMAR_LOG(INFO) << "In history: " << state;
+  }
+  // XGRAMMAR_LOG(INFO) << "After Advance, the size of states is " <<
+  // history_states.back().size(); XGRAMMAR_LOG(INFO) << "The queue is not empty, the character"
+  // << ch << "is accepted."
   //  << std::endl;
   return true;
 }

@@ -352,13 +352,17 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
 }
 
 bool GrammarMatcher::Impl::IsTerminated() const {
+  XGRAMMAR_LOG(INFO) << "Withouttoken: " << terminate_without_stop_token_;
   if (terminate_without_stop_token_) {
     return CanReachEnd();
   }
   return IsStopTokenAccepted();
 }
 
-bool GrammarMatcher::Impl::IsStopTokenAccepted() const { return history_states.back().empty(); }
+bool GrammarMatcher::Impl::IsStopTokenAccepted() const {
+  XGRAMMAR_LOG(INFO) << history_states.back().size();
+  return history_states.back().empty();
+}
 
 // TODO(yixin): Polish verbose logging
 bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
@@ -425,6 +429,7 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
 }
 
 bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool debug_print) {
+  debug_print = true;
   if (IsStopTokenAccepted()) {
     if (debug_print) {
       XGRAMMAR_LOG(INFO) << "The matcher has terminated after accepting the stop token, but is "
@@ -722,12 +727,10 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
         if (state.element_id < 0 || cur_sequence.size() != 3 || cur_sequence[0] != 0 ||
             cur_sequence[1] != cur_sequence[2]) {
           can_find_next_char = false;
-          XGRAMMAR_LOG(INFO) << "Failed with class!";
           break;
         } else if (next_char == -1) {
           next_char = cur_sequence[1];
         } else if (next_char != cur_sequence[1]) {
-          XGRAMMAR_LOG(INFO) << "Failed with class!";
           can_find_next_char = false;
           break;
         }
