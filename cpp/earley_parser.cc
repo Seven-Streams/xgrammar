@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -114,21 +115,13 @@ inline void EarleyParser::Complete(const State& state) {
   }
   // XGRAMMAR_LOG(INFO) << "Now is completing " << state << std::endl;
   // Check all the possible parent states.
-  const auto& parent_states_list = states[state.parent_pos];
-  // XGRAMMAR_LOG(INFO) << "Parent list size is: " << parent_states_list.size();
-  for (const auto& parent_state : parent_states_list) {
-    XGRAMMAR_DCHECK(parent_state.predictions.has_value());
-    bool in_vec = std::find(
-                      parent_state.predictions->begin(),
-                      parent_state.predictions->end(),
-                      std::make_pair(state.rule_id, state.sequence_id)
-                  ) != parent_state.predictions->end();
-    if (!in_vec) {
-      continue;
-    }
-    // XGRAMMAR_LOG(INFO) << "The parent state is: " << parent_state << std::endl;
-    // The parent state indeed has a prediction for the current state.
-
+  auto& parent_states_map = states[state.parent_pos];
+  if (parent_states_map.find(std::make_pair(state.rule_id, state.sequence_id)) ==
+      parent_states_map.end()) {
+    return;
+  }
+  for (const auto& parent_state :
+       parent_states_map[std::make_pair(state.rule_id, state.sequence_id)]) {
     if (parent_state.sequence_id == kUnexpandedRuleStartSequenceId) {
       queue.emplace_back(State{
           parent_state.rule_id,
@@ -202,16 +195,12 @@ inline void EarleyParser::Predict(const State& state) {
     auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
     auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
     if (cur_rule_body.type == RuleExprType::kTagDispatch) {
-      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
-      bool in_vec = ptr != states.back().end();
-      if (in_vec) {
-        ptr->predictions->emplace_back(std::make_pair(cur_rule_id, cur_rule_body_id));
-      } else {
-        states.back().push_back(state);
-        states.back().back().predictions =
-            std::vector<std::pair<int32_t, int32_t>>({std::make_pair(cur_rule_id, cur_rule_body_id)}
-            );
+      auto& states_map = states.back();
+      if (states_map.find(std::make_pair(cur_rule_id, cur_rule_body_id)) == states_map.end()) {
+        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)] =
+            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
       }
+      states_map[std::make_pair(cur_rule_id, cur_rule_body_id)].insert(state);
       queue.emplace_back(State(
           cur_rule_id,
           cur_rule_body_id,
@@ -222,18 +211,14 @@ inline void EarleyParser::Predict(const State& state) {
     } else {
       // XGRAMMAR_LOG(INFO) << "It's a kChoices!" << std::endl;
       XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
-      bool in_vec =
-          std::find(states.back().begin(), states.back().end(), state) != states.back().end();
-      if (!in_vec) {
-        states.back().push_back(state);
-        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
-      }
-      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
+      auto& states_map = states.back();
       for (auto sequence_id : cur_rule_body) {
-        ptr->predictions->emplace_back(std::make_pair(cur_rule_id, sequence_id));
+        if (states_map.find(std::make_pair(cur_rule_id, sequence_id)) == states_map.end()) {
+          states_map[std::make_pair(cur_rule_id, sequence_id)] =
+              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+        }
+        states_map[std::make_pair(cur_rule_id, sequence_id)].insert(state);
         queue.emplace_back(State(cur_rule_id, sequence_id, 0, states.size() - 1));
-        // XGRAMMAR_LOG(INFO) << State(cur_rule_id, sequence_id, 0, states.size() - 1)
-        //                    << " is predicted!" << std::endl;
       }
       return;
     }
@@ -265,38 +250,27 @@ inline void EarleyParser::Predict(const State& state) {
     // 1. Add the new rule into the queue.
     // 2. Mark the new rule as a prediction of the current state.
     case RuleExprType::kRuleRef: {
-      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
-      bool in_vec = ptr != states.back().end();
-      if (in_vec) {
-        ptr->predictions->emplace_back(std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId));
-      } else {
-        states.back().push_back(state);
-        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
-        states.back().back().predictions->emplace_back(
-            std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)
-        );
+      auto& states_map = states.back();
+      if (states_map.find(std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)) ==
+          states_map.end()) {
+        states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)] =
+            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
       }
+      states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)].insert(state);
       queue.emplace_back(State(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1));
-      // XGRAMMAR_LOG(INFO) << "Ruleref " << state << " predict "
-      //  << State(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1)
-      //  << std::endl;
       break;
     }
     // If the type if kSequence, then:
     // 1. Add the new rule_expr into the queue.
     // 2. Mark the new rule_expr as a prediction of the current state.
     case RuleExprType::kSequence: {
-      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
-      bool in_vec = ptr != states.back().end();
-      if (in_vec) {
-        ptr->predictions->emplace_back(std::make_pair(state.rule_id, cur_rule[state.element_id]));
-      } else {
-        states.back().push_back(state);
-        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
-        states.back().back().predictions->emplace_back(
-            std::make_pair(state.rule_id, cur_rule[state.element_id])
-        );
+      auto& states_map = states.back();
+      if (states_map.find(std::make_pair(state.rule_id, cur_rule[state.element_id])) ==
+          states_map.end()) {
+        states_map[std::make_pair(state.rule_id, cur_rule[state.element_id])] =
+            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
       }
+      states_map[std::make_pair(state.rule_id, cur_rule[state.element_id])].insert(state);
       queue.emplace_back(state.rule_id, cur_rule[state.element_id], 0, states.size() - 1);
       // XGRAMMAR_LOG(INFO) << "sequence " << state << " predict "
       //                    << State(state.rule_id, cur_rule[state.element_id], 0, states.size() -
@@ -308,27 +282,14 @@ inline void EarleyParser::Predict(const State& state) {
     // 1. Add all the new rule_exprs into the queue.
     // 2. Mark the new rule_exprs as predictions of the current state.
     case RuleExprType::kChoices: {
-      const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
-      bool in_vec = ptr != states.back().end();
-      if (!in_vec) {
-        states.back().push_back(state);
-        states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>();
-        for (const auto& sequence_id : cur_rule) {
-          states.back().back().predictions->emplace_back(std::make_pair(state.rule_id, sequence_id)
-          );
-          queue.emplace_back(state.rule_id, sequence_id, 0, states.size() - 1);
-          // XGRAMMAR_LOG(INFO) << "choice " << state << " predict "
-          //                    << State(state.rule_id, sequence_id, 0, states.size() - 1)
-          //                    << std::endl;
+      auto& states_map = states.back();
+      for (const auto& sequence_id : cur_rule) {
+        if (states_map.find(std::make_pair(state.rule_id, sequence_id)) == states_map.end()) {
+          states_map[std::make_pair(state.rule_id, sequence_id)] =
+              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
         }
-      } else {
-        for (const auto& sequence_id : cur_rule) {
-          ptr->predictions->emplace_back(std::make_pair(state.rule_id, sequence_id));
-          queue.emplace_back(state.rule_id, sequence_id, 0, states.size() - 1);
-          // XGRAMMAR_LOG(INFO) << "choice " << state << " predict "
-          // << State(state.rule_id, sequence_id, 0, states.size() - 1)
-          // << std::endl;
-        }
+        states_map[std::make_pair(state.rule_id, sequence_id)].insert(state);
+        queue.emplace_back(state.rule_id, sequence_id, 0, states.size() - 1);
       }
       return;
     }
@@ -344,18 +305,13 @@ inline void EarleyParser::Predict(const State& state) {
             << "The end node of the tag dispatch fsm does not correspond to any rule id";
         auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
         // XGRAMMAR_LOG(INFO) << "KTag " << state << ", new rule id is" << refered_rule_id;
-        const auto& ptr = std::find(states.back().begin(), states.back().end(), state);
-        bool in_vec = ptr != states.back().end();
-        if (!in_vec) {
-          states.back().push_back(state);
-          states.back().back().predictions = std::vector<std::pair<int32_t, int32_t>>(
-              {std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)}
-          );
-        } else {
-          ptr->predictions->emplace_back(
-              std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)
-          );
+        auto& states_map = states.back();
+        if (states_map.find(std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)) ==
+            states_map.end()) {
+          states_map[std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)] =
+              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
         }
+        states_map[std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)].insert(state);
         queue.emplace_back(
             State(refered_rule_id, kUnexpandedRuleStartSequenceId, 0, states.size() - 1)
         );
@@ -500,6 +456,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
   const auto& latest_states = history_states.back();
+  // XGRAMMAR_LOG(INFO) << "Latest states: " << latest_states.size();
   for (const auto& state : latest_states) {
     // XGRAMMAR_LOG(INFO) << "Scanning State: " << state;
     Scan(state, ch);
@@ -517,7 +474,9 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   // }
   // We need a copy of the states, since we need to rollback the states.
   history_states.push_back(std::vector<State>());
-  states.push_back(std::vector<State>());
+  states.push_back(std::unordered_map<
+                   std::pair<int32_t, int32_t>,
+                   std::unordered_set<State, CheckingStateHash, CheckingStateEqual>>());
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {
     const auto& state = queue.front();
@@ -602,7 +561,9 @@ inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
 
 void EarleyParser::PushInitialState(const State& stack_element) {
   history_states.push_back(std::vector<State>());
-  states.push_back(std::vector<State>());
+  states.push_back(std::unordered_map<
+                   std::pair<int32_t, int32_t>,
+                   std::unordered_set<State, CheckingStateHash, CheckingStateEqual>>());
   if (stack_element.IsInvalid()) {
     queue.push_back(
         State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
@@ -619,7 +580,7 @@ void EarleyParser::PushInitialState(const State& stack_element) {
     const auto& state = queue.front();
     // // XGRAMMAR_LOG(INFO) << "Now Size: " << queue.size() << ", " << state << std::endl;
     if (visited.find(queue.front()) != visited.end()) {
-      // XGRAMMAR_LOG(INFO) << state << " is skipped!" << std::endl;
+      XGRAMMAR_LOG(INFO) << state << " is skipped!" << std::endl;
       queue.pop_front();
       continue;
     }

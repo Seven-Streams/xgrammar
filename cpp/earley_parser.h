@@ -7,8 +7,10 @@
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
 #include <list>
-#include <optional>
 #include <ostream>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "xgrammar/grammar.h"
@@ -25,9 +27,6 @@ struct State {
   /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
    * rule starts to match the string.*/
   int32_t parent_pos = -1;
-  /*! \brief Store all the possible predictions rule_ids. Used for completion.
-   *   The first element is the rule_id, and  the second element is the sequence_id.*/
-  std::optional<std::vector<std::pair<int32_t, int32_t>>> predictions = std::nullopt;
   /*! \brief A parent_id value of kNoParent means this StackElement is the root of the tree. */
   static constexpr int32_t kNoParent = -1;
 
@@ -44,7 +43,6 @@ struct State {
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
 
-  // TODO: Check parent_pos == other.parent_pos if proper.
   bool operator==(const State& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
            element_id == other.element_id;
@@ -83,7 +81,10 @@ class EarleyParser {
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
   /*! \brief The tree storing all states. It's used for completation. */
-  std::vector<std::vector<State>> states;
+  std::vector<std::unordered_map<
+      std::pair<int32_t, int32_t>,
+      std::unordered_set<State, CheckingStateHash, CheckingStateEqual>>>
+      states;
   /*!
       \brief The history of states. i.e. the i-th(0-base) vector
       will store the states after matching i characters. It's used
