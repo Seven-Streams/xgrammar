@@ -20,6 +20,12 @@ using RuleExpr = Grammar::Impl::RuleExpr;
 inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   // The root rule.
   if (state.parent_pos != State::kNoParent) {
+    if (state.sequence_id != kUnexpandedRuleStartSequenceId) {
+      auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
+      if (seq_expr.type == Grammar::Impl::RuleExprType::kTagDispatch) {
+        return state.element_id != -1;
+      }
+    }
     return false;
   }
   if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
@@ -28,9 +34,8 @@ inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
   if (seq_expr.type == Grammar::Impl::RuleExprType::kTagDispatch) {
     return state.element_id != -1;
-  } else {
-    return seq_expr.size() == state.element_id;
   }
+  return seq_expr.size() == state.element_id;
 }
 
 bool EarleyParser::CanReachEnd() const {
@@ -497,7 +502,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   //                    << history_states.size();
   const auto& latest_states = history_states.back();
   // XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
-  //  << history_states.size() << "th character";
+  //                    << history_states.size() << "th character"
   //                    << ", there are " << latest_states.size() << " states.";
   // for (const auto& state : latest_states) {
   //   XGRAMMAR_LOG(INFO) << "Checking " << state;
