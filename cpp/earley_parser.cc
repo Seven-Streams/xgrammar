@@ -32,6 +32,9 @@ inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
     return state.element_id == kUnexpandedRuleFinishElementId;
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
+  if (seq_expr.type == RuleExprType::kCharacterClassStar) {
+    return state.element_id == 0;
+  }
   if (seq_expr.type == Grammar::Impl::RuleExprType::kTagDispatch) {
     return state.element_id != -1;
   }
