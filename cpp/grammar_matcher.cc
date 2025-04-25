@@ -352,7 +352,6 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
 }
 
 bool GrammarMatcher::Impl::IsTerminated() const {
-  XGRAMMAR_LOG(INFO) << "Withouttoken: " << terminate_without_stop_token_;
   if (terminate_without_stop_token_) {
     return CanReachEnd();
   }

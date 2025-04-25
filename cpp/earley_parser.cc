@@ -371,7 +371,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   // XGRAMMAR_LOG(INFO) << "Scan: " << state << ", type is " << int(cur_rule.type)
   //  << ", the element size is " << cur_rule.size() << std::endl;
   // If the current state is the end of the rule, we do not need to scan.
-  if (state.element_id == cur_rule.size() && (cur_rule.type != RuleExprType::kTagDispatch)) {
+  if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
     return;
   }
   switch (cur_rule.type) {
