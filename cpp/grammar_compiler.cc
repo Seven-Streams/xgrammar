@@ -544,6 +544,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
 
   auto add_task_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
     // Execute depending on whether we use thread_pool
+    is_root_rule = false;
     if (max_threads_ > 1) {
       thread_pool->Execute([add_adaptive_token_mask, state, is_root_rule]() {
         add_adaptive_token_mask(state, is_root_rule);
@@ -582,7 +583,9 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
         if (element.type == RuleExprType::kByteString) {
           for (int idx = 0; idx < element.size(); ++idx) {
             cur_state.element_id = idx;
-            add_task_adaptive_token_mask(cur_state, rule_id == root_rule_id);
+            add_task_adaptive_token_mask(
+                cur_state, (rule_id == root_rule_id) && (element_id == sequence.size() - 1)
+            );
           }
         } else {
           XGRAMMAR_DCHECK(
@@ -591,7 +594,9 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
           );
           for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
             cur_state.element_id = -left_utf8_bytes;
-            add_task_adaptive_token_mask(cur_state, rule_id == root_rule_id);
+            add_task_adaptive_token_mask(
+                cur_state, (rule_id == root_rule_id) && (element_id == sequence.size() - 1)
+            );
           }
         }
       }
