@@ -371,7 +371,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   // XGRAMMAR_LOG(INFO) << "Scan: " << state << ", type is " << int(cur_rule.type)
   //  << ", the element size is " << cur_rule.size() << std::endl;
   // If the current state is the end of the rule, we do not need to scan.
-  if (state.element_id == cur_rule.size()) {
+  if (state.element_id == cur_rule.size() && (cur_rule.type != RuleExprType::kTagDispatch)) {
     return;
   }
   switch (cur_rule.type) {
@@ -496,18 +496,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   to the history_states[0], and perform prediction and completion on the initial state.
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
-  // XGRAMMAR_LOG(INFO) << history_states.size() << " " << states.size();
-  // assert(history_states.size() == states.size());
-  // XGRAMMAR_LOG(INFO) << "States size " << states.size() << ", history size "
-  //                    << history_states.size();
   const auto& latest_states = history_states.back();
-  // XGRAMMAR_LOG(INFO) << "Start Advance: " << PrintAsEscapedUTF8(ch) << ", the "
-  //                    << history_states.size() << "th character"
-  //                    << ", there are " << latest_states.size() << " states.";
-  // for (const auto& state : latest_states) {
-  //   XGRAMMAR_LOG(INFO) << "Checking " << state;
-  // }
-  // XGRAMMAR_LOG(INFO) << "The states size is " << latest_states.size();
   for (const auto& state : latest_states) {
     // XGRAMMAR_LOG(INFO) << "Scanning State: " << state;
     Scan(state, ch);
