@@ -172,9 +172,10 @@ inline void EarleyParser::Predict(const State& state) {
       auto& states_map = states.back();
       if (states_map.find(std::make_pair(cur_rule_id, cur_rule_body_id)) == states_map.end()) {
         states_map[std::make_pair(cur_rule_id, cur_rule_body_id)] =
-            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+      } else {
+        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)].insert(state);
       }
-      states_map[std::make_pair(cur_rule_id, cur_rule_body_id)].insert(state);
       queue.emplace_back(
           cur_rule_id,
           cur_rule_body_id,
@@ -188,9 +189,10 @@ inline void EarleyParser::Predict(const State& state) {
       for (auto sequence_id : cur_rule_body) {
         if (states_map.find(std::make_pair(cur_rule_id, sequence_id)) == states_map.end()) {
           states_map[std::make_pair(cur_rule_id, sequence_id)] =
-              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+        } else {
+          states_map[std::make_pair(cur_rule_id, sequence_id)].insert(state);
         }
-        states_map[std::make_pair(cur_rule_id, sequence_id)].insert(state);
         queue.emplace_back(cur_rule_id, sequence_id, 0, states.size() - 1);
       }
       return;
@@ -223,9 +225,10 @@ inline void EarleyParser::Predict(const State& state) {
       if (states_map.find(std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)) ==
           states_map.end()) {
         states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)] =
-            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+      } else {
+        states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)].insert(state);
       }
-      states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)].insert(state);
       queue.emplace_back(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1);
       break;
     }
@@ -237,9 +240,10 @@ inline void EarleyParser::Predict(const State& state) {
       if (states_map.find(std::make_pair(state.rule_id, cur_rule[state.element_id])) ==
           states_map.end()) {
         states_map[std::make_pair(state.rule_id, cur_rule[state.element_id])] =
-            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+            std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+      } else {
+        states_map[std::make_pair(state.rule_id, cur_rule[state.element_id])].insert(state);
       }
-      states_map[std::make_pair(state.rule_id, cur_rule[state.element_id])].insert(state);
       queue.emplace_back(state.rule_id, cur_rule[state.element_id], 0, states.size() - 1);
       return;
     }
@@ -251,9 +255,10 @@ inline void EarleyParser::Predict(const State& state) {
       for (const auto& sequence_id : cur_rule) {
         if (states_map.find(std::make_pair(state.rule_id, sequence_id)) == states_map.end()) {
           states_map[std::make_pair(state.rule_id, sequence_id)] =
-              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+        } else {
+          states_map[std::make_pair(state.rule_id, sequence_id)].insert(state);
         }
-        states_map[std::make_pair(state.rule_id, sequence_id)].insert(state);
         queue.emplace_back(state.rule_id, sequence_id, 0, states.size() - 1);
       }
       return;
@@ -272,9 +277,10 @@ inline void EarleyParser::Predict(const State& state) {
         if (states_map.find(std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)) ==
             states_map.end()) {
           states_map[std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)] =
-              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+        } else {
+          states_map[std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)].insert(state);
         }
-        states_map[std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)].insert(state);
         queue.emplace_back(
             State(refered_rule_id, kUnexpandedRuleStartSequenceId, 0, states.size() - 1)
         );
