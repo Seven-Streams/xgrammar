@@ -33,13 +33,17 @@ inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
     return state.element_id == kUnexpandedRuleFinishElementId;
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
-  if (seq_expr.type == RuleExprType::kCharacterClassStar) {
-    return state.element_id == 0;
+  switch (seq_expr.type) {
+    case Grammar::Impl::RuleExprType::kCharacterClassStar: {
+      return state.element_id == 0;
+    }
+    case Grammar::Impl::RuleExprType::kTagDispatch: {
+      return state.element_id != -1;
+    }
+    default: {
+      return state.element_id == seq_expr.size();
+    }
   }
-  if (seq_expr.type == Grammar::Impl::RuleExprType::kTagDispatch) {
-    return state.element_id != -1;
-  }
-  return seq_expr.size() == state.element_id;
 }
 
 bool EarleyParser::CanReachEnd() const {
