@@ -6,6 +6,7 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
+#include <functional>
 #include <list>
 #include <ostream>
 #include <unordered_map>
@@ -72,8 +73,9 @@ struct State {
 class StateHash {
  public:
   size_t operator()(const State& state) const {
-    return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
-           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.sub_element_id);
+    return std::hash<int32_t>()(state.rule_id) << 16 ^
+           std::hash<int32_t>()(state.sequence_id) << 8 ^
+           std::hash<int32_t>()(state.element_id) << 4 ^ std::hash<int32_t>()(state.sub_element_id);
   }
 };
 
@@ -89,9 +91,10 @@ class CheckingStateEqual {
 class CheckingStateHash {
  public:
   size_t operator()(const State& state) const {
-    return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
-           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_pos) ^
-           std::hash<int32_t>()(state.sub_element_id);
+    return std::hash<int32_t>()(state.rule_id) << 16 ^
+           std::hash<int32_t>()(state.sequence_id) << 8 ^
+           std::hash<int32_t>()(state.element_id) << 4 ^
+           std::hash<int32_t>()(state.parent_pos) << 2 ^ std::hash<int32_t>()(state.sub_element_id);
   }
 };
 class EarleyParser {

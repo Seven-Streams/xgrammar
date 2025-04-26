@@ -524,6 +524,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
   for (auto state : latest_states) {
     // ++stack_top_cnt;
+    XGRAMMAR_LOG(INFO) << state;
     if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       continue;
     }
@@ -537,20 +538,18 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         cur_sequence.type == RuleExprType::kEmptyStr) {
       continue;
     }
-    // XGRAMMAR_LOG(INFO) << "Now is trying to test " << state
-    //                    << ", the type=" << int(cur_sequence.type)
-    //                    << ", the full size=" << cur_sequence.size() << std::endl;
     if (cur_sequence.type == RuleExprType::kTagDispatch) {
-      have_tag_dispatch = true;
       if (state.element_id == State::kTagDispatchEndFlag ||
           (grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id))) {
         continue;
       }
-    }
-    XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
-    const auto& cur_element = grammar_->GetRuleExpr(cur_sequence[state.element_id]);
-    if (cur_element.type == RuleExprType::kRuleRef) {
-      continue;
+      have_tag_dispatch = true;
+    } else {
+      XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
+      const auto& cur_element = grammar_->GetRuleExpr(cur_sequence[state.element_id]);
+      if (cur_element.type == RuleExprType::kRuleRef) {
+        continue;
+      }
     }
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
     // XGRAMMAR_LOG(INFO) << "The state is " << state << ", the mask is "
