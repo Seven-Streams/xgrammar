@@ -249,19 +249,36 @@ inline void EarleyParser::Predict(const State& state) {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
       if (element_expr.type == RuleExprType::kRuleRef) {
         auto& states_map = states.back();
-        if (states_map.find(std::make_pair(element_expr[0], State::kUnexpandedRuleStartSequenceId)
-            ) == states_map.end()) {
-          states_map[std::make_pair(element_expr[0], State::kUnexpandedRuleStartSequenceId)] =
-              std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+        const auto& rule_ref_id = element_expr[0];
+        const auto& ref_rule = grammar_->GetRule(rule_ref_id);
+        const auto& ref_rule_body_id = ref_rule.body_expr_id;
+        const auto& ref_rule_body = grammar_->GetRuleExpr(ref_rule_body_id);
+        if (ref_rule_body.type == RuleExprType::kTagDispatch) {
+          if (states_map.find(std::make_pair(rule_ref_id, ref_rule_body_id)) == states_map.end()) {
+            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)] =
+                std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+          } else {
+            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)].insert(state);
+          }
+          queue.emplace_back(State{
+              rule_ref_id,
+              ref_rule_body_id,
+              grammar_->root_tag_dispatch_fsm->StartNode(),
+              int32_t(states.size()) - 1,
+              0
+          });
         } else {
-          states_map[std::make_pair(element_expr[0], State::kUnexpandedRuleStartSequenceId)].insert(
-              state
-          );
+          XGRAMMAR_DCHECK(ref_rule_body.type == RuleExprType::kChoices);
+          for (const auto& sequence_id : ref_rule_body) {
+            if (states_map.find(std::make_pair(rule_ref_id, sequence_id)) == states_map.end()) {
+              states_map[std::make_pair(rule_ref_id, sequence_id)] =
+                  std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
+            } else {
+              states_map[std::make_pair(rule_ref_id, sequence_id)].insert(state);
+            }
+            queue.emplace_back(State{rule_ref_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
+          }
         }
-        queue.emplace_back(State{
-            element_expr[0], State::kUnexpandedRuleStartSequenceId, 0, int32_t(states.size()) - 1, 0
-        });
-        return;
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
         queue.emplace_back(
