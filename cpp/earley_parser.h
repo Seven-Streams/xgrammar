@@ -16,7 +16,23 @@
 
 #include "xgrammar/grammar.h"
 namespace xgrammar {
-// Be the same as StackElement.
+/* \brief The state of the Earley parser.
+  In the implementation, a rule can only be a kchoices or a ktagdispatch.
+  A kchoices rule must be composed of some ksequence rules, or a kemptyrule.
+  In the ksequence, every element in the sequence must be a kbytestring, a
+  kcharacterclass, a kcharacterclassstar, or a rule reference.
+
+  -rule_id: The id of the rule.
+  -sequence_id: The id of the sequence in the rule.
+  -element_id: The id of the element in the sequence, or the id of the node in
+  the tag dispatch fsm.
+  -parent_pos: The id of the parent node in the Earley parser. i.e. the rule
+  is predicted from the k-th character.
+  -sub_element_id: The id of the sub element in the current element, i.e.:
+    - kbytestring: the id of the byte in the string.
+    - kcharacterclass: How many bytes are left to be read in the utf8 character.
+    - kcharacterclassstar: How many bytes are left to be read in the utf8 character.
+*/
 struct State {
   /*! \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
    * expanded.*/
@@ -70,6 +86,10 @@ struct State {
     return os;
   }
 };
+
+/*
+  When getting the mask of the state, we don't need to consider the parent_pos.
+*/
 class StateHash {
  public:
   size_t operator()(const State& state) const {
@@ -79,6 +99,10 @@ class StateHash {
   }
 };
 
+/*
+  When matching the state, we need to consider the parent_pos, since if two states
+  don't have the same parent_pos, they are not the same state.
+*/
 class CheckingStateEqual {
  public:
   bool operator()(const State& lhs, const State& rhs) const {

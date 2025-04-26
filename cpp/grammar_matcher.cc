@@ -372,13 +372,6 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   XGRAMMAR_CHECK(token_id >= 0 && token_id < tokenizer_info_.GetVocabSize())
       << "Invalid token id " << token_id << " for GrammarMatcher";
 
-  // if (debug_print) {
-  //   XGRAMMAR_LOG(INFO) << "Accepting token id " << token_id << ", string: \""
-  //                      << PrintAsEscapedUTF8(tokenizer_info_.GetDecodedVocab()[token_id])
-  //                      << "\", state state:\n"
-  //                      << PrintStackState();
-  // }
-
   // Handle the stop token
   if (std::find(stop_token_ids_.begin(), stop_token_ids_.end(), token_id) !=
       stop_token_ids_.end()) {
@@ -413,12 +406,8 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   }
   token_length_history.push_back(token.size());
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
-    // DiscardEarliestChars(token_length_history.front());
     token_length_history.pop_front();
   }
-  // if (debug_print) {
-  //   XGRAMMAR_LOG(INFO) << "The token is accepted. State after accepting:\n" << PrintStackState();
-  // }
   return true;
 }
 
@@ -450,7 +439,6 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
   }
   token_length_history.push_back(input_str.size());
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
-    // DiscardEarliestChars(token_length_history.front());
     token_length_history.pop_front();
   }
   if (debug_print) {
@@ -501,17 +489,17 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
   const auto& adaptive_token_mask_cache = compiled_grammar_->adaptive_token_mask_cache;
   const auto& latest_states = history_states.back();
 
-  // We check all the stacks one by one, and find the accepted token set or the rejected token set
-  // for each stack. We will try to find the small one of the two sets.
-  // The final accepted token set is the union of the accepted token sets of all stacks.
-  // The final rejected token set is the intersection of the rejected token sets of all stacks.
+  // We check all the latest states of the earley parser, and check all the masks of the leaf
+  // states. The final accepted token set is the union of the accepted token sets of all leaf
+  // states. The final rejected token set is the intersection of the rejected token sets of all leaf
+  // states.
 
   // Note these indices store the indices in sorted_decoded_vocab, instead of the token ids.
   tmp_accepted_bitset_.Reset();
   // {-1} means the universal set, i.e. all tokens initially
   tmp_rejected_indices_.assign({-1});
 
-  // If there is a stack top that is a tag dispatch, we allow special tokens to be accepted
+  // If there is a leaf state that is a tag dispatch, we allow special tokens to be accepted
   // because in function calling cases, only the part within the tag is constrained
   bool have_tag_dispatch = false;
 
@@ -520,10 +508,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
                        << ", num of states=" << latest_states.size();
   }
 
-  // int stack_top_cnt = -1;
-
   for (auto state : latest_states) {
-    // ++stack_top_cnt;
     if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       continue;
     }
@@ -551,21 +536,10 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       }
     }
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
-    // XGRAMMAR_LOG(INFO) << "The state is " << state << ", the mask is "
-    //                    << adaptive_token_mask_it->second.Print(tokenizer_info_) << std::endl;
     XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end()) << state;
-    //     << "The adaptive token mask is not found for stack element: "
-    //     << persistent_stack_.PrintStackElement(cur_stack_element);
-
     const auto& adaptive_token_mask = adaptive_token_mask_it->second;
-    // if (debug_print) {
-    //   XGRAMMAR_LOG(INFO) << "FillNextTokenBitmask: Stack #" << stack_top_cnt
-    //                      << ", num_uncertain_tokens="
-    //                      << adaptive_token_mask.uncertain_indices.size() << ": "
-    //                      << persistent_stack_.PrintStackByTopId(top) << "\n";
-    // }
 
-    // For each stack, we will check every uncertain token and put them into the accepted or
+    // For each state, we will check every uncertain token and put them into the accepted or
     // rejected list.
 
     // Step 2. Update the accepted tokens in accepted_indices_delta, or the rejected tokens in
@@ -576,7 +550,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
     tmp_rejected_indices_delta_.clear();
 
-    // Examine only the current one stack
+    // Examine only the current one state
     PushInitialState(state);
 
     const std::string* prev_token = nullptr;
@@ -587,8 +561,6 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     }
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
-      // XGRAMMAR_LOG(INFO) << "Now is trying to test " << cur_token
-      //                    << ", the size=" << cur_token.size() << std::endl;
       bool accepted = true;
 
       // Step 2.1. Find the longest common prefix with the accepted part of the previous token.
@@ -677,7 +649,7 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
   while (can_find_next_char) {
     const auto& states = history_states.back();
 
-    // 1. Check that for every stack top, the next possible char is unique and the same
+    // 1. Check that for every leaf state, the next possible char is unique and the same
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;
     for (const auto& state : states) {
