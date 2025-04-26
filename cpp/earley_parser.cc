@@ -83,12 +83,12 @@ inline void EarleyParser::Complete(const State& state) {
       if (state.element_id != -1) {
         return;
       }
-      queue.emplace_back(State{
+      queue.emplace_back(
           state.rule_id,
           state.sequence_id,
           grammar_->root_tag_dispatch_fsm->StartNode(),
           state.parent_pos
-      });
+      );
     } else {
       if ((!((cur_rule.size() == state.element_id) || (state.parent_pos == State::kNoParent))) &&
           (cur_rule.type != RuleExprType::kEmptyStr) &&
@@ -98,20 +98,20 @@ inline void EarleyParser::Complete(const State& state) {
     }
   }
   // Check all the possible parent states.
-  auto& parent_states_map = states[state.parent_pos];
+  const auto& parent_states_map = states[state.parent_pos];
   if (parent_states_map.find(std::make_pair(state.rule_id, state.sequence_id)) ==
       parent_states_map.end()) {
     return;
   }
   for (const auto& parent_state :
-       parent_states_map[std::make_pair(state.rule_id, state.sequence_id)]) {
+       parent_states_map.at(std::make_pair(state.rule_id, state.sequence_id))) {
     if (parent_state.sequence_id == kUnexpandedRuleStartSequenceId) {
-      queue.emplace_back(State{
+      queue.emplace_back(
           parent_state.rule_id,
           parent_state.sequence_id,
           kUnexpandedRuleFinishElementId,
           parent_state.parent_pos
-      });
+      );
       continue;
     }
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
@@ -127,12 +127,12 @@ inline void EarleyParser::Complete(const State& state) {
       // These two types can predict other new rules. We need to
       // to move to the next element.
       case RuleExprType::kSequence: {
-        queue.emplace_back(State{
+        queue.emplace_back(
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_state.element_id + 1,
             parent_state.parent_pos
-        });
+        );
         break;
       }
       // These two types can predict other new rules, and have a
@@ -140,12 +140,12 @@ inline void EarleyParser::Complete(const State& state) {
       // We need to move to the end of the element. i.e. complete the parent state.
       case RuleExprType::kChoices:
       case RuleExprType::kRuleRef: {
-        queue.emplace_back(State{
+        queue.emplace_back(
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_expr.size(),
             parent_state.parent_pos
-        });
+        );
         break;
       }
       case RuleExprType::kTagDispatch: {
@@ -175,12 +175,12 @@ inline void EarleyParser::Predict(const State& state) {
             std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
       }
       states_map[std::make_pair(cur_rule_id, cur_rule_body_id)].insert(state);
-      queue.emplace_back(State(
+      queue.emplace_back(
           cur_rule_id,
           cur_rule_body_id,
           grammar_->root_tag_dispatch_fsm->StartNode(),
           states.size() - 1
-      ));
+      );
       return;
     } else {
       XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
@@ -191,7 +191,7 @@ inline void EarleyParser::Predict(const State& state) {
               std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
         }
         states_map[std::make_pair(cur_rule_id, sequence_id)].insert(state);
-        queue.emplace_back(State(cur_rule_id, sequence_id, 0, states.size() - 1));
+        queue.emplace_back(cur_rule_id, sequence_id, 0, states.size() - 1);
       }
       return;
     }
@@ -226,7 +226,7 @@ inline void EarleyParser::Predict(const State& state) {
             std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
       }
       states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)].insert(state);
-      queue.emplace_back(State(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1));
+      queue.emplace_back(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1);
       break;
     }
     // If the type if kSequence, then:
