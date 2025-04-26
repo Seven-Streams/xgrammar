@@ -36,28 +36,36 @@ struct State {
   /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
    * rule starts to match the string.*/
   int32_t parent_pos = -1;
+  /*! \brief The id of the sub element in the current selement of the sequence. */
+  int32_t sub_element_id = 0;
 
   constexpr State() = default;
   constexpr State(const State&) = default;
   State& operator=(const State&) = default;
   constexpr State(
-      int32_t rule_id, int32_t sequence_id, int32_t element_id, int32_t parent_pos = kNoParent
+      int32_t rule_id,
+      int32_t sequence_id,
+      int32_t element_id,
+      int32_t parent_pos,
+      int32_t sub_element_id
   )
       : rule_id(rule_id),
         sequence_id(sequence_id),
         element_id(element_id),
-        parent_pos(parent_pos) {}
+        parent_pos(parent_pos),
+        sub_element_id(sub_element_id) {}
 
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
 
   bool operator==(const State& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
-           element_id == other.element_id;
+           element_id == other.element_id && sub_element_id == other.sub_element_id;
   }
   friend std::ostream& operator<<(std::ostream& os, const State& state) {
     os << "State(rule_id=" << state.rule_id << ", sequence_id=" << state.sequence_id
-       << ", element_id=" << state.element_id << ", parent_pos=" << state.parent_pos << ")";
+       << ", element_id=" << state.element_id << ", parent_pos=" << state.parent_pos
+       << ", sub_element_id=" << state.sub_element_id << ")";
     return os;
   }
 };
@@ -65,7 +73,7 @@ class StateHash {
  public:
   size_t operator()(const State& state) const {
     return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
-           std::hash<int32_t>()(state.element_id);
+           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.sub_element_id);
   }
 };
 
@@ -73,7 +81,8 @@ class CheckingStateEqual {
  public:
   bool operator()(const State& lhs, const State& rhs) const {
     return lhs.rule_id == rhs.rule_id && lhs.sequence_id == rhs.sequence_id &&
-           lhs.element_id == rhs.element_id && lhs.parent_pos == rhs.parent_pos;
+           lhs.element_id == rhs.element_id && lhs.parent_pos == rhs.parent_pos &&
+           lhs.sub_element_id == rhs.sub_element_id;
   }
 };
 
@@ -81,7 +90,8 @@ class CheckingStateHash {
  public:
   size_t operator()(const State& state) const {
     return std::hash<int32_t>()(state.rule_id) ^ std::hash<int32_t>()(state.sequence_id) ^
-           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_pos);
+           std::hash<int32_t>()(state.element_id) ^ std::hash<int32_t>()(state.parent_pos) ^
+           std::hash<int32_t>()(state.sub_element_id);
   }
 };
 class EarleyParser {
@@ -172,16 +182,6 @@ class EarleyParser {
     parser with the root rule.
   */
   void ParserReset();
-
-  /*!
-    \brief Push the two states.
-    \param grammar The grammar to be parsed.
-    \param parent_state The parent state to be pushed.
-    \param child_state The child state, which is referred by the parent state.
-    \note This function is used to push the two states into the parser. WITHOUT
-    any prediction or completion when initializing the parser.
-  */
-  EarleyParser(const Grammar& grammar, const State& parent_state, const State& child_state);
 };
 }  // namespace xgrammar
 #endif  // XGRAMMAR_EARLEY_PARSER_H_

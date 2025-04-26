@@ -255,7 +255,7 @@ class GrammarMatcher::Impl : public EarleyParser {
       bool terminate_without_stop_token = false,
       int max_rollback_tokens = 0
   )
-      : EarleyParser(compiled_grammar->grammar, State{-1, -1, -1}),
+      : EarleyParser(compiled_grammar->grammar, State{-1, -1, -1, -1, -1}),
         compiled_grammar_(compiled_grammar),
         tokenizer_info_(compiled_grammar->tokenizer_info),
         stop_token_ids_(override_stop_tokens.value_or(tokenizer_info_.GetStopTokenIds())),
@@ -532,9 +532,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         (cur_sequence.type != RuleExprType::kTagDispatch)) {
       continue;
     }
-
-    if (cur_sequence.type == RuleExprType::kSequence ||
-        cur_sequence.type == RuleExprType::kRuleRef ||
+    if (cur_sequence.type == RuleExprType::kRuleRef ||
         cur_sequence.type == RuleExprType::kChoices ||
         cur_sequence.type == RuleExprType::kEmptyStr) {
       continue;
@@ -549,11 +547,15 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         continue;
       }
     }
-
+    XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
+    const auto& cur_element = grammar_->GetRuleExpr(cur_sequence[state.element_id]);
+    if (cur_element.type == RuleExprType::kRuleRef) {
+      continue;
+    }
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
     // XGRAMMAR_LOG(INFO) << "The state is " << state << ", the mask is "
     //                    << adaptive_token_mask_it->second.Print(tokenizer_info_) << std::endl;
-    XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end());
+    XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end()) << state;
     //     << "The adaptive token mask is not found for stack element: "
     //     << persistent_stack_.PrintStackElement(cur_stack_element);
 
@@ -692,48 +694,46 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
       auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
       // We cannot deduce the next char for tag dispatch
       if (cur_sequence.type == RuleExprType::kTagDispatch) {
-        XGRAMMAR_LOG(INFO) << "Failed with kTag!";
         can_find_next_char = false;
         break;
       }
-
       // The state comes to the end of the grammar
       if (state.element_id == cur_sequence.size()) {
         continue;
       }
       if (cur_sequence.type == RuleExprType::kChoices ||
-          cur_sequence.type == RuleExprType::kSequence ||
-          cur_sequence.type == RuleExprType::kEmptyStr ||
-          cur_sequence.type == RuleExprType::kRuleRef) {
+          cur_sequence.type == RuleExprType::kEmptyStr) {
+        continue;
+      }
+      XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
+      const auto& cur_element = grammar_->GetRuleExpr(cur_sequence[state.element_id]);
+      if (cur_element.type == RuleExprType::kByteString) {
+        XGRAMMAR_DCHECK(state.sub_element_id < cur_element.size());
+        if (next_char == -1) {
+          next_char = cur_element[state.sub_element_id];
+        } else if (next_char != cur_element[state.sub_element_id]) {
+          can_find_next_char = false;
+          break;
+        }
+        continue;
+      }
+      if (cur_element.type == RuleExprType::kRuleRef) {
         continue;
       }
 
-      if (cur_sequence.type == RuleExprType::kByteString) {
-        XGRAMMAR_DCHECK(state.element_id < cur_sequence.size());
-        if (next_char == -1) {
-          next_char = cur_sequence[state.element_id];
-        } else if (next_char != cur_sequence[state.element_id]) {
-          can_find_next_char = false;
-          XGRAMMAR_LOG(INFO) << "Failed with a BString!, The next char is " << next_char
-                             << " And the demanded char is " << cur_sequence[state.element_id]
-                             << std::endl;
-          break;
-        }
-      } else {
-        XGRAMMAR_DCHECK(
-            cur_sequence.type == RuleExprType::kCharacterClass ||
-            cur_sequence.type == RuleExprType::kCharacterClassStar
-        );
-        if (state.element_id < 0 || cur_sequence.size() != 3 || cur_sequence[0] != 0 ||
-            cur_sequence[1] != cur_sequence[2]) {
-          can_find_next_char = false;
-          break;
-        } else if (next_char == -1) {
-          next_char = cur_sequence[1];
-        } else if (next_char != cur_sequence[1]) {
-          can_find_next_char = false;
-          break;
-        }
+      XGRAMMAR_DCHECK(
+          cur_element.type == RuleExprType::kCharacterClass ||
+          cur_element.type == RuleExprType::kCharacterClassStar
+      );
+      if (state.sub_element_id > 0 || cur_element.size() != 3 || cur_element[0] != 0 ||
+          cur_element[1] != cur_element[2]) {
+        can_find_next_char = false;
+        break;
+      } else if (next_char == -1) {
+        next_char = cur_element[1];
+      } else if (next_char != cur_element[1]) {
+        can_find_next_char = false;
+        break;
       }
     }
 

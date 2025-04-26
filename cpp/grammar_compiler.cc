@@ -203,10 +203,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
   // Do not expand the initial stack element: we want to find the accepted/rejected tokens
   // that exactly start from the initial stack element.
-  GrammarMatcherForTokenMaskCache(
-      const Grammar& grammar, const State& parent_state, const State& child_state
-  )
-      : EarleyParser(grammar, parent_state, child_state), init_rule_id(parent_state.rule_id) {}
+  GrammarMatcherForTokenMaskCache(const Grammar& grammar, const State& init_state)
+      : EarleyParser(grammar, init_state), init_rule_id(init_state.rule_id) {}
   /*!
    * \brief Get the adaptive token mask for the given StackElement.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
@@ -287,7 +285,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
-
   // For every character in the current token, stores whether it is possible to reach the end of
   // the rule when matching until this character. Store it in a stack for later rollback.
   tmp_can_reach_end_stack_.assign({CanReachEnd()});
@@ -354,9 +351,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       // 2. If a token cannot pass the lookahead assertion, it is rejected.
       tmp_uncertain_indices_.push_back(i);
     } else {
-      // XGRAMMAR_LOG(INFO) << "Token " << token << " is rejected!"
-      //                    << ", can_reach_end: " << can_reach_end
-      //                    << ", is_root_rule: " << is_root_rule << std::endl;
       tmp_rejected_indices_.push_back(i);
     }
   }
@@ -526,32 +520,28 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     adaptive_token_mask_cache_mutex.emplace();
   }
 
-  auto add_adaptive_token_mask = [&](const State& parent_state,
-                                     const State& child_state,
-                                     bool is_root_rule) {
-    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, parent_state, child_state);
+  auto add_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
+    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(), tokenizer_info_.GetSortedDecodedVocab(), is_root_rule
     );
     if (max_threads_ > 1) {
       std::lock_guard<std::mutex> lock(adaptive_token_mask_cache_mutex.value());
-      compiled_grammar_impl->adaptive_token_mask_cache[child_state] = cur_adaptive_token_mask_cache;
+      compiled_grammar_impl->adaptive_token_mask_cache[state] = cur_adaptive_token_mask_cache;
     } else {
-      compiled_grammar_impl->adaptive_token_mask_cache[child_state] = cur_adaptive_token_mask_cache;
+      compiled_grammar_impl->adaptive_token_mask_cache[state] = cur_adaptive_token_mask_cache;
     }
   };
 
-  auto add_task_adaptive_token_mask = [&](const State& parent_state,
-                                          const State& child_state,
-                                          bool is_root_rule) {
+  auto add_task_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
     // Execute depending on whether we use thread_pool
     is_root_rule = false;
     if (max_threads_ > 1) {
-      thread_pool->Execute([add_adaptive_token_mask, parent_state, child_state, is_root_rule]() {
-        add_adaptive_token_mask(parent_state, child_state, is_root_rule);
+      thread_pool->Execute([add_adaptive_token_mask, state, is_root_rule]() {
+        add_adaptive_token_mask(state, is_root_rule);
       });
     } else {
-      add_adaptive_token_mask(parent_state, child_state, is_root_rule);
+      add_adaptive_token_mask(state, is_root_rule);
     }
   };
 
@@ -560,12 +550,10 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     auto rule_body = grammar->GetRuleExpr(rule.body_expr_id);
 
     if (rule_body.type == RuleExprType::kTagDispatch) {
-      auto parent_state =
-          State(rule_id, State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent);
-      auto child_state = State(rule_id, rule.body_expr_id, 0, 0);
+      auto state = State(rule_id, rule.body_expr_id, 0, State::kNoParent, 0);
       for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
-        child_state.element_id = i;
-        add_task_adaptive_token_mask(parent_state, child_state, rule_id == root_rule_id);
+        state.element_id = i;
+        add_task_adaptive_token_mask(state, rule_id == root_rule_id);
       }
       continue;
     }
@@ -577,18 +565,17 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
         continue;
       }
       XGRAMMAR_DCHECK(sequence.type == RuleExprType::kSequence);
-      auto parent_state = State(rule_id, sequence_id, 0, State::kNoParent);
+      auto state = State(rule_id, sequence_id, 0, State::kNoParent, 0);
       for (int element_id = 0; element_id < sequence.size(); ++element_id) {
+        state.element_id = element_id;
         auto element = grammar->GetRuleExpr(sequence[element_id]);
         if (element.type == RuleExprType::kRuleRef) {
           continue;
         }
-        parent_state.element_id = element_id;
-        auto child_state = State(rule_id, sequence[element_id], 0, 0);
         if (element.type == RuleExprType::kByteString) {
           for (int idx = 0; idx < element.size(); ++idx) {
-            child_state.element_id = idx;
-            add_task_adaptive_token_mask(parent_state, child_state, rule_id == root_rule_id);
+            state.sub_element_id = idx;
+            add_task_adaptive_token_mask(state, rule_id == root_rule_id);
           }
         } else {
           XGRAMMAR_DCHECK(
@@ -596,8 +583,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
               element.type == RuleExprType::kCharacterClass
           );
           for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
-            child_state.element_id = -left_utf8_bytes;
-            add_task_adaptive_token_mask(parent_state, child_state, rule_id == root_rule_id);
+            state.sub_element_id = left_utf8_bytes;
+            add_task_adaptive_token_mask(state, rule_id == root_rule_id);
           }
         }
       }
