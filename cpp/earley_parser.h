@@ -115,6 +115,8 @@ class EarleyParser {
 
   /*! \brief It's the processing queue of the earley parser.*/
   std::list<State> queue;
+
+  State init_state;
   /*!
     \brief The scanning operation of the Earley parser.
   */

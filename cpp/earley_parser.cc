@@ -62,10 +62,10 @@ void EarleyParser::PopBackStates(int32_t cnt) {
 }
 
 inline void EarleyParser::Complete(const State& state) {
+  // Check if a rule is completed.
   if (state.parent_pos == State::kNoParent) {
     return;
   }
-  // Check if a rule is completed.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
     if (state.element_id != State::kUnexpanedRuleFinishFlag) {
       return;
@@ -360,6 +360,9 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             auto new_state = state;
             new_state.sub_element_id--;
             if (new_state.sub_element_id == 0) {
+              if (element_expr.type == RuleExprType::kCharacterClassStar) {
+                queue.push_back(new_state);
+              }
               new_state.element_id++;
               new_state.sub_element_id = 0;
             }
@@ -454,27 +457,22 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {
     const auto& state = queue.front();
-    // XGRAMMAR_LOG(INFO) << "Now is checking the state: " << state;
     if (visited.find(queue.front()) != visited.end()) {
       queue.pop_front();
       continue;
     }
     visited.insert(state);
     history_states.back().push_back(state);
-    // XGRAMMAR_LOG(INFO) << "Completing the state... " << state;
     Complete(state);
-    // XGRAMMAR_LOG(INFO) << "Predicting the state... " << state;
-    //  << ", After Completing: " << queue.size() << "In the queue";
     Predict(state);
-    // XGRAMMAR_LOG(INFO) << "Done: " << state << ", After Predicting: " << queue.size()
-    //  << "In the queue";
     queue.pop_front();
   }
   can_reach_end.push_back(CanReachEnd());
   return true;
 }
 
-EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state) : grammar_(grammar) {
+EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state)
+    : grammar_(grammar), init_state(init_state) {
   if (init_state.IsInvalid()) {
     PushInitialState(State(
         grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
@@ -490,7 +488,7 @@ inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
       element_expr.type == RuleExprType::kCharacterClass ||
       element_expr.type == RuleExprType::kCharacterClassStar
   ) << "The element type is not supported!";
-  if (state.element_id < 0) {
+  if (state.sub_element_id > 0) {
     return (ch & 0xC0) == 0x80;
   }
   auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
