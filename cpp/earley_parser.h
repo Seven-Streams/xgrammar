@@ -151,9 +151,29 @@ class EarleyParser {
   */
   void PushInitialState(const State& state);
 
+  /*!
+    \brief Constructor of the Earley parser.
+    \param grammar The grammar to be parsed.
+    \param initial_state The initial state to be pushed into the parser.
+  */
   EarleyParser(const Grammar& grammar, const State& initial_state);
 
+  /*!
+    \brief Reset the parser.
+    \note This function is used to reset the parser, and initialize the
+    parser with the root rule.
+  */
   void ParserReset();
+
+  /*!
+    \brief Push the two states.
+    \param grammar The grammar to be parsed.
+    \param parent_state The parent state to be pushed.
+    \param child_state The child state, which is referred by the parent state.
+    \note This function is used to push the two states into the parser. WITHOUT
+    any prediction or completion when initializing the parser.
+  */
+  EarleyParser(const Grammar& grammar, const State& parent_state, const State& child_state);
 };
 }  // namespace xgrammar
 #endif  // XGRAMMAR_EARLEY_PARSER_H_

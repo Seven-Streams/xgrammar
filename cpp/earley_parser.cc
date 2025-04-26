@@ -608,4 +608,21 @@ void EarleyParser::ParserReset() {
       State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
   );
 }
+
+EarleyParser::EarleyParser(
+    const Grammar& grammar, const State& parent_state, const State& child_state
+) {
+  XGRAMMAR_DCHECK(parent_state.parent_pos == State::kNoParent) << "Invalid parent state";
+  XGRAMMAR_DCHECK(child_state.parent_pos == 0) << "Invalid child state";
+  grammar_ = grammar;
+  states.push_back(std::unordered_map<
+                   std::pair<int32_t, int32_t>,
+                   std::unordered_set<State, CheckingStateHash, CheckingStateEqual>>());
+  history_states.push_back(std::vector<State>());
+  history_states.back().push_back(child_state);
+  states.back()[std::make_pair(child_state.rule_id, child_state.sequence_id)] =
+      std::unordered_set<State, CheckingStateHash, CheckingStateEqual>();
+  states.back()[std::make_pair(child_state.rule_id, child_state.sequence_id)].insert(parent_state);
+  can_reach_end.push_back(CanReachEnd());
+}
 }  // namespace xgrammar
