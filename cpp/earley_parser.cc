@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
@@ -31,16 +32,10 @@ inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
     return state.element_id == State::kUnexpanedRuleFinishFlag;
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
-  switch (seq_expr.type) {
-    case RuleExprType::kCharacterClassStar: {
-      return state.element_id == 0;
-    }
-    case RuleExprType::kTagDispatch: {
-      return state.element_id != State::kTagDispatchEndFlag;
-    }
-    default: {
-      return state.element_id == seq_expr.size();
-    }
+  if (seq_expr.type == RuleExprType::kTagDispatch) {
+    return state.element_id != State::kTagDispatchEndFlag;
+  } else {
+    return state.element_id == seq_expr.size();
   }
 }
 
@@ -56,7 +51,9 @@ void EarleyParser::PopBackStates(int32_t cnt) {
     XGRAMMAR_LOG(FATAL) << "The number of states to be popped is larger than the size of states.";
   }
   states.erase(states.end() - cnt, states.end());
-  history_states.erase(history_states.end() - cnt, history_states.end());
+  for (int i = 0; i < cnt; i++) {
+    history_states.pop_back();
+  }
   can_reach_end.erase(can_reach_end.end() - cnt, can_reach_end.end());
   return;
 }
@@ -557,6 +554,15 @@ void EarleyParser::ParserReset() {
   PushInitialState(State(
       grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
   ));
+}
+
+void EarleyParser::PopFrontStates(const int32_t& cnt) {
+  if (std::size_t(cnt) >= history_states.size()) {
+    return;
+  }
+  for (int i = 0; i < cnt; i++) {
+    history_states.pop_front();
+  }
 }
 
 }  // namespace xgrammar

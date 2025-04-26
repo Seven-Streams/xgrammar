@@ -131,7 +131,7 @@ class EarleyParser {
       will store the states after matching i characters. It's used
       for rollback.
    */
-  std::vector<std::vector<State>> history_states;
+  std::list<std::vector<State>> history_states;
 
   /*! \brief The vector stores whether at present, the grammar can reach the end. */
   std::vector<bool> can_reach_end;
@@ -207,6 +207,11 @@ class EarleyParser {
     parser with the root rule.
   */
   void ParserReset();
+
+  /*!
+    \brief Popfront the history states to save memory.
+  */
+  void PopFrontStates(const int32_t& cnt);
 };
 }  // namespace xgrammar
 #endif  // XGRAMMAR_EARLEY_PARSER_H_
