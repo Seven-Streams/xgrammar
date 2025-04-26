@@ -524,7 +524,6 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
   for (auto state : latest_states) {
     // ++stack_top_cnt;
-    XGRAMMAR_LOG(INFO) << state;
     if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       continue;
     }
