@@ -17,6 +17,15 @@
 namespace xgrammar {
 // Be the same as StackElement.
 struct State {
+  /*! \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
+   * expanded.*/
+  static constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
+  /*! \brief A element_id value of kUnexpanedRuleFinishFlag means an unexpanded rule is ended.*/
+  static constexpr int32_t kUnexpanedRuleFinishFlag = 128001;
+  /*! \brief A element_id value of kTagDispatchEndFlag means the kTagDispatch pair is finished.*/
+  static constexpr int32_t kTagDispatchEndFlag = -2;
+  /*! \brief A parent_id value of kNoParent means this State is the root of the tree. */
+  static constexpr int32_t kNoParent = -1;
   /*! \brief The rule's id. Used for debug purposes. */
   int32_t rule_id = -1;
   /*! \brief Which choice in this rule is selected. */
@@ -27,8 +36,6 @@ struct State {
   /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
    * rule starts to match the string.*/
   int32_t parent_pos = -1;
-  /*! \brief A parent_id value of kNoParent means this StackElement is the root of the tree. */
-  static constexpr int32_t kNoParent = -1;
 
   constexpr State() = default;
   constexpr State(const State&) = default;

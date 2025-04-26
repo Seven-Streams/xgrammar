@@ -13,24 +13,22 @@
 #include "support/logging.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
-constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
-constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
 using RuleExprType = Grammar::Impl::RuleExprType;
 using RuleExpr = Grammar::Impl::RuleExpr;
 
 inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   // The root rule.
   if (state.parent_pos != State::kNoParent) {
-    if (state.sequence_id != kUnexpandedRuleStartSequenceId) {
+    if (state.sequence_id != State::kUnexpandedRuleStartSequenceId) {
       auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
       if (seq_expr.type == RuleExprType::kTagDispatch) {
-        return state.element_id != -1;
+        return state.element_id != State::kTagDispatchEndFlag;
       }
     }
     return false;
   }
-  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
-    return state.element_id == kUnexpandedRuleFinishElementId;
+  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
+    return state.element_id == State::kUnexpanedRuleFinishFlag;
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
   switch (seq_expr.type) {
@@ -38,7 +36,7 @@ inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
       return state.element_id == 0;
     }
     case RuleExprType::kTagDispatch: {
-      return state.element_id != -1;
+      return state.element_id != State::kTagDispatchEndFlag;
     }
     default: {
       return state.element_id == seq_expr.size();
@@ -67,8 +65,8 @@ inline void EarleyParser::Complete(const State& state) {
   if (state.parent_pos == State::kNoParent) {
     return;
   }
-  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
-    if (state.element_id != kUnexpandedRuleFinishElementId) {
+  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
+    if (state.element_id != State::kUnexpanedRuleFinishFlag) {
       return;
     }
   } else {
@@ -80,7 +78,7 @@ inline void EarleyParser::Complete(const State& state) {
       If none of the above cases is true, we return.
     */
     if (cur_rule.type == RuleExprType::kTagDispatch) {
-      if (state.element_id != -1) {
+      if (state.element_id != State::kTagDispatchEndFlag) {
         return;
       }
       queue.emplace_back(
@@ -105,11 +103,11 @@ inline void EarleyParser::Complete(const State& state) {
   }
   for (const auto& parent_state :
        parent_states_map.at(std::make_pair(state.rule_id, state.sequence_id))) {
-    if (parent_state.sequence_id == kUnexpandedRuleStartSequenceId) {
+    if (parent_state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       queue.emplace_back(
           parent_state.rule_id,
           parent_state.sequence_id,
-          kUnexpandedRuleFinishElementId,
+          State::kUnexpanedRuleFinishFlag,
           parent_state.parent_pos
       );
       continue;
@@ -149,9 +147,12 @@ inline void EarleyParser::Complete(const State& state) {
         break;
       }
       case RuleExprType::kTagDispatch: {
-        queue.emplace_back(
-            State{parent_state.rule_id, parent_state.sequence_id, -1, parent_state.parent_pos}
-        );
+        queue.emplace_back(State{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            State::kTagDispatchEndFlag,
+            parent_state.parent_pos
+        });
         break;
       }
     }
@@ -161,8 +162,8 @@ inline void EarleyParser::Complete(const State& state) {
 inline void EarleyParser::Predict(const State& state) {
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
-  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
-    if (state.element_id == kUnexpandedRuleFinishElementId) {
+  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
+    if (state.element_id == State::kUnexpanedRuleFinishFlag) {
       return;
     }
     auto cur_rule_id = state.rule_id;
@@ -201,7 +202,7 @@ inline void EarleyParser::Predict(const State& state) {
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   //  If the current state is the end of the rule, we do not need to predict.
   if (cur_rule.type == RuleExprType::kTagDispatch) {
-    if (state.element_id == -1) {
+    if (state.element_id == State::kTagDispatchEndFlag) {
       return;
     }
   } else {
@@ -222,14 +223,15 @@ inline void EarleyParser::Predict(const State& state) {
     // 2. Mark the new rule as a prediction of the current state.
     case RuleExprType::kRuleRef: {
       auto& states_map = states.back();
-      if (states_map.find(std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)) ==
+      if (states_map.find(std::make_pair(cur_rule[0], State::kUnexpandedRuleStartSequenceId)) ==
           states_map.end()) {
-        states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)] =
+        states_map[std::make_pair(cur_rule[0], State::kUnexpandedRuleStartSequenceId)] =
             std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
       } else {
-        states_map[std::make_pair(cur_rule[0], kUnexpandedRuleStartSequenceId)].insert(state);
+        states_map[std::make_pair(cur_rule[0], State::kUnexpandedRuleStartSequenceId)].insert(state
+        );
       }
-      queue.emplace_back(cur_rule[0], kUnexpandedRuleStartSequenceId, 0, states.size() - 1);
+      queue.emplace_back(cur_rule[0], State::kUnexpandedRuleStartSequenceId, 0, states.size() - 1);
       break;
     }
     // If the type if kSequence, then:
@@ -264,7 +266,7 @@ inline void EarleyParser::Predict(const State& state) {
       return;
     }
     case RuleExprType::kTagDispatch: {
-      if (state.element_id == -1) {
+      if (state.element_id == State::kTagDispatchEndFlag) {
         // The tag has been dispatched.
         return;
       }
@@ -274,15 +276,17 @@ inline void EarleyParser::Predict(const State& state) {
             << "The end node of the tag dispatch fsm does not correspond to any rule id";
         auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
         auto& states_map = states.back();
-        if (states_map.find(std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)) ==
-            states_map.end()) {
-          states_map[std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)] =
+        if (states_map.find(std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)
+            ) == states_map.end()) {
+          states_map[std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)] =
               std::unordered_set<State, CheckingStateHash, CheckingStateEqual>({state});
         } else {
-          states_map[std::make_pair(refered_rule_id, kUnexpandedRuleStartSequenceId)].insert(state);
+          states_map[std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)].insert(
+              state
+          );
         }
         queue.emplace_back(
-            State(refered_rule_id, kUnexpandedRuleStartSequenceId, 0, states.size() - 1)
+            State(refered_rule_id, State::kUnexpandedRuleStartSequenceId, 0, states.size() - 1)
         );
       }
       return;
@@ -290,9 +294,8 @@ inline void EarleyParser::Predict(const State& state) {
   }
 }
 inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
-  // // XGRAMMAR_LOG(INFO) << "Scan: " << state << ", ch is " << ch << std::endl;
   //  An unexpanded rule cannot be scanned.
-  if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
     return;
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
@@ -368,7 +371,7 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       return;
     }
     case (RuleExprType::kTagDispatch): {
-      if (state.element_id == -1) {
+      if (state.element_id == State::kTagDispatchEndFlag) {
         // The tag has been dispatched.
         return;
       }
@@ -448,7 +451,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
 EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state) : grammar_(grammar) {
   if (init_state.IsInvalid()) {
     PushInitialState(
-        State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
+        State(grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
     );
   } else {
     PushInitialState(init_state);
@@ -501,7 +504,7 @@ void EarleyParser::PushInitialState(const State& stack_element) {
                    std::unordered_set<State, CheckingStateHash, CheckingStateEqual>>());
   if (stack_element.IsInvalid()) {
     queue.push_back(
-        State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
+        State(grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
     );
   } else {
     queue.push_back(stack_element);
@@ -530,7 +533,7 @@ void EarleyParser::ParserReset() {
   queue.clear();
   can_reach_end.clear();
   PushInitialState(
-      State(grammar_->GetRootRuleId(), kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
+      State(grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent)
   );
 }
 

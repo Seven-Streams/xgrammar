@@ -37,7 +37,6 @@ struct hash<xgrammar::StructuralTagItem> {
 }  // namespace std
 
 namespace xgrammar {
-constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
 /******************* MemorySize *******************/
 
 std::size_t MemorySize(const Grammar::Impl& impl) {
@@ -561,7 +560,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     auto rule_body = grammar->GetRuleExpr(rule.body_expr_id);
 
     if (rule_body.type == RuleExprType::kTagDispatch) {
-      auto parent_state = State(rule_id, kUnexpandedRuleStartSequenceId, 0, -1);
+      auto parent_state =
+          State(rule_id, State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent);
       auto child_state = State(rule_id, rule.body_expr_id, 0, 0);
       for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
         child_state.element_id = i;
@@ -577,7 +577,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
         continue;
       }
       XGRAMMAR_DCHECK(sequence.type == RuleExprType::kSequence);
-      auto parent_state = State(rule_id, sequence_id, 0, -1);
+      auto parent_state = State(rule_id, sequence_id, 0, State::kNoParent);
       for (int element_id = 0; element_id < sequence.size(); ++element_id) {
         auto element = grammar->GetRuleExpr(sequence[element_id]);
         if (element.type == RuleExprType::kRuleRef) {

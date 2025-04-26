@@ -20,8 +20,6 @@
 namespace xgrammar {
 
 /******************* Tool functions for token mask *******************/
-constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
-constexpr int32_t kUnexpandedRuleFinishElementId = 128000;
 using RuleExprType = Grammar::Impl::RuleExprType;
 
 int32_t GetBitmaskSize(int vocab_size) { return DynamicBitset::GetBufferSize(vocab_size); }
@@ -526,7 +524,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
   for (auto state : latest_states) {
     // ++stack_top_cnt;
-    if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+    if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       continue;
     }
     auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
@@ -546,7 +544,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     //                    << ", the full size=" << cur_sequence.size() << std::endl;
     if (cur_sequence.type == RuleExprType::kTagDispatch) {
       have_tag_dispatch = true;
-      if (state.element_id == -1 ||
+      if (state.element_id == State::kTagDispatchEndFlag ||
           (grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id))) {
         continue;
       }
@@ -683,12 +681,12 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;
     for (const auto& state : states) {
-      if (state.element_id == kUnexpandedRuleFinishElementId &&
+      if (state.element_id == State::kUnexpanedRuleFinishFlag &&
           state.parent_pos == State::kNoParent) {
         can_find_next_char = false;
         break;
       }
-      if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
+      if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
         continue;
       }
       auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
