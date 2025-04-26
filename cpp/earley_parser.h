@@ -32,6 +32,7 @@ struct State {
 
   constexpr State() = default;
   constexpr State(const State&) = default;
+  State& operator=(const State&) = default;
   constexpr State(
       int32_t rule_id, int32_t sequence_id, int32_t element_id, int32_t parent_pos = kNoParent
   )
