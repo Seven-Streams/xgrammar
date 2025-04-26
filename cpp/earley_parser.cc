@@ -23,7 +23,7 @@ inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   if (state.parent_pos != State::kNoParent) {
     if (state.sequence_id != kUnexpandedRuleStartSequenceId) {
       auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
-      if (seq_expr.type == Grammar::Impl::RuleExprType::kTagDispatch) {
+      if (seq_expr.type == RuleExprType::kTagDispatch) {
         return state.element_id != -1;
       }
     }
@@ -34,10 +34,10 @@ inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
   switch (seq_expr.type) {
-    case Grammar::Impl::RuleExprType::kCharacterClassStar: {
+    case RuleExprType::kCharacterClassStar: {
       return state.element_id == 0;
     }
-    case Grammar::Impl::RuleExprType::kTagDispatch: {
+    case RuleExprType::kTagDispatch: {
       return state.element_id != -1;
     }
     default: {
@@ -65,21 +65,6 @@ void EarleyParser::PopBackStates(int32_t cnt) {
 
 inline void EarleyParser::Complete(const State& state) {
   if (state.parent_pos == State::kNoParent) {
-    if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
-      return;
-    }
-    auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-    if (cur_rule.type == RuleExprType::kTagDispatch) {
-      if (state.element_id != -1) {
-        return;
-      }
-      queue.emplace_back(State{
-          state.rule_id,
-          state.sequence_id,
-          grammar_->root_tag_dispatch_fsm->StartNode(),
-          state.parent_pos
-      });
-    }
     return;
   }
   if (state.sequence_id == kUnexpandedRuleStartSequenceId) {
