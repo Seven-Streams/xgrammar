@@ -233,49 +233,49 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   std::vector<bool> tmp_can_reach_end_prefix_or_stack_;
 };
 
-// bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
-//     const std::string& token, const std::vector<bool>& can_reach_end_stack
-// ) {
-//   auto lookahead_assertion_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
-//   if (lookahead_assertion_id == -1) {
-//     return true;
-//   }
-//   auto lookahead_stack_element = StackElement(-1, lookahead_assertion_id, 0);
-//   PushInitialState(lookahead_stack_element, true);
-//   int token_len = token.size();
+bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
+    const std::string& token, const std::vector<bool>& can_reach_end_stack
+) {
+  auto lookahead_assertion_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
+  if (lookahead_assertion_id == -1) {
+    return true;
+  }
+  auto lookahead_state = State(-1, lookahead_assertion_id, 0, -1, 0);
+  PushInitialState(lookahead_state);
+  int token_len = token.size();
 
-//   // Find all positions that can come to and end. Then check if the suffix from that position
-//   // can be accepted by the lookahead assertion.
-//   for (int i = static_cast<int>(can_reach_end_stack.size()) - 1; i >= 0; --i) {
-//     if (!can_reach_end_stack[i]) {
-//       continue;
-//     }
-//     int last_accept_pos = i - 1;
-//     for (int pos = i; pos < token_len; ++pos) {
-//       if (!AcceptChar(token[pos])) {
-//         break;
-//       }
-//       last_accept_pos = pos;
-//       // Case 1. The whole rule is finished.
-//       if (CanReachEnd()) {
-//         // accepted chars: pos - i + 1
-//         // we need to rollback the pushed initial state as well
-//         RollbackChars(pos - i + 2);
-//         return true;
-//       }
-//     }
-//     // Case 2. The whole token is accepted
-//     if (last_accept_pos == token_len - 1) {
-//       RollbackChars(last_accept_pos - i + 2);
-//       return true;
-//     }
-//     // Case 3. The token is not accepted. Check the next position.
-//     RollbackChars(last_accept_pos - i + 1);
-//   }
+  // Find all positions that can come to and end. Then check if the suffix from that position
+  // can be accepted by the lookahead assertion.
+  for (int i = static_cast<int>(can_reach_end_stack.size()) - 1; i >= 0; --i) {
+    if (!can_reach_end_stack[i]) {
+      continue;
+    }
+    int last_accept_pos = i - 1;
+    for (int pos = i; pos < token_len; ++pos) {
+      if (!Advance(token[pos])) {
+        break;
+      }
+      last_accept_pos = pos;
+      // Case 1. The whole rule is finished.
+      if (CanReachEnd()) {
+        // accepted chars: pos - i + 1
+        // we need to rollback the pushed initial state as well
+        PopBackStates(pos - i + 2);
+        return true;
+      }
+    }
+    // Case 2. The whole token is accepted
+    if (last_accept_pos == token_len - 1) {
+      PopBackStates(last_accept_pos - i + 2);
+      return true;
+    }
+    // Case 3. The token is not accepted. Check the next position.
+    PopBackStates(last_accept_pos - i + 1);
+  }
 
-//   RollbackChars(1);
-//   return false;
-// }
+  PopBackStates(1);
+  return false;
+}
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     size_t vocab_size,
@@ -343,7 +343,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     if (accepted) {
       // XGRAMMAR_LOG(INFO) << "Token " << token << " is accepted!" << std::endl;
       tmp_accepted_indices_.push_back(i);
-    } else if (can_reach_end && !is_root_rule) {
+    } else if (can_reach_end && !is_root_rule &&
+               IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
       // XGRAMMAR_LOG(INFO) << "Token " << token << " is uncertain!" << std::endl;
       // IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
       // 1. If the current rule is the root rule (is_root_rule=true), there are no
