@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -199,13 +198,19 @@ void EarleyParser::Predict(const State& state) {
     }
     XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
     auto& states_map = states.back();
-    std::unordered_set<std::pair<int32_t, int32_t>> prediction;
+    std::vector<std::pair<int32_t, int32_t>> prediction;
     for (auto sequence_id : cur_rule_body) {
       queue.emplace_back(State{cur_rule_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
-      if (prediction.find(std::make_pair(cur_rule_id, sequence_id)) != prediction.end()) {
+      if (std::find_if(
+              prediction.begin(),
+              prediction.end(),
+              [&](const std::pair<int32_t, int32_t> p) {
+                return p == std::make_pair(cur_rule_id, sequence_id);
+              }
+          ) != prediction.end()) {
         continue;
       }
-      prediction.insert(std::make_pair(cur_rule_id, sequence_id));
+      prediction.push_back(std::make_pair(cur_rule_id, sequence_id));
       if (states_map.find(std::make_pair(cur_rule_id, sequence_id)) == states_map.end()) {
         states_map[std::make_pair(cur_rule_id, sequence_id)] = std::vector<State>({state});
       } else {
@@ -473,14 +478,17 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   }
   history_states.push_back(std::vector<State>());
   states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
-  std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
+  std::vector<State> visited;
+
   while (!queue.empty()) {
     const auto& state = queue.front();
-    if (visited.find(queue.front()) != visited.end()) {
+    if (std::find_if(visited.begin(), visited.end(), [&](const State& s) {
+          return CheckingStateEqual()(state, s);
+        }) != visited.end()) {
       queue.pop_front();
       continue;
     }
-    visited.insert(state);
+    visited.push_back(state);
     history_states.back().push_back(state);
     Complete(state);
     Predict(state);
@@ -536,14 +544,16 @@ void EarleyParser::PushInitialState(const State& state) {
   } else {
     queue.push_back(state);
   }
-  std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
+  std::vector<State> visited;
   while (!queue.empty()) {
     const auto& state = queue.front();
-    if (visited.find(queue.front()) != visited.end()) {
+    if (std::find_if(visited.begin(), visited.end(), [&](const State& s) {
+          return CheckingStateEqual()(state, s);
+        }) != visited.end()) {
       queue.pop_front();
       continue;
     }
-    visited.insert(state);
+    visited.push_back(state);
     history_states.back().push_back(state);
     Complete(state);
     Predict(state);
