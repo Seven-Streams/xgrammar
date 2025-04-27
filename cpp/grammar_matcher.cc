@@ -510,8 +510,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
                        << ", num of states=" << latest_states.size();
   }
 
-  for (auto state_id : latest_states) {
-    const auto& state = state_buffer[state_id];
+  for (auto state : latest_states) {
     if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       continue;
     }
@@ -650,13 +649,12 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
   bool can_find_next_char = true;
 
   while (can_find_next_char) {
-    const auto& state_ids = history_states.back();
+    const auto& states = history_states.back();
 
     // 1. Check that for every leaf state, the next possible char is unique and the same
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;
-    for (const auto& state_id : state_ids) {
-      const auto& state = state_buffer[state_id];
+    for (const auto& state : states) {
       if (state.element_id == State::kUnexpanedRuleFinishFlag &&
           state.parent_pos == State::kNoParent) {
         can_find_next_char = false;

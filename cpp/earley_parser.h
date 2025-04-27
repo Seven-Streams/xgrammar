@@ -13,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include "support/element_buffer.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
 /* \brief The state of the Earley parser.
@@ -56,8 +55,6 @@ struct State {
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
 
-  /*! \brief The reference time of the state, useful for memory management.*/
-  int32_t reference_count = 0;
   constexpr State() = default;
   constexpr State(const State&) = default;
   State& operator=(const State&) = default;
@@ -66,15 +63,13 @@ struct State {
       int32_t sequence_id,
       int32_t element_id,
       int32_t parent_pos,
-      int32_t sub_element_id,
-      int32_t reference_count = 0
+      int32_t sub_element_id
   )
       : rule_id(rule_id),
         sequence_id(sequence_id),
         element_id(element_id),
         parent_pos(parent_pos),
-        sub_element_id(sub_element_id),
-        reference_count(reference_count) {}
+        sub_element_id(sub_element_id) {}
 
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
@@ -130,39 +125,35 @@ class EarleyParser {
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
   /*! \brief The tree storing all states. It's used for completation. */
-  std::vector<std::unordered_map<std::pair<int32_t, int32_t>, std::vector<int32_t>>> states;
+  std::vector<std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>> states;
   /*!
       \brief The history of states. i.e. the i-th(0-base) vector
       will store the states after matching i characters. It's used
       for rollback.
    */
-  std::list<std::vector<int32_t>> history_states;
+  std::list<std::vector<State>> history_states;
 
   /*! \brief The vector stores whether at present, the grammar can reach the end. */
   std::vector<bool> can_reach_end;
 
   /*! \brief It's the processing queue of the earley parser.*/
-  std::list<int32_t> queue;
+  std::list<State> queue;
 
-  /*! \brief The initial state, useful for debug. */
   State init_state;
-
-  static constexpr State invalid_state = State(-1, -1, -1, -1, -1);
-  ElementBuffer<State, invalid_state> state_buffer;
   /*!
     \brief The scanning operation of the Earley parser.
   */
-  void Scan(const int32_t& state_id, const uint8_t& ch);
+  void Scan(const State& state, const uint8_t& ch);
 
   /*!
       \brief The prediction operation of the Earley parser.
   */
-  void Predict(const int32_t& state_id);
+  void Predict(const State& state);
 
   /*!
       \brief The completion operation of the Earley parser.
   */
-  void Complete(const int32_t& state_id);
+  void Complete(const State& state);
 
   /*!
     \brief Check if the state is the end of the grammar.
@@ -175,26 +166,6 @@ class EarleyParser {
     \brief Check if a character can be accepted.
   */
   bool IsAccepted(const State& state, uint8_t ch) const;
-
-  /*! \brief Allocate a new State.*/
-  int32_t NewState(const State& state) {
-    int32_t id = state_buffer.Allocate(state);
-    return id;
-  }
-
-  /*! \brief Add a reference of the state.*/
-  void AddRef(int32_t id) {
-    state_buffer[id].reference_count++;
-    return;
-  }
-
-  /*! \brief remove a reference of the state.*/
-  void RemoveRef(int32_t id) {
-    state_buffer[id].reference_count--;
-    if (state_buffer[id].reference_count <= 0) {
-      state_buffer.Free(id);
-    }
-  }
 
  public:
   /*!
