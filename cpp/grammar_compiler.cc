@@ -546,7 +546,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
       auto state = State(rule_id, rule.body_expr_id, 0, State::kNoParent, 0);
       for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
         state.element_id = i;
-        add_task_adaptive_token_mask(state, rule_id == root_rule_id);
+        add_task_adaptive_token_mask(state, false);
       }
       continue;
     }
