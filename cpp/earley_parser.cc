@@ -424,21 +424,21 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       }
       auto start_node = root_tag_dispatch_fsm->StartNode();
       auto next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
-      auto new_stack_element = state;
+      auto new_state = state;
       if (next_node == CompactFSM::NO_TRANSITION) {
         // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
         // We try to accept the new char from the start node. If accepted, we go to the target
         // node. If it still cannot be accepted, we stay at the start node.
         auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
-        new_stack_element.element_id =
+        new_state.element_id =
             new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
-        queue.emplace_back(new_stack_element);
+        queue.emplace_back(new_state);
         return;
       } else {
         // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
         // We need to update the element id to the next node.
-        new_stack_element.element_id = next_node;
-        queue.emplace_back(new_stack_element);
+        new_state.element_id = next_node;
+        queue.emplace_back(new_state);
         return;
       }
     }
@@ -519,15 +519,15 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   return is_negative;
 }
 
-void EarleyParser::PushInitialState(const State& stack_element) {
+void EarleyParser::PushInitialState(const State& state) {
   history_states.push_back(std::vector<State>());
   states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
-  if (stack_element.IsInvalid()) {
+  if (state.IsInvalid()) {
     queue.push_back(State(
         grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
     ));
   } else {
-    queue.push_back(stack_element);
+    queue.push_back(state);
   }
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {
