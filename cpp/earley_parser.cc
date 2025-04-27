@@ -41,8 +41,8 @@ bool EarleyParser::IsEndOfGrammar(const State& state) const {
 
 bool EarleyParser::CanReachEnd() const {
   const auto& current_states = history_states.back();
-  return std::any_of(current_states.begin(), current_states.end(), [&](const State& state) {
-    return IsEndOfGrammar(state);
+  return std::any_of(current_states.begin(), current_states.end(), [&](const int32_t& state_id) {
+    return IsEndOfGrammar(state_buffer[state_id]);
   });
 }
 
@@ -52,13 +52,17 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   }
   states.erase(states.end() - cnt, states.end());
   for (int i = 0; i < cnt; i++) {
+    for (const auto& state_id : history_states.back()) {
+      RemoveRef(state_id);
+    }
     history_states.pop_back();
   }
   can_reach_end.erase(can_reach_end.end() - cnt, can_reach_end.end());
   return;
 }
 
-void EarleyParser::Complete(const State& state) {
+void EarleyParser::Complete(const int32_t& state_id) {
+  const auto& state = state_buffer[state_id];
   // Check if a rule is completed.
   if (state.parent_pos == State::kNoParent) {
     return;
@@ -79,13 +83,16 @@ void EarleyParser::Complete(const State& state) {
       if (state.element_id != State::kTagDispatchEndFlag) {
         return;
       }
-      queue.emplace_back(State{
+      int32_t new_node_id = NewState(State{
           state.rule_id,
           state.sequence_id,
           grammar_->root_tag_dispatch_fsm->StartNode(),
           state.parent_pos,
+          0,
           0
       });
+      AddRef(new_node_id);
+      queue.push_back(new_node_id);
     } else {
       if (((cur_rule.size() != state.element_id)) && (cur_rule.type != RuleExprType::kEmptyStr)) {
         return;
@@ -98,16 +105,19 @@ void EarleyParser::Complete(const State& state) {
       parent_states_map.end()) {
     return;
   }
-  for (const auto& parent_state :
+  for (const auto& parent_state_id :
        parent_states_map.at(std::make_pair(state.rule_id, state.sequence_id))) {
+    const auto& parent_state = state_buffer[parent_state_id];
     if (parent_state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-      queue.emplace_back(State{
+      int32_t new_state_id = NewState(State{
           parent_state.rule_id,
           parent_state.sequence_id,
           State::kUnexpanedRuleFinishFlag,
           parent_state.parent_pos,
           0
       });
+      AddRef(new_state_id);
+      queue.push_back(new_state_id);
       continue;
     }
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
@@ -124,43 +134,50 @@ void EarleyParser::Complete(const State& state) {
       // These two types can predict other new rules. We need to
       // to move to the next element.
       case RuleExprType::kSequence: {
-        queue.emplace_back(State{
+        int32_t new_state_id = NewState(State{
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_state.element_id + 1,
             parent_state.parent_pos,
             0
         });
+        AddRef(new_state_id);
+        queue.push_back(new_state_id);
         break;
       }
       // These two types can predict other new rules, and have a
       // completion is enough to complete the parent state.
       // We need to move to the end of the element. i.e. complete the parent state.
       case RuleExprType::kChoices: {
-        queue.emplace_back(State{
+        int32_t new_state_id = NewState(State{
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_expr.size(),
             parent_state.parent_pos,
             0
         });
+        AddRef(new_state_id);
+        queue.push_back(new_state_id);
         break;
       }
       case RuleExprType::kTagDispatch: {
-        queue.emplace_back(State{
+        int32_t new_state_id = NewState(State{
             parent_state.rule_id,
             parent_state.sequence_id,
             State::kTagDispatchEndFlag,
             parent_state.parent_pos,
             0
         });
+        AddRef(new_state_id);
+        queue.push_back(new_state_id);
         break;
       }
     }
   }
   return;
 }
-void EarleyParser::Predict(const State& state) {
+void EarleyParser::Predict(const int32_t& state_id) {
+  auto& state = state_buffer[state_id];
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
@@ -177,33 +194,41 @@ void EarleyParser::Predict(const State& state) {
     if (cur_rule_body.type == RuleExprType::kTagDispatch) {
       auto& states_map = states.back();
       if (states_map.find(std::make_pair(cur_rule_id, cur_rule_body_id)) == states_map.end()) {
-        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)] = std::vector<State>({state});
+        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)] =
+            std::vector<int32_t>({state_id});
       } else {
-        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)].push_back(state);
+        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)].push_back(state_id);
       }
-      queue.emplace_back(State{
+      AddRef(state_id);
+      int32_t new_state_id = NewState(State{
           cur_rule_id,
           cur_rule_body_id,
           grammar_->root_tag_dispatch_fsm->StartNode(),
           int32_t(states.size()) - 1,
           0
       });
+      AddRef(new_state_id);
+      queue.push_back(new_state_id);
       return;
     }
     XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
     auto& states_map = states.back();
     std::unordered_set<std::pair<int32_t, int32_t>> prediction;
     for (auto sequence_id : cur_rule_body) {
-      queue.emplace_back(State{cur_rule_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
       if (prediction.find(std::make_pair(cur_rule_id, sequence_id)) != prediction.end()) {
         continue;
       }
+      int32_t new_state_id =
+          NewState(State{cur_rule_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
+      AddRef(new_state_id);
+      queue.push_back(new_state_id);
       prediction.insert(std::make_pair(cur_rule_id, sequence_id));
       if (states_map.find(std::make_pair(cur_rule_id, sequence_id)) == states_map.end()) {
-        states_map[std::make_pair(cur_rule_id, sequence_id)] = std::vector<State>({state});
+        states_map[std::make_pair(cur_rule_id, sequence_id)] = std::vector<int32_t>({state_id});
       } else {
-        states_map[std::make_pair(cur_rule_id, sequence_id)].push_back(state);
+        states_map[std::make_pair(cur_rule_id, sequence_id)].push_back(state_id);
       }
+      AddRef(state_id);
     }
     return;
   }
@@ -255,33 +280,44 @@ void EarleyParser::Predict(const State& state) {
         const auto& ref_rule_body = grammar_->GetRuleExpr(ref_rule_body_id);
         if (ref_rule_body.type == RuleExprType::kTagDispatch) {
           if (states_map.find(std::make_pair(rule_ref_id, ref_rule_body_id)) == states_map.end()) {
-            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)] = std::vector<State>({state});
+            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)] =
+                std::vector<int32_t>({state_id});
           } else {
-            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)].push_back(state);
+            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)].push_back(state_id);
           }
-          queue.emplace_back(State{
+          AddRef(state_id);
+          int32_t new_state_id = NewState(State{
               rule_ref_id,
               ref_rule_body_id,
               grammar_->root_tag_dispatch_fsm->StartNode(),
               int32_t(states.size()) - 1,
               0
           });
+          AddRef(new_state_id);
+          queue.push_back(new_state_id);
         } else {
           XGRAMMAR_DCHECK(ref_rule_body.type == RuleExprType::kChoices);
           for (const auto& sequence_id : ref_rule_body) {
             if (states_map.find(std::make_pair(rule_ref_id, sequence_id)) == states_map.end()) {
-              states_map[std::make_pair(rule_ref_id, sequence_id)] = std::vector<State>({state});
+              states_map[std::make_pair(rule_ref_id, sequence_id)] =
+                  std::vector<int32_t>({state_id});
             } else {
-              states_map[std::make_pair(rule_ref_id, sequence_id)].push_back(state);
+              states_map[std::make_pair(rule_ref_id, sequence_id)].push_back(state_id);
             }
-            queue.emplace_back(State{rule_ref_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
+            AddRef(state_id);
+            int32_t new_state_id =
+                NewState(State{rule_ref_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
+            AddRef(new_state_id);
+            queue.push_back(new_state_id);
           }
         }
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
-        queue.emplace_back(
+        int32_t new_state_id = NewState(
             State{state.rule_id, state.sequence_id, state.element_id + 1, state.parent_pos, 0}
         );
+        AddRef(new_state_id);
+        queue.push_back(new_state_id);
         return;
       }
 
@@ -301,20 +337,24 @@ void EarleyParser::Predict(const State& state) {
         if (states_map.find(std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)
             ) == states_map.end()) {
           states_map[std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)] =
-              std::vector<State>({state});
+              std::vector<int32_t>({state_id});
         } else {
           states_map[std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)]
-              .push_back(state);
+              .push_back(state_id);
         }
-        queue.emplace_back(
+        AddRef(state_id);
+        int32_t new_state_id = NewState(
             State(refered_rule_id, State::kUnexpandedRuleStartSequenceId, 0, states.size() - 1, 0)
         );
+        AddRef(new_state_id);
+        queue.push_back(new_state_id);
       }
       return;
     }
   }
 }
-void EarleyParser::Scan(const State& state, const uint8_t& ch) {
+void EarleyParser::Scan(const int32_t& state_id, const uint8_t& ch) {
+  const auto& state = state_buffer[state_id];
   //  An unexpanded rule cannot be scanned.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
     return;
@@ -361,7 +401,9 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
               new_state.element_id++;
               new_state.sub_element_id = 0;
             }
-            queue.push_back(new_state);
+            int new_state_id = NewState(new_state);
+            AddRef(new_state_id);
+            queue.push_back(new_state_id);
           }
           return;
         }
@@ -375,12 +417,16 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             new_state.sub_element_id--;
             if (new_state.sub_element_id == 0) {
               if (element_expr.type == RuleExprType::kCharacterClassStar) {
-                queue.push_back(new_state);
+                int new_state_id = NewState(new_state);
+                AddRef(new_state_id);
+                queue.push_back(new_state_id);
               }
               new_state.element_id++;
               new_state.sub_element_id = 0;
             }
-            queue.push_back(new_state);
+            int new_state_id = NewState(new_state);
+            AddRef(new_state_id);
+            queue.push_back(new_state_id);
             return;
           }
           auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
@@ -391,17 +437,22 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           if (num_bytes == 1) {
             auto new_state = state;
             new_state.element_id++;
-            queue.push_back(new_state);
+            int new_state_id = NewState(new_state);
+            AddRef(new_state_id);
+            queue.push_back(new_state_id);
             if (element_expr.type == RuleExprType::kCharacterClassStar) {
               // The element is a character class star, we need to add the old state again.
-              queue.push_back(state);
+              AddRef(state_id);
+              queue.push_back(state_id);
             }
             return;
           }
           // A UTF8 character is accepted.
           auto new_state = state;
           new_state.sub_element_id = num_bytes - 1;
-          queue.push_back(new_state);
+          int new_state_id = NewState(new_state);
+          AddRef(new_state_id);
+          queue.push_back(new_state_id);
           return;
         }
       }
@@ -424,21 +475,25 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       }
       auto start_node = root_tag_dispatch_fsm->StartNode();
       auto next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
-      auto new_stack_element = state;
+      auto new_state = state;
       if (next_node == CompactFSM::NO_TRANSITION) {
         // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
         // We try to accept the new char from the start node. If accepted, we go to the target
         // node. If it still cannot be accepted, we stay at the start node.
         auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
-        new_stack_element.element_id =
+        new_state.element_id =
             new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
-        queue.emplace_back(new_stack_element);
+        int new_state_id = NewState(new_state);
+        AddRef(new_state_id);
+        queue.push_back(new_state_id);
         return;
       } else {
         // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
         // We need to update the element id to the next node.
-        new_stack_element.element_id = next_node;
-        queue.emplace_back(new_stack_element);
+        new_state.element_id = next_node;
+        int new_state_id = NewState(new_state);
+        AddRef(new_state_id);
+        queue.push_back(new_state_id);
         return;
       }
     }
@@ -464,19 +519,21 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   if (queue.empty()) {
     return false;
   }
-  history_states.push_back(std::vector<State>());
-  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
+  history_states.push_back(std::vector<int32_t>());
+  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<int32_t>>());
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {
-    const auto& state = queue.front();
-    if (visited.find(queue.front()) != visited.end()) {
+    const auto& state_id = queue.front();
+    const auto& state = state_buffer[state_id];
+    if (visited.find(state) != visited.end()) {
+      RemoveRef(state_id);
       queue.pop_front();
       continue;
     }
     visited.insert(state);
-    history_states.back().push_back(state);
-    Complete(state);
-    Predict(state);
+    history_states.back().push_back(state_id);
+    Complete(state_id);
+    Predict(state_id);
     queue.pop_front();
   }
   can_reach_end.push_back(CanReachEnd());
@@ -519,27 +576,32 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   return is_negative;
 }
 
-void EarleyParser::PushInitialState(const State& stack_element) {
-  history_states.push_back(std::vector<State>());
-  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
-  if (stack_element.IsInvalid()) {
-    queue.push_back(State(
-        grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
+void EarleyParser::PushInitialState(const State& state) {
+  history_states.push_back(std::vector<int32_t>());
+  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<int32_t>>());
+  if (state.IsInvalid()) {
+    int32_t new_state_id = NewState(State(
+        grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0, 1
     ));
+    queue.push_back(new_state_id);
   } else {
-    queue.push_back(stack_element);
+    int32_t new_state_id = NewState(state);
+    AddRef(new_state_id);
+    queue.push_back(new_state_id);
   }
   std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
   while (!queue.empty()) {
-    const auto& state = queue.front();
-    if (visited.find(queue.front()) != visited.end()) {
+    const auto& state_id = queue.front();
+    const auto& state = state_buffer[state_id];
+    if (visited.find(state) != visited.end()) {
+      RemoveRef(state_id);
       queue.pop_front();
       continue;
     }
     visited.insert(state);
-    history_states.back().push_back(state);
-    Complete(state);
-    Predict(state);
+    history_states.back().push_back(state_id);
+    Complete(state_id);
+    Predict(state_id);
     queue.pop_front();
   }
   can_reach_end.push_back(CanReachEnd());
@@ -561,6 +623,9 @@ void EarleyParser::PopFrontStates(const int32_t& cnt) {
     return;
   }
   for (int i = 0; i < cnt; i++) {
+    for (auto& state_id : history_states.front()) {
+      RemoveRef(state_id);
+    }
     history_states.pop_front();
   }
 }
