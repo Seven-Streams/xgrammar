@@ -529,7 +529,6 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
 
   auto add_task_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
     // Execute depending on whether we use thread_pool
-    is_root_rule = false;
     if (max_threads_ > 1) {
       thread_pool->Execute([add_adaptive_token_mask, state, is_root_rule]() {
         add_adaptive_token_mask(state, is_root_rule);
