@@ -509,7 +509,44 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     XGRAMMAR_LOG(INFO) << "FillNextTokenBitmask: index=" << index
                        << ", num of states=" << latest_states.size();
   }
-
+  for (auto state : latest_states) {
+    if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
+      continue;
+    }
+    auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
+    if (state.element_id == cur_sequence.size() &&
+        (cur_sequence.type != RuleExprType::kTagDispatch)) {
+      continue;
+    }
+    if (cur_sequence.type == RuleExprType::kRuleRef ||
+        cur_sequence.type == RuleExprType::kChoices ||
+        cur_sequence.type == RuleExprType::kEmptyStr) {
+      continue;
+    }
+    if (cur_sequence.type == RuleExprType::kTagDispatch) {
+      if (state.element_id == State::kTagDispatchEndFlag ||
+          (grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id))) {
+        continue;
+      }
+      have_tag_dispatch = true;
+    } else {
+      XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
+      const auto& cur_element = grammar_->GetRuleExpr(cur_sequence[state.element_id]);
+      if (cur_element.type == RuleExprType::kRuleRef) {
+        continue;
+      }
+    }
+    auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
+    XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end()) << state;
+    const auto& adaptive_token_mask = adaptive_token_mask_it->second;
+    if (adaptive_token_mask.store_type == StoreType::kAcceptedBitset) {
+      tmp_accepted_bitset_ |= adaptive_token_mask.accepted_bitset;
+    } else if (adaptive_token_mask.store_type == StoreType::kAccepted) {
+      for (auto idx : adaptive_token_mask.accepted_indices) {
+        tmp_accepted_bitset_.Set(sorted_decoded_vocab[idx].first, true);
+      }
+    }
+  }
   for (auto state : latest_states) {
     if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       continue;
@@ -562,6 +599,9 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
                          << adaptive_token_mask.Print(tokenizer_info_);
     }
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
+      if (tmp_accepted_bitset_[sorted_decoded_vocab[cur_token_idx].first] == true) {
+        continue;
+      }
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
       bool accepted = true;
 
