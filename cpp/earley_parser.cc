@@ -154,6 +154,13 @@ void EarleyParser::Complete(const State& state) {
             parent_state.parent_pos,
             0
         });
+        queue.emplace_back(State{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            grammar_->root_tag_dispatch_fsm->StartNode(),
+            parent_state.parent_pos,
+            0
+        });
         break;
       }
     }
