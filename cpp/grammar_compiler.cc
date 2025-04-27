@@ -565,6 +565,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
         state.element_id = element_id;
         auto element = grammar->GetRuleExpr(sequence[element_id]);
         if (element.type == RuleExprType::kRuleRef) {
+          state.sub_element_id = 0;
+          add_task_adaptive_token_mask(state, rule_id == root_rule_id);
           continue;
         }
         if (element.type == RuleExprType::kByteString) {
@@ -572,15 +574,15 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
             state.sub_element_id = idx;
             add_task_adaptive_token_mask(state, rule_id == root_rule_id);
           }
-        } else {
-          XGRAMMAR_DCHECK(
-              element.type == RuleExprType::kCharacterClassStar ||
-              element.type == RuleExprType::kCharacterClass
-          );
-          for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
-            state.sub_element_id = left_utf8_bytes;
-            add_task_adaptive_token_mask(state, rule_id == root_rule_id);
-          }
+          continue;
+        }
+        XGRAMMAR_DCHECK(
+            element.type == RuleExprType::kCharacterClassStar ||
+            element.type == RuleExprType::kCharacterClass
+        );
+        for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
+          state.sub_element_id = left_utf8_bytes;
+          add_task_adaptive_token_mask(state, rule_id == root_rule_id);
         }
       }
     }

@@ -519,8 +519,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         (cur_sequence.type != RuleExprType::kTagDispatch)) {
       continue;
     }
-    if (cur_sequence.type == RuleExprType::kRuleRef ||
-        cur_sequence.type == RuleExprType::kChoices ||
+    if (cur_sequence.type == RuleExprType::kChoices ||
         cur_sequence.type == RuleExprType::kEmptyStr) {
       continue;
     }
@@ -530,13 +529,8 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         continue;
       }
       have_tag_dispatch = true;
-    } else {
-      XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
-      const auto& cur_element = grammar_->GetRuleExpr(cur_sequence[state.element_id]);
-      if (cur_element.type == RuleExprType::kRuleRef) {
-        continue;
-      }
     }
+    XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
     XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end()) << state;
     const auto& adaptive_token_mask = adaptive_token_mask_it->second;
