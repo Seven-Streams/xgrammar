@@ -562,6 +562,9 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
                          << adaptive_token_mask.Print(tokenizer_info_);
     }
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
+      if (tmp_accepted_bitset_[sorted_decoded_vocab[cur_token_idx].first] == true) {
+        continue;
+      }
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
       bool accepted = true;
 
