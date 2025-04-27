@@ -17,7 +17,7 @@ namespace xgrammar {
 using RuleExprType = Grammar::Impl::RuleExprType;
 using RuleExpr = Grammar::Impl::RuleExpr;
 
-inline bool EarleyParser::IsEndOfGrammar(const State& state) const {
+bool EarleyParser::IsEndOfGrammar(const State& state) const {
   // The root rule.
   if (state.parent_pos != State::kNoParent) {
     if (state.sequence_id != State::kUnexpandedRuleStartSequenceId) {
@@ -58,7 +58,7 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   return;
 }
 
-inline void EarleyParser::Complete(const State& state) {
+void EarleyParser::Complete(const State& state) {
   // Check if a rule is completed.
   if (state.parent_pos == State::kNoParent) {
     return;
@@ -160,7 +160,7 @@ inline void EarleyParser::Complete(const State& state) {
   }
   return;
 }
-inline void EarleyParser::Predict(const State& state) {
+void EarleyParser::Predict(const State& state) {
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
@@ -314,7 +314,7 @@ inline void EarleyParser::Predict(const State& state) {
     }
   }
 }
-inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
+void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   //  An unexpanded rule cannot be scanned.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
     return;
@@ -326,11 +326,11 @@ inline void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   }
   switch (cur_rule.type) {
     // These types can never accept a character directly.
-    case (RuleExprType::kRuleRef):
     case (RuleExprType::kChoices):
     case (RuleExprType::kEmptyStr):
       return;
     // These types can never be added into the queue.
+    case (RuleExprType::kRuleRef):
     case (RuleExprType::kByteString):
     case (RuleExprType::kCharacterClass):
     case (RuleExprType::kCharacterClassStar): {
@@ -493,7 +493,7 @@ EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state)
     PushInitialState(init_state);
   }
 }
-inline bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
+bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   auto sequence_expr = grammar_->GetRuleExpr(state.sequence_id);
   auto element_expr = grammar_->GetRuleExpr(sequence_expr[state.element_id]);
   XGRAMMAR_DCHECK(

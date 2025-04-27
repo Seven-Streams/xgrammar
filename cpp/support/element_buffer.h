@@ -6,7 +6,7 @@
 #include "logging.h"
 namespace xgrammar {
 template <class T, const T& invalid_element>
-class StackElementBuffer {
+class ElementBuffer {
  public:
   /*!
    * \brief Allocate a new StackElement. with given initial value.
@@ -61,7 +61,7 @@ class StackElementBuffer {
   }
 
  private:
-  /*! \brief The buffer to store all StackElements. */
+  /*! \brief The buffer to store all States. */
   std::vector<T> buffer_;
   /*! \brief A stack to store all free node ids. */
   std::vector<int32_t> free_nodes_;
