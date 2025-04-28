@@ -200,8 +200,10 @@ TokenizerInfo CompiledGrammar::GetTokenizerInfo() const { return pimpl_->GetToke
 /*! \brief The concrete implementation of GrammarMatcherNode. */
 class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
-  GrammarMatcherForTokenMaskCache(const Grammar& grammar, const State& init_state)
-      : EarleyParser(grammar, init_state), init_rule_id(init_state.rule_id) {}
+  GrammarMatcherForTokenMaskCache(
+      const Grammar& grammar, const State& init_state, const bool& need_expand = true
+  )
+      : EarleyParser(grammar, init_state, need_expand), init_rule_id(init_state.rule_id) {}
   /*!
    * \brief Get the adaptive token mask for the given State.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
@@ -516,7 +518,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   }
 
   auto add_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
-    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state);
+    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state, false);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(), tokenizer_info_.GetSortedDecodedVocab(), is_root_rule
     );

@@ -498,15 +498,23 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   return true;
 }
 
-EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state)
-    : grammar_(grammar), init_state(init_state) {
+EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state, const bool& need_expand)
+    : grammar_(grammar) {
   if (init_state.IsInvalid()) {
-    PushInitialState(State(
+    this->init_state = State(
         grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
-    ));
+    );
   } else {
-    PushInitialState(init_state);
+    this->init_state = init_state;
   }
+  if (need_expand) {
+    PushInitialState(this->init_state);
+    return;
+  }
+  history_states.push_back(std::vector<State>());
+  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
+  history_states.push_back({this->init_state});
+  can_reach_end.push_back(CanReachEnd());
 }
 bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   auto sequence_expr = grammar_->GetRuleExpr(state.sequence_id);
