@@ -125,8 +125,10 @@ class EarleyParser {
  protected:
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
+
   /*! \brief The tree storing all states. It's used for completation. */
   std::vector<std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>> states;
+
   /*!
       \brief The history of states. i.e. the i-th(0-base) vector
       will store the states after matching i characters. It's used
