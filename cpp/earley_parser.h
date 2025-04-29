@@ -7,12 +7,12 @@
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
 #include <functional>
-#include <list>
 #include <ostream>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "support/container.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
 /* \brief The state of the Earley parser.
@@ -131,13 +131,13 @@ class EarleyParser {
       will store the states after matching i characters. It's used
       for rollback.
    */
-  std::list<std::vector<State>> history_states;
+  std::vector<std::vector<State>> history_states;
 
   /*! \brief The vector stores whether at present, the grammar can reach the end. */
   std::vector<bool> can_reach_end;
 
   /*! \brief It's the processing queue of the earley parser.*/
-  std::list<State> queue;
+  List<State> queue;
 
   State init_state;
   /*!
