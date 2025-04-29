@@ -15,6 +15,7 @@
 #include "support/container.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
+
 /* \brief The state of the Earley parser.
   In the implementation, a rule can only be a kchoices or a ktagdispatch.
   A kchoices rule must be composed of some ksequence rules, or a kemptyrule.
@@ -139,7 +140,9 @@ class EarleyParser {
   /*! \brief It's the processing queue of the earley parser.*/
   List<State> queue;
 
+  /*! \brief The initial state, used for debugging.*/
   State init_state;
+
   /*!
     \brief The scanning operation of the Earley parser.
   */
@@ -213,5 +216,7 @@ class EarleyParser {
   */
   void PopFrontStates(const int32_t& cnt);
 };
+
 }  // namespace xgrammar
+
 #endif  // XGRAMMAR_EARLEY_PARSER_H_

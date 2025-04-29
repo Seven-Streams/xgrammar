@@ -13,7 +13,9 @@
 #include "support/logging.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
+
 using RuleExprType = Grammar::Impl::RuleExprType;
+
 using RuleExpr = Grammar::Impl::RuleExpr;
 
 bool EarleyParser::IsEndOfGrammar(const State& state) const {
@@ -166,6 +168,7 @@ void EarleyParser::Complete(const State& state) {
   }
   return;
 }
+
 void EarleyParser::Predict(const State& state) {
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
@@ -296,7 +299,6 @@ void EarleyParser::Predict(const State& state) {
         );
         return;
       }
-
       return;
     }
     case RuleExprType::kTagDispatch: {
@@ -326,6 +328,7 @@ void EarleyParser::Predict(const State& state) {
     }
   }
 }
+
 void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   //  An unexpanded rule cannot be scanned.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
@@ -457,6 +460,7 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   }
   return;
 }
+
 /*!
   \note The workflow of Advance is as follows:
   1. Scan all the states in the latest states. Add all the possible states
