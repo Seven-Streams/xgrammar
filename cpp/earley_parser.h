@@ -57,8 +57,11 @@ struct State {
   int32_t sub_element_id = 0;
 
   constexpr State() = default;
+
   constexpr State(const State&) = default;
+
   State& operator=(const State&) = default;
+
   constexpr State(
       int32_t rule_id,
       int32_t sequence_id,
@@ -79,6 +82,7 @@ struct State {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
            element_id == other.element_id && sub_element_id == other.sub_element_id;
   }
+
   friend std::ostream& operator<<(std::ostream& os, const State& state) {
     os << "State(rule_id=" << state.rule_id << ", sequence_id=" << state.sequence_id
        << ", element_id=" << state.element_id << ", parent_pos=" << state.parent_pos
@@ -127,7 +131,7 @@ class EarleyParser {
   Grammar grammar_;
 
   /*! \brief The tree storing all states. It's used for completation. */
-  std::vector<std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>> states;
+  std::vector<std::unordered_multimap<std::pair<int32_t, int32_t>, State>> states;
 
   /*!
       \brief The history of states. i.e. the i-th(0-base) vector

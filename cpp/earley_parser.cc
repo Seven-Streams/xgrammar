@@ -99,8 +99,11 @@ void EarleyParser::Complete(const State& state) {
       parent_states_map.end()) {
     return;
   }
-  for (const auto& parent_state :
-       parent_states_map.at(std::make_pair(state.rule_id, state.sequence_id))) {
+  const auto& range =
+      parent_states_map.equal_range(std::make_pair(state.rule_id, state.sequence_id));
+  for (auto parent_state_iter = range.first; parent_state_iter != range.second;
+       parent_state_iter++) {
+    const auto& parent_state = parent_state_iter->second;
     if (parent_state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       queue.PushBack(State{
           parent_state.rule_id,
@@ -185,11 +188,7 @@ void EarleyParser::Predict(const State& state) {
     // 2. The rule is a choice, consisting of multiple sequences.
     if (cur_rule_body.type == RuleExprType::kTagDispatch) {
       auto& states_map = states.back();
-      if (states_map.find(std::make_pair(cur_rule_id, cur_rule_body_id)) == states_map.end()) {
-        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)] = std::vector<State>({state});
-      } else {
-        states_map[std::make_pair(cur_rule_id, cur_rule_body_id)].push_back(state);
-      }
+      states_map.insert({std::make_pair(cur_rule_id, cur_rule_body_id), {state}});
       queue.PushBack(State{
           cur_rule_id,
           cur_rule_body_id,
@@ -214,11 +213,7 @@ void EarleyParser::Predict(const State& state) {
         continue;
       }
       prediction.push_back(std::make_pair(cur_rule_id, sequence_id));
-      if (states_map.find(std::make_pair(cur_rule_id, sequence_id)) == states_map.end()) {
-        states_map[std::make_pair(cur_rule_id, sequence_id)] = std::vector<State>({state});
-      } else {
-        states_map[std::make_pair(cur_rule_id, sequence_id)].push_back(state);
-      }
+      states_map.insert({std::make_pair(cur_rule_id, sequence_id), state});
     }
     return;
   }
@@ -269,11 +264,7 @@ void EarleyParser::Predict(const State& state) {
         const auto& ref_rule_body_id = ref_rule.body_expr_id;
         const auto& ref_rule_body = grammar_->GetRuleExpr(ref_rule_body_id);
         if (ref_rule_body.type == RuleExprType::kTagDispatch) {
-          if (states_map.find(std::make_pair(rule_ref_id, ref_rule_body_id)) == states_map.end()) {
-            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)] = std::vector<State>({state});
-          } else {
-            states_map[std::make_pair(rule_ref_id, ref_rule_body_id)].push_back(state);
-          }
+          states_map.insert({std::make_pair(rule_ref_id, ref_rule_body_id), state});
           queue.PushBack(State{
               rule_ref_id,
               ref_rule_body_id,
@@ -284,11 +275,7 @@ void EarleyParser::Predict(const State& state) {
         } else {
           XGRAMMAR_DCHECK(ref_rule_body.type == RuleExprType::kChoices);
           for (const auto& sequence_id : ref_rule_body) {
-            if (states_map.find(std::make_pair(rule_ref_id, sequence_id)) == states_map.end()) {
-              states_map[std::make_pair(rule_ref_id, sequence_id)] = std::vector<State>({state});
-            } else {
-              states_map[std::make_pair(rule_ref_id, sequence_id)].push_back(state);
-            }
+            states_map.insert({std::make_pair(rule_ref_id, sequence_id), state});
             queue.PushBack(State{rule_ref_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
           }
         }
@@ -312,14 +299,9 @@ void EarleyParser::Predict(const State& state) {
             << "The end node of the tag dispatch fsm does not correspond to any rule id";
         auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
         auto& states_map = states.back();
-        if (states_map.find(std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)
-            ) == states_map.end()) {
-          states_map[std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)] =
-              std::vector<State>({state});
-        } else {
-          states_map[std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId)]
-              .push_back(state);
-        }
+        states_map.insert(
+            {std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId), state}
+        );
         queue.PushBack(
             State(refered_rule_id, State::kUnexpandedRuleStartSequenceId, 0, states.size() - 1, 0)
         );
@@ -481,7 +463,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     return false;
   }
   history_states.push_back(std::vector<State>());
-  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
+  states.push_back(std::unordered_multimap<std::pair<int32_t, int32_t>, State>());
   std::vector<State> visited;
 
   while (queue.begin() != queue.end()) {
@@ -517,7 +499,7 @@ EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state, cons
     return;
   }
   history_states.push_back(std::vector<State>());
-  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
+  states.push_back(std::unordered_multimap<std::pair<int32_t, int32_t>, State>());
   history_states.push_back({this->init_state});
   can_reach_end.push_back(CanReachEnd());
 }
@@ -549,7 +531,7 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
 
 void EarleyParser::PushInitialState(const State& state) {
   history_states.push_back(std::vector<State>());
-  states.push_back(std::unordered_map<std::pair<int32_t, int32_t>, std::vector<State>>());
+  states.push_back(std::unordered_multimap<std::pair<int32_t, int32_t>, State>());
   if (state.IsInvalid()) {
     queue.PushBack(State(
         grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
