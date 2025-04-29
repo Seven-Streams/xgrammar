@@ -37,22 +37,30 @@ struct State {
   /*! \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
    * expanded.*/
   static constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
+
   /*! \brief A element_id value of kUnexpanedRuleFinishFlag means an unexpanded rule is ended.*/
   static constexpr int32_t kUnexpanedRuleFinishFlag = 128001;
+
   /*! \brief A element_id value of kTagDispatchEndFlag means the kTagDispatch pair is finished.*/
   static constexpr int32_t kTagDispatchEndFlag = -2;
+
   /*! \brief A parent_id value of kNoParent means this State is the root of the tree. */
   static constexpr int32_t kNoParent = -1;
-  /*! \brief The rule's id. Used for debug purposes. */
+
+  /*! \brief The rule's id.*/
   int32_t rule_id = -1;
+
   /*! \brief Which choice in this rule is selected. */
   int32_t sequence_id = -1;
+
   /*! \brief Which element of the choice sequence is to be visited. When the current sequence is
    * a tag dispatch rule, this element id the currently visited node. */
   int32_t element_id = -1;
+
   /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
    * rule starts to match the string.*/
   int32_t parent_pos = -1;
+
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
 
