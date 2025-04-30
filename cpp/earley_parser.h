@@ -7,8 +7,8 @@
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <ostream>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -139,7 +139,7 @@ class EarleyParser {
   Grammar grammar_;
 
   /*! \brief The tree storing all states. It's used for completation. */
-  std::vector<std::unordered_multimap<std::pair<int32_t, int32_t>, State>> states;
+  std::vector<std::multimap<std::pair<int32_t, int32_t>, State>> states;
 
   /*!
       \brief The history of states. i.e. the i-th(0-base) vector
