@@ -454,7 +454,7 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   to the history_states[0], and perform prediction and completion on the initial state.
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
-  const auto& latest_states = history_states[history_states.Size() - 1];
+  const auto latest_states = history_states[history_states.Size() - 1];
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
