@@ -462,8 +462,8 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   if (queue.begin() == queue.end()) {
     return false;
   }
-  history_states.push_back(std::vector<State>());
-  states.push_back(std::multimap<std::pair<int32_t, int32_t>, State>());
+  history_states.emplace_back();
+  states.emplace_back();
   std::vector<State> visited;
 
   while (queue.begin() != queue.end()) {
@@ -498,11 +498,12 @@ EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state, cons
     PushInitialState(this->init_state);
     return;
   }
-  history_states.push_back(std::vector<State>());
-  states.push_back(std::multimap<std::pair<int32_t, int32_t>, State>());
+  history_states.emplace_back();
+  states.emplace_back();
   history_states.push_back({this->init_state});
   can_reach_end.push_back(CanReachEnd());
 }
+
 bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   auto sequence_expr = grammar_->GetRuleExpr(state.sequence_id);
   auto element_expr = grammar_->GetRuleExpr(sequence_expr[state.element_id]);
@@ -530,7 +531,7 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
 }
 
 void EarleyParser::PushInitialState(const State& state) {
-  history_states.push_back(std::vector<State>());
+  history_states.emplace_back();
   states.push_back(std::multimap<std::pair<int32_t, int32_t>, State>());
   if (state.IsInvalid()) {
     queue.PushBack(State(
@@ -573,6 +574,7 @@ void EarleyParser::PopFrontStates(const int32_t& cnt) {
   if (std::size_t(cnt) >= history_states.size()) {
     return;
   }
+  // TODO:
   return;
 }
 
