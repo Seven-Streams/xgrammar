@@ -560,7 +560,7 @@ void EarleyParser::PushInitialState(const State& state) {
 
 void EarleyParser::ParserReset() {
   states.clear();
-  history_states = CSRArray<State>();
+  history_states.PopBack(history_states.Size());
   queue.Clear();
   can_reach_end.clear();
   PushInitialState(State(
