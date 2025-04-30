@@ -233,6 +233,7 @@ void EarleyParser::Predict(const State& state) {
             queue.PushBack(State{rule_ref_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
           }
         }
+        return;
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
         queue.PushBack(
@@ -366,14 +367,13 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         new_state.element_id =
             new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
         queue.PushBack(new_state);
-        return;
       } else {
         // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
         // We need to update the element id to the next node.
         new_state.element_id = next_node;
         queue.PushBack(new_state);
-        return;
       }
+      return;
     }
     default: {
       return;
