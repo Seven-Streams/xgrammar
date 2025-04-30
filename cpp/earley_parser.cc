@@ -51,9 +51,7 @@ void EarleyParser::PopBackStates(int32_t cnt) {
     XGRAMMAR_LOG(FATAL) << "The number of states to be popped is larger than the size of states.";
   }
   states.erase(states.end() - cnt, states.end());
-  for (int i = 0; i < cnt; i++) {
-    history_states.PopBack();
-  }
+  history_states.PopBack(cnt);
   can_reach_end.erase(can_reach_end.end() - cnt, can_reach_end.end());
   return;
 }

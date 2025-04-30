@@ -136,8 +136,8 @@ class CSRArray {
   /*!
    * \brief Pop back the last row of the CSRArray.
    */
-  void PopBack() {
-    indptr_.pop_back();
+  void PopBack(const int32_t& cnt) {
+    indptr_.erase(indptr_.end() - cnt, indptr_.end());
     data_.erase(data_.begin() + indptr_.back(), data_.end());
     return;
   }
