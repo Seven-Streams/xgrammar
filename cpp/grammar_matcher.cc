@@ -493,7 +493,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       CheckAndGetBitmaskPtr(*next_token_bitmask, tokenizer_info_.GetVocabSize(), index);
   const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
   const auto& adaptive_token_mask_cache = compiled_grammar_->adaptive_token_mask_cache;
-  const auto& latest_states = history_states[history_states.Size() - 1];
+  const auto latest_states = history_states[history_states.Size() - 1];
 
   // We check all the latest states of the earley parser, and check all the masks of the leaf
   // states. The final accepted token set is the union of the accepted token sets of all leaf
@@ -653,7 +653,7 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
   bool can_find_next_char = true;
 
   while (can_find_next_char) {
-    const auto& states = history_states[history_states.Size() - 1];
+    const auto states = history_states[history_states.Size() - 1];
 
     // 1. Check that for every leaf state, the next possible char is unique and the same
     // -1 means not found yet; 0~255 means the next char
