@@ -77,15 +77,8 @@ void EarleyParser::Complete(const State& state) {
       if (state.element_id != State::kTagDispatchEndFlag) {
         return;
       }
-      queue.PushBack(State{
-          state.rule_id,
-          state.sequence_id,
-          grammar_->root_tag_dispatch_fsm->StartNode(),
-          state.parent_pos,
-          0
-      });
     } else {
-      if (((cur_rule.size() != state.element_id)) && (cur_rule.type != RuleExprType::kEmptyStr)) {
+      if ((cur_rule.size() != state.element_id)) {
         return;
       }
     }
@@ -113,15 +106,6 @@ void EarleyParser::Complete(const State& state) {
     }
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
     switch (parent_expr.type) {
-      // These types can never predict other new rules, Thus
-      // They will never be a legal parent state.
-      case RuleExprType::kByteString:
-      case RuleExprType::kCharacterClass:
-      case RuleExprType::kCharacterClassStar:
-      case RuleExprType::kEmptyStr:
-      case RuleExprType::kRuleRef:
-        XGRAMMAR_LOG(FATAL) << "Unexpected RuleExprType in Complete: "
-                            << static_cast<int>(parent_expr.type);
       // These two types can predict other new rules. We need to
       // to move to the next element.
       case RuleExprType::kSequence: {
@@ -132,19 +116,6 @@ void EarleyParser::Complete(const State& state) {
             parent_state.parent_pos,
             0
         });
-        break;
-      }
-      // These two types can predict other new rules, and have a
-      // completion is enough to complete the parent state.
-      // We need to move to the end of the element. i.e. complete the parent state.
-      case RuleExprType::kChoices: {
-        queue.PushBack(
-            {parent_state.rule_id,
-             parent_state.sequence_id,
-             parent_expr.size(),
-             parent_state.parent_pos,
-             0}
-        );
         break;
       }
       case RuleExprType::kTagDispatch: {
@@ -163,6 +134,9 @@ void EarleyParser::Complete(const State& state) {
              0}
         );
         break;
+      }
+      default: {
+        return;
       }
     }
   }
@@ -228,23 +202,6 @@ void EarleyParser::Predict(const State& state) {
     }
   }
   switch (cur_rule.type) {
-    // These types will never be added into the queue.
-    case RuleExprType::kByteString:
-    case RuleExprType::kCharacterClass:
-    case RuleExprType::kCharacterClassStar:
-    case RuleExprType::kRuleRef: {
-      XGRAMMAR_LOG(FATAL) << "Unexpected RuleExprType in Predict: "
-                          << static_cast<int>(cur_rule.type);
-    }
-    // If the type is kChoices, then it shoule have been expanded.
-    case RuleExprType::kChoices: {
-      return;
-    }
-    // If the type is kEmptyStr, then it should be a empty string,
-    // it will predict nothing.
-    case RuleExprType::kEmptyStr: {
-      return;
-    }
     /* If the type is kSequence, then it should be a sequence consisting of:
       - kByteString
       - kCharacterClass
@@ -286,10 +243,6 @@ void EarleyParser::Predict(const State& state) {
       return;
     }
     case RuleExprType::kTagDispatch: {
-      if (state.element_id == State::kTagDispatchEndFlag) {
-        // The tag has been dispatched.
-        return;
-      }
       const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
       if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
         XGRAMMAR_DCHECK(grammar_->tag_dispatch_end_node_to_rule_id.count(state.element_id))
@@ -303,6 +256,9 @@ void EarleyParser::Predict(const State& state) {
             State(refered_rule_id, State::kUnexpandedRuleStartSequenceId, 0, states.size() - 1, 0)
         );
       }
+      return;
+    }
+    default: {
       return;
     }
   }
@@ -319,30 +275,10 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
     return;
   }
   switch (cur_rule.type) {
-    // These types can never accept a character directly.
-    case (RuleExprType::kChoices):
-    case (RuleExprType::kEmptyStr):
-      return;
-    // These types can never be added into the queue.
-    case (RuleExprType::kRuleRef):
-    case (RuleExprType::kByteString):
-    case (RuleExprType::kCharacterClass):
-    case (RuleExprType::kCharacterClassStar): {
-      XGRAMMAR_LOG(FATAL) << "Unexpected RuleExprType in Scan: " << static_cast<int>(cur_rule.type);
-    }
     case (RuleExprType::kSequence): {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
       // The element is a rule reference, we do not need to scan it.
       switch (element_expr.type) {
-        case (RuleExprType::kChoices):
-        case (RuleExprType::kSequence):
-        case (RuleExprType::kEmptyStr):
-        case (RuleExprType::kTagDispatch): {
-          XGRAMMAR_LOG(FATAL) << "Unexpected RuleExprType of sequence's element: "
-                              << static_cast<int>(element_expr.type);
-        }
-        case (RuleExprType::kRuleRef):
-          return;
         case (RuleExprType::kByteString): {
           // The rule has been completed.
           if (state.sub_element_id == element_expr.size()) {
@@ -398,6 +334,9 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           queue.PushBack(new_state);
           return;
         }
+        default: {
+          return;
+        }
       }
       return;
     }
@@ -435,6 +374,9 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         queue.PushBack(new_state);
         return;
       }
+    }
+    default: {
+      return;
     }
   }
   return;
