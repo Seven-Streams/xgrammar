@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "support/container.h"
+#include "support/csr_array.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
 
@@ -146,7 +147,10 @@ class EarleyParser {
       will store the states after matching i characters. It's used
       for rollback.
    */
-  std::vector<std::vector<State>> history_states;
+  CSRArray<State> history_states;
+
+  /*! \brief The vector stores the states that are going to be added into the CSRArray. */
+  std::vector<State> tmp_states;
 
   /*! \brief The vector stores whether at present, the grammar can reach the end. */
   std::vector<bool> can_reach_end;

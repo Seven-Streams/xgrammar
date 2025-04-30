@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstddef>
 #include <cstdint>
 #include <unordered_map>
 #include <utility>
@@ -41,7 +40,7 @@ bool EarleyParser::IsEndOfGrammar(const State& state) const {
 }
 
 bool EarleyParser::CanReachEnd() const {
-  const auto& current_states = history_states.back();
+  const auto& current_states = history_states[history_states.Size() - 1];
   return std::any_of(current_states.begin(), current_states.end(), [&](const State& state) {
     return IsEndOfGrammar(state);
   });
@@ -53,7 +52,7 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   }
   states.erase(states.end() - cnt, states.end());
   for (int i = 0; i < cnt; i++) {
-    history_states.pop_back();
+    history_states.PopBack();
   }
   can_reach_end.erase(can_reach_end.end() - cnt, can_reach_end.end());
   return;
@@ -212,7 +211,7 @@ void EarleyParser::Predict(const State& state) {
           ) != prediction.end()) {
         continue;
       }
-      prediction.push_back(std::make_pair(cur_rule_id, sequence_id));
+      prediction.emplace_back(cur_rule_id, sequence_id);
       states_map.insert({std::make_pair(cur_rule_id, sequence_id), state});
     }
     return;
@@ -455,14 +454,14 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
   to the history_states[0], and perform prediction and completion on the initial state.
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
-  const auto& latest_states = history_states.back();
+  const auto& latest_states = history_states[history_states.Size() - 1];
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
   if (queue.begin() == queue.end()) {
     return false;
   }
-  history_states.emplace_back();
+  tmp_states.clear();
   states.emplace_back();
   std::vector<State> visited;
 
@@ -476,11 +475,12 @@ bool EarleyParser::Advance(const uint8_t& ch) {
       continue;
     }
     visited.push_back(state);
-    history_states.back().push_back(state);
+    tmp_states.push_back(state);
     Complete(state);
     Predict(state);
     queue.Erase(state_iter);
   }
+  history_states.Insert(tmp_states);
   can_reach_end.push_back(CanReachEnd());
   return true;
 }
@@ -498,9 +498,8 @@ EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state, cons
     PushInitialState(this->init_state);
     return;
   }
-  history_states.emplace_back();
   states.emplace_back();
-  history_states.push_back({this->init_state});
+  history_states.Insert({this->init_state});
   can_reach_end.push_back(CanReachEnd());
 }
 
@@ -531,8 +530,8 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
 }
 
 void EarleyParser::PushInitialState(const State& state) {
-  history_states.emplace_back();
-  states.push_back(std::multimap<std::pair<int32_t, int32_t>, State>());
+  tmp_states.clear();
+  states.emplace_back();
   if (state.IsInvalid()) {
     queue.PushBack(State(
         grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
@@ -551,18 +550,19 @@ void EarleyParser::PushInitialState(const State& state) {
       continue;
     }
     visited.push_back(state);
-    history_states.back().push_back(state);
+    tmp_states.push_back(state);
     Complete(state);
     Predict(state);
     queue.Erase(state_iter);
   }
+  history_states.Insert(tmp_states);
   can_reach_end.push_back(CanReachEnd());
   return;
 }
 
 void EarleyParser::ParserReset() {
   states.clear();
-  history_states.clear();
+  history_states = CSRArray<State>();
   queue.Clear();
   can_reach_end.clear();
   PushInitialState(State(
@@ -571,7 +571,7 @@ void EarleyParser::ParserReset() {
 }
 
 void EarleyParser::PopFrontStates(const int32_t& cnt) {
-  if (std::size_t(cnt) >= history_states.size()) {
+  if (cnt >= history_states.Size()) {
     return;
   }
   // TODO:

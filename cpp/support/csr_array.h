@@ -133,6 +133,15 @@ class CSRArray {
    */
   int32_t InsertNonContiguous(DataType data_1, const DataType* data_2, int32_t data_2_len);
 
+  /*!
+   * \brief Pop back the last row of the CSRArray.
+   */
+  void PopBack() {
+    indptr_.pop_back();
+    data_.erase(data_.begin() + indptr_.back(), data_.end());
+    return;
+  }
+
   /****************** Internal Accessors ******************/
 
   /*! \brief Get a pointer to the underlying data array. */
