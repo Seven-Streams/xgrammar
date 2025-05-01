@@ -143,13 +143,13 @@ bool EarleyParser::Complete(const State& state) {
   return false;
 }
 
-void EarleyParser::Predict(const State& state) {
+bool EarleyParser::Predict(const State& state) {
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
     // The rule is already expanded, and finished.
     if (state.element_id == State::kUnexpanedRuleFinishFlag) {
-      return;
+      return state.rule_id == grammar_->GetRootRuleId();
     }
     auto cur_rule_id = state.rule_id;
     auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
@@ -167,7 +167,7 @@ void EarleyParser::Predict(const State& state) {
           int32_t(states.size()) - 1,
           0
       });
-      return;
+      return false;
     }
     XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
     auto& states_map = states.back();
@@ -186,19 +186,19 @@ void EarleyParser::Predict(const State& state) {
       prediction.emplace_back(cur_rule_id, sequence_id);
       states_map.insert({std::make_pair(cur_rule_id, sequence_id), state});
     }
-    return;
+    return false;
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   //  If the current state is the end of the rule, we do not need to predict.
   if (cur_rule.type == RuleExprType::kTagDispatch) {
     if (state.element_id == State::kTagDispatchEndFlag) {
-      return;
+      return false;
     }
   } else {
     // If the current state is the end of the rule, we do not need to predict,
     // since the rule is already completed.
     if (state.element_id == cur_rule.size()) {
-      return;
+      return state.parent_pos == State::kNoParent;
     }
   }
   switch (cur_rule.type) {
@@ -233,15 +233,15 @@ void EarleyParser::Predict(const State& state) {
             queue.PushBack(State{rule_ref_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
           }
         }
-        return;
+        return false;
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
         queue.PushBack(
             State{state.rule_id, state.sequence_id, state.element_id + 1, state.parent_pos, 0}
         );
-        return;
+        return true;
       }
-      return;
+      return true;
     }
     case RuleExprType::kTagDispatch: {
       const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
@@ -257,10 +257,10 @@ void EarleyParser::Predict(const State& state) {
             State(refered_rule_id, State::kUnexpandedRuleStartSequenceId, 0, states.size() - 1, 0)
         );
       }
-      return;
+      return true;
     }
     default: {
-      return;
+      return false;
     }
   }
 }
@@ -415,11 +415,11 @@ bool EarleyParser::Advance(const uint8_t& ch) {
       continue;
     }
     visited.push_back(state);
-    if (Complete(state)) {
+    bool flag = Complete(state);
+    flag = Predict(state) && flag;
+    if (flag) {
       tmp_states.push_back(state);
     }
-    Predict(state);
-
     queue.Erase(state_iter);
   }
   history_states.Insert(tmp_states);
@@ -492,10 +492,11 @@ void EarleyParser::PushInitialState(const State& state) {
       continue;
     }
     visited.push_back(state);
-    if (Complete(state)) {
+    bool flag = Complete(state);
+    flag = Predict(state) && flag;
+    if (flag) {
       tmp_states.push_back(state);
     }
-    Predict(state);
     queue.Erase(state_iter);
   }
   history_states.Insert(tmp_states);

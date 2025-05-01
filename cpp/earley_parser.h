@@ -167,16 +167,22 @@ class EarleyParser {
   void Scan(const State& state, const uint8_t& ch);
 
   /*!
-      \brief The prediction operation of the Earley parser.
-  */
-  void Predict(const State& state);
-
-  /*!
       \brief The completion operation of the Earley parser.
       \return If the state can't be scanned, and the state
       is not the end of the grammar, then we return false.
+      \details The reason is that if the state can't be scanned, then
+      add it into the next states is useless. Moreover, the end
+      of the grammar is used to check if the grammar is completed,
+      so it should be added into the next states.
   */
   bool Complete(const State& state);
+
+  /*!
+      \brief The prediction operation of the Earley parser.
+      \return If the state can't be scanned, and the state
+      is not the end of the grammar, then we return false.
+  */
+  bool Predict(const State& state);
 
   /*!
     \brief Check if the state is the end of the grammar.
