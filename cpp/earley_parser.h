@@ -173,8 +173,10 @@ class EarleyParser {
 
   /*!
       \brief The completion operation of the Earley parser.
+      \return If the state can't be scanned, and the state
+      is not the end of the grammar, then we return false.
   */
-  void Complete(const State& state);
+  bool Complete(const State& state);
 
   /*!
     \brief Check if the state is the end of the grammar.

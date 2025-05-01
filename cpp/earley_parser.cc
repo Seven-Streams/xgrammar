@@ -56,14 +56,14 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   return;
 }
 
-void EarleyParser::Complete(const State& state) {
+bool EarleyParser::Complete(const State& state) {
   // Check if a rule is completed.
   if (state.parent_pos == State::kNoParent) {
-    return;
+    return true;
   }
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
     if (state.element_id != State::kUnexpanedRuleFinishFlag) {
-      return;
+      return false;
     }
   } else {
     auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
@@ -75,11 +75,11 @@ void EarleyParser::Complete(const State& state) {
     */
     if (cur_rule.type == RuleExprType::kTagDispatch) {
       if (state.element_id != State::kTagDispatchEndFlag) {
-        return;
+        return true;
       }
     } else {
       if ((cur_rule.size() != state.element_id)) {
-        return;
+        return true;
       }
     }
   }
@@ -87,7 +87,7 @@ void EarleyParser::Complete(const State& state) {
   const auto& parent_states_map = states[state.parent_pos];
   if (parent_states_map.find(std::make_pair(state.rule_id, state.sequence_id)) ==
       parent_states_map.end()) {
-    return;
+    return false;
   }
   const auto& range =
       parent_states_map.equal_range(std::make_pair(state.rule_id, state.sequence_id));
@@ -136,11 +136,11 @@ void EarleyParser::Complete(const State& state) {
         break;
       }
       default: {
-        return;
+        return false;
       }
     }
   }
-  return;
+  return false;
 }
 
 void EarleyParser::Predict(const State& state) {
@@ -415,9 +415,11 @@ bool EarleyParser::Advance(const uint8_t& ch) {
       continue;
     }
     visited.push_back(state);
-    tmp_states.push_back(state);
-    Complete(state);
+    if (Complete(state)) {
+      tmp_states.push_back(state);
+    }
     Predict(state);
+
     queue.Erase(state_iter);
   }
   history_states.Insert(tmp_states);
@@ -490,8 +492,9 @@ void EarleyParser::PushInitialState(const State& state) {
       continue;
     }
     visited.push_back(state);
-    tmp_states.push_back(state);
-    Complete(state);
+    if (Complete(state)) {
+      tmp_states.push_back(state);
+    }
     Predict(state);
     queue.Erase(state_iter);
   }
