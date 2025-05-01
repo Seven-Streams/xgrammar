@@ -179,10 +179,12 @@ class EarleyParser {
 
   /*!
       \brief The prediction operation of the Earley parser.
-      \return If the state can't be scanned, and the state
+      \return Fitst: If the state can't be scanned, and the state
       is not the end of the grammar, then we return false.
+      \return Second: If the state is obviously that it can't complete,
+      then return false, true otherwise.
   */
-  bool Predict(const State& state);
+  std::pair<bool, bool> Predict(const State& state);
 
   /*!
     \brief Check if the state is the end of the grammar.
