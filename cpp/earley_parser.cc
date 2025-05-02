@@ -246,10 +246,6 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
     return;
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-  // If the current state is the end of the rule, we do not need to scan.
-  if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
-    return;
-  }
   switch (cur_rule.type) {
     case (RuleExprType::kSequence): {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
@@ -257,9 +253,6 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       switch (element_expr.type) {
         case (RuleExprType::kByteString): {
           // The rule has been completed.
-          if (state.sub_element_id == element_expr.size()) {
-            return;
-          }
           if (element_expr[state.sub_element_id] == ch) {
             auto new_state = state;
             new_state.sub_element_id++;
@@ -378,7 +371,11 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
         // We need to update the element id to the next node.
         new_state.element_id = next_node;
-        queue.PushBack(new_state);
+        if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
+          queue.PushBack(new_state);
+        } else {
+          tmp_states.push_back(new_state);
+        }
       }
       return;
     }
