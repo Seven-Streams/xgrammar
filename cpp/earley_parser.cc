@@ -262,6 +262,10 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
     return;
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  // If the current state is the end of the rule, we do not need to scan.
+  if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
+    return;
+  }
   switch (cur_rule.type) {
     case (RuleExprType::kSequence): {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
