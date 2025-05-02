@@ -549,7 +549,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     tmp_rejected_indices_delta_.clear();
 
     // Examine only the current one state
-    PushInitialState(state);
+    PushInitialState(state, false);
 
     const std::string* prev_token = nullptr;
     int prev_matched_size = 0;

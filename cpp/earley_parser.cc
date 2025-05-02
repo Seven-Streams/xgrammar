@@ -480,8 +480,16 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   return is_negative;
 }
 
-void EarleyParser::PushInitialState(const State& state) {
+void EarleyParser::PushInitialState(const State& state, const bool& need_expand) {
   states.emplace_back();
+  if (!need_expand) {
+    if (state.IsInvalid()) {
+      XGRAMMAR_LOG(FATAL) << "When not expanding, the initial state should be valid.";
+    }
+    history_states.Insert({state});
+    can_reach_end.push_back(CanReachEnd());
+    return;
+  }
   if (state.IsInvalid()) {
     queue.PushBack(State(
         grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
