@@ -62,16 +62,6 @@ bool EarleyParser::Complete(const State& state) {
   for (auto parent_state_iter = range.first; parent_state_iter != range.second;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
-    if (parent_state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-      queue.PushBack(State{
-          parent_state.rule_id,
-          parent_state.sequence_id,
-          State::kUnexpanedRuleFinishFlag,
-          parent_state.parent_pos,
-          0
-      });
-      continue;
-    }
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
     switch (parent_expr.type) {
       // These two types can predict other new rules. We need to
@@ -114,30 +104,6 @@ bool EarleyParser::Complete(const State& state) {
 std::pair<bool, bool> EarleyParser::Predict(const State& state) {
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
-  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-    // The rule is already expanded, and finished.
-    auto cur_rule_id = state.rule_id;
-    auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
-    auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
-    // There are two types of an unexpanded rule:
-    // 1. The rule is a tag dispatch rule.
-    // 2. The rule is a choice, consisting of multiple sequences.
-    if (cur_rule_body.type == RuleExprType::kTagDispatch) {
-      queue.PushBack(State{
-          cur_rule_id,
-          cur_rule_body_id,
-          grammar_->root_tag_dispatch_fsm->StartNode(),
-          State::kNoParent,
-          0
-      });
-      return std::make_pair(false, false);
-    }
-    XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
-    for (auto sequence_id : cur_rule_body) {
-      queue.PushBack(State{cur_rule_id, sequence_id, 0, State::kNoParent, 0});
-    }
-    return std::make_pair(false, false);
-  }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   //  If the current state is the end of the rule, we do not need to predict.
   if (cur_rule.type == RuleExprType::kTagDispatch) {
@@ -229,10 +195,6 @@ std::pair<bool, bool> EarleyParser::Predict(const State& state) {
 }
 
 void EarleyParser::Scan(const State& state, const uint8_t& ch) {
-  //  An unexpanded rule cannot be scanned.
-  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-    return;
-  }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   // If the current state is the end of the rule, we do not need to scan.
   if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
@@ -469,18 +431,54 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
 void EarleyParser::PushInitialState(const State& state, const bool& need_expand) {
   states.emplace_back();
   if (!need_expand) {
-    if (state.IsInvalid()) {
+    if (state.IsInvalid() || state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
       XGRAMMAR_LOG(FATAL) << "When not expanding, the initial state should be valid.";
     }
     history_states.Insert({state});
     return;
   }
   if (state.IsInvalid()) {
-    queue.PushBack(State(
-        grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
-    ));
+    auto cur_rule_id = grammar_->GetRootRuleId();
+    auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
+    auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
+    if (cur_rule_body.type == RuleExprType::kTagDispatch) {
+      queue.PushBack(State{
+          cur_rule_id,
+          cur_rule_body_id,
+          grammar_->root_tag_dispatch_fsm->StartNode(),
+          State::kNoParent,
+          0
+      });
+    }
+    XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
+    for (auto sequence_id : cur_rule_body) {
+      queue.PushBack(State{cur_rule_id, sequence_id, 0, State::kNoParent, 0});
+    };
   } else {
-    queue.PushBack(state);
+    if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
+      // The rule is already expanded, and finished.
+      auto cur_rule_id = state.rule_id;
+      auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
+      auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
+      // There are two types of an unexpanded rule:
+      // 1. The rule is a tag dispatch rule.
+      // 2. The rule is a choice, consisting of multiple sequences.
+      if (cur_rule_body.type == RuleExprType::kTagDispatch) {
+        queue.PushBack(State{
+            cur_rule_id,
+            cur_rule_body_id,
+            grammar_->root_tag_dispatch_fsm->StartNode(),
+            State::kNoParent,
+            0
+        });
+      }
+      XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
+      for (auto sequence_id : cur_rule_body) {
+        queue.PushBack(State{cur_rule_id, sequence_id, 0, State::kNoParent, 0});
+      }
+    } else {
+      queue.PushBack(state);
+    }
   }
   std::vector<State> visited;
   while (queue.begin() != queue.end()) {
