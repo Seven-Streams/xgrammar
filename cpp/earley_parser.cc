@@ -263,16 +263,18 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           if (element_expr[state.sub_element_id] == ch) {
             auto new_state = state;
             new_state.sub_element_id++;
+            // The rule is finished, and is possible to predict.
             if (new_state.sub_element_id == element_expr.size()) {
               new_state.element_id++;
               new_state.sub_element_id = 0;
+              queue.PushBack(new_state);
+            } else {
+              tmp_states.push_back(new_state);
             }
-            queue.PushBack(new_state);
           }
           return;
         }
-        case (RuleExprType::kCharacterClass):
-        case (RuleExprType::kCharacterClassStar): {
+        case (RuleExprType::kCharacterClass): {
           if (!IsAccepted(state, ch)) {
             return;
           }
@@ -280,13 +282,12 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             auto new_state = state;
             new_state.sub_element_id--;
             if (new_state.sub_element_id == 0) {
-              if (element_expr.type == RuleExprType::kCharacterClassStar) {
-                queue.PushBack(new_state);
-              }
               new_state.element_id++;
               new_state.sub_element_id = 0;
+              queue.PushBack(new_state);
+            } else {
+              tmp_states.push_back(new_state);
             }
-            queue.PushBack(new_state);
             return;
           }
           auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
@@ -298,16 +299,47 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             auto new_state = state;
             new_state.element_id++;
             queue.PushBack(new_state);
-            if (element_expr.type == RuleExprType::kCharacterClassStar) {
-              // The element is a character class star, we need to add the old state again.
-              queue.PushBack(state);
-            }
             return;
           }
           // A UTF8 character is accepted.
           auto new_state = state;
           new_state.sub_element_id = num_bytes - 1;
-          queue.PushBack(new_state);
+          tmp_states.push_back(new_state);
+          return;
+        }
+        case (RuleExprType::kCharacterClassStar): {
+          if (!IsAccepted(state, ch)) {
+            return;
+          }
+          if (state.sub_element_id > 0) {
+            auto new_state = state;
+            new_state.sub_element_id--;
+            if (new_state.sub_element_id == 0) {
+              tmp_states.push_back(new_state);
+              new_state.element_id++;
+              new_state.sub_element_id = 0;
+              queue.PushBack(new_state);
+            } else {
+              tmp_states.push_back(new_state);
+            }
+            return;
+          }
+          auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+          if (!accepted) {
+            return;
+          }
+          // A single byte is accepted.
+          if (num_bytes == 1) {
+            auto new_state = state;
+            new_state.element_id++;
+            queue.PushBack(new_state);
+            tmp_states.push_back(state);
+            return;
+          }
+          // A UTF8 character is accepted.
+          auto new_state = state;
+          new_state.sub_element_id = num_bytes - 1;
+          tmp_states.push_back(new_state);
           return;
         }
         default: {
@@ -373,10 +405,9 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
-  if (queue.begin() == queue.end()) {
+  if (queue.begin() == queue.end() && tmp_states.empty()) {
     return false;
   }
-  tmp_states.clear();
   states.emplace_back();
   std::vector<State> visited;
 
@@ -400,6 +431,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     queue.Erase(state_iter);
   }
   history_states.Insert(tmp_states);
+  tmp_states.clear();
   can_reach_end.push_back(CanReachEnd());
   return true;
 }
@@ -449,7 +481,6 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
 }
 
 void EarleyParser::PushInitialState(const State& state) {
-  tmp_states.clear();
   states.emplace_back();
   if (state.IsInvalid()) {
     queue.PushBack(State(
@@ -479,6 +510,7 @@ void EarleyParser::PushInitialState(const State& state) {
     queue.Erase(state_iter);
   }
   history_states.Insert(tmp_states);
+  tmp_states.clear();
   can_reach_end.push_back(CanReachEnd());
   return;
 }
