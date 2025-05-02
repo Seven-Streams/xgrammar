@@ -52,7 +52,6 @@ void EarleyParser::PopBackStates(int32_t cnt) {
   }
   states.erase(states.end() - cnt, states.end());
   history_states.PopBack(cnt);
-  can_reach_end.erase(can_reach_end.end() - cnt, can_reach_end.end());
   return;
 }
 
@@ -432,7 +431,6 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   }
   history_states.Insert(tmp_states);
   tmp_states.clear();
-  can_reach_end.push_back(CanReachEnd());
   return true;
 }
 
@@ -451,7 +449,6 @@ EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state, cons
   }
   states.emplace_back();
   history_states.Insert({this->init_state});
-  can_reach_end.push_back(CanReachEnd());
 }
 
 bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
@@ -487,7 +484,6 @@ void EarleyParser::PushInitialState(const State& state, const bool& need_expand)
       XGRAMMAR_LOG(FATAL) << "When not expanding, the initial state should be valid.";
     }
     history_states.Insert({state});
-    can_reach_end.push_back(CanReachEnd());
     return;
   }
   if (state.IsInvalid()) {
@@ -519,7 +515,6 @@ void EarleyParser::PushInitialState(const State& state, const bool& need_expand)
   }
   history_states.Insert(tmp_states);
   tmp_states.clear();
-  can_reach_end.push_back(CanReachEnd());
   return;
 }
 
@@ -527,7 +522,6 @@ void EarleyParser::ParserReset() {
   states.clear();
   history_states.PopBack(history_states.Size());
   queue.Clear();
-  can_reach_end.clear();
   PushInitialState(State(
       grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
   ));

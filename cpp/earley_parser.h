@@ -152,9 +152,6 @@ class EarleyParser {
   /*! \brief The vector stores the states that are going to be added into the CSRArray. */
   std::vector<State> tmp_states;
 
-  /*! \brief The vector stores whether at present, the grammar can reach the end. */
-  std::vector<bool> can_reach_end;
-
   /*! \brief It's the processing queue of the earley parser.*/
   List<State> queue;
 
