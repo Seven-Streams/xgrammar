@@ -20,11 +20,9 @@ using RuleExpr = Grammar::Impl::RuleExpr;
 bool EarleyParser::IsEndOfGrammar(const State& state) const {
   // The root rule.
   if (state.parent_pos != State::kNoParent) {
-    if (state.sequence_id != State::kUnexpandedRuleStartSequenceId) {
-      auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
-      if (seq_expr.type == RuleExprType::kTagDispatch) {
-        return state.element_id != State::kTagDispatchEndFlag;
-      }
+    auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
+    if (seq_expr.type == RuleExprType::kTagDispatch) {
+      return state.element_id != State::kTagDispatchEndFlag;
     }
     return false;
   }
@@ -58,7 +56,14 @@ void EarleyParser::PopBackStates(int32_t cnt) {
 bool EarleyParser::Complete(const State& state) {
   // Check if a rule is completed.
   if (state.parent_pos == State::kNoParent) {
-    return true;
+    if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
+      return state.element_id == State::kUnexpanedRuleFinishFlag;
+    }
+    auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
+    if (seq_expr.type == RuleExprType::kTagDispatch) {
+      return state.element_id != State::kTagDispatchEndFlag;
+    }
+    return state.element_id == seq_expr.size();
   }
   // Check all the possible parent states.
   const auto& parent_states_map = states[state.parent_pos];
@@ -223,12 +228,24 @@ std::pair<bool, bool> EarleyParser::Predict(const State& state) {
             << "The end node of the tag dispatch fsm does not correspond to any rule id";
         auto refered_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
         auto& states_map = states.back();
-        states_map.insert(
-            {std::make_pair(refered_rule_id, State::kUnexpandedRuleStartSequenceId), state}
-        );
-        queue.PushBack(
-            State(refered_rule_id, State::kUnexpandedRuleStartSequenceId, 0, states.size() - 1, 0)
-        );
+        const auto& ref_rule = grammar_->GetRule(refered_rule_id);
+        const auto& ref_rule_body = grammar_->GetRuleExpr(ref_rule.body_expr_id);
+        if (ref_rule_body.type == RuleExprType::kTagDispatch) {
+          states_map.insert({std::make_pair(refered_rule_id, ref_rule.body_expr_id), state});
+          queue.PushBack(State{
+              refered_rule_id,
+              ref_rule.body_expr_id,
+              grammar_->root_tag_dispatch_fsm->StartNode(),
+              int32_t(states.size()) - 1,
+              0
+          });
+        } else {
+          XGRAMMAR_DCHECK(ref_rule_body.type == RuleExprType::kChoices);
+          for (const auto& sequence_id : ref_rule_body) {
+            states_map.insert({std::make_pair(refered_rule_id, sequence_id), state});
+            queue.PushBack(State{refered_rule_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
+          }
+        }
         return std::make_pair(false, false);
       }
       return std::make_pair(true, false);
@@ -245,10 +262,6 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
     return;
   }
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-  // If the current state is the end of the rule, we do not need to scan.
-  if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
-    return;
-  }
   switch (cur_rule.type) {
     case (RuleExprType::kSequence): {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
