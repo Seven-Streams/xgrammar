@@ -18,16 +18,9 @@ using RuleExprType = Grammar::Impl::RuleExprType;
 using RuleExpr = Grammar::Impl::RuleExpr;
 
 bool EarleyParser::IsEndOfGrammar(const State& state) const {
-  // The root rule.
+  // Check if the rule is the root rule.
   if (state.parent_pos != State::kNoParent) {
-    auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
-    if (seq_expr.type == RuleExprType::kTagDispatch) {
-      return state.element_id != State::kTagDispatchEndFlag;
-    }
     return false;
-  }
-  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-    return state.element_id == State::kUnexpanedRuleFinishFlag;
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
   if (seq_expr.type == RuleExprType::kTagDispatch) {
@@ -56,9 +49,6 @@ void EarleyParser::PopBackStates(int32_t cnt) {
 bool EarleyParser::Complete(const State& state) {
   // Check if a rule is completed.
   if (state.parent_pos == State::kNoParent) {
-    if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-      return state.element_id == State::kUnexpanedRuleFinishFlag;
-    }
     auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
     if (seq_expr.type == RuleExprType::kTagDispatch) {
       return state.element_id != State::kTagDispatchEndFlag;
@@ -126,9 +116,6 @@ std::pair<bool, bool> EarleyParser::Predict(const State& state) {
   // and add all the possible rules into the queue.
   if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
     // The rule is already expanded, and finished.
-    if (state.element_id == State::kUnexpanedRuleFinishFlag) {
-      return std::make_pair(state.rule_id == grammar_->GetRootRuleId(), true);
-    }
     auto cur_rule_id = state.rule_id;
     auto cur_rule_body_id = grammar_->GetRule(cur_rule_id).body_expr_id;
     auto cur_rule_body = grammar_->GetRuleExpr(cur_rule_body_id);
@@ -136,33 +123,18 @@ std::pair<bool, bool> EarleyParser::Predict(const State& state) {
     // 1. The rule is a tag dispatch rule.
     // 2. The rule is a choice, consisting of multiple sequences.
     if (cur_rule_body.type == RuleExprType::kTagDispatch) {
-      auto& states_map = states.back();
-      states_map.insert({std::make_pair(cur_rule_id, cur_rule_body_id), {state}});
       queue.PushBack(State{
           cur_rule_id,
           cur_rule_body_id,
           grammar_->root_tag_dispatch_fsm->StartNode(),
-          int32_t(states.size()) - 1,
+          State::kNoParent,
           0
       });
       return std::make_pair(false, false);
     }
     XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
-    auto& states_map = states.back();
-    std::vector<std::pair<int32_t, int32_t>> prediction;
     for (auto sequence_id : cur_rule_body) {
-      queue.PushBack(State{cur_rule_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
-      if (std::find_if(
-              prediction.begin(),
-              prediction.end(),
-              [&](const std::pair<int32_t, int32_t> p) {
-                return p == std::make_pair(cur_rule_id, sequence_id);
-              }
-          ) != prediction.end()) {
-        continue;
-      }
-      prediction.emplace_back(cur_rule_id, sequence_id);
-      states_map.insert({std::make_pair(cur_rule_id, sequence_id), state});
+      queue.PushBack(State{cur_rule_id, sequence_id, 0, State::kNoParent, 0});
     }
     return std::make_pair(false, false);
   }

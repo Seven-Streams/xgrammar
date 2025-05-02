@@ -530,6 +530,9 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     if (cur_sequence.type == RuleExprType::kTagDispatch) {
       have_tag_dispatch = true;
     } else {
+      if (cur_sequence.size() == state.element_id) {
+        continue;
+      }
       XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
     }
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(state);
@@ -650,13 +653,9 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;
     for (const auto& state : states) {
-      if (state.element_id == State::kUnexpanedRuleFinishFlag &&
-          state.parent_pos == State::kNoParent) {
+      if (CanReachEnd()) {
         can_find_next_char = false;
         break;
-      }
-      if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-        continue;
       }
       auto cur_sequence = grammar_->GetRuleExpr(state.sequence_id);
       // We cannot deduce the next char for tag dispatch
