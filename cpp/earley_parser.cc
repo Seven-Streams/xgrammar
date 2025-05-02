@@ -61,34 +61,8 @@ bool EarleyParser::Complete(const State& state) {
   if (state.parent_pos == State::kNoParent) {
     return true;
   }
-  if (state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
-    if (state.element_id != State::kUnexpanedRuleFinishFlag) {
-      return false;
-    }
-  } else {
-    auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-    /*
-      Case 1: The current state is the end of the rule.
-      Case 2: The current rule can be empty.
-      Case 3: The type is kCharacterClassStar, and the element_id == 0.
-      If none of the above cases is true, we return.
-    */
-    if (cur_rule.type == RuleExprType::kTagDispatch) {
-      if (state.element_id != State::kTagDispatchEndFlag) {
-        return true;
-      }
-    } else {
-      if ((cur_rule.size() != state.element_id)) {
-        return true;
-      }
-    }
-  }
   // Check all the possible parent states.
   const auto& parent_states_map = states[state.parent_pos];
-  if (parent_states_map.find(std::make_pair(state.rule_id, state.sequence_id)) ==
-      parent_states_map.end()) {
-    return false;
-  }
   const auto& range =
       parent_states_map.equal_range(std::make_pair(state.rule_id, state.sequence_id));
   for (auto parent_state_iter = range.first; parent_state_iter != range.second;
