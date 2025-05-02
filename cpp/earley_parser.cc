@@ -24,7 +24,7 @@ bool EarleyParser::IsEndOfGrammar(const State& state) const {
   }
   auto seq_expr = grammar_->GetRuleExpr(state.sequence_id);
   if (seq_expr.type == RuleExprType::kTagDispatch) {
-    return state.element_id != State::kTagDispatchEndFlag;
+    return true;
   } else {
     return state.element_id == seq_expr.size();
   }
@@ -53,7 +53,7 @@ bool EarleyParser::Complete(const State& state) {
     if (seq_expr.type == RuleExprType::kTagDispatch) {
       return state.element_id != State::kTagDispatchEndFlag;
     }
-    return state.element_id == seq_expr.size();
+    return true;
   }
   // Check all the possible parent states.
   const auto& parent_states_map = states[state.parent_pos];
@@ -109,6 +109,10 @@ std::pair<bool, bool> EarleyParser::Predict(const State& state) {
   if (cur_rule.type == RuleExprType::kTagDispatch) {
     if (state.element_id == State::kTagDispatchEndFlag) {
       return std::make_pair(false, true);
+    }
+    // The rule can be scanned, bug can't be completed.
+    if (!grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
+      return std::make_pair(true, false);
     }
   } else {
     // If the current state is the end of the rule, we do not need to predict,
@@ -255,11 +259,7 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
       return;
     }
     case (RuleExprType::kTagDispatch): {
-      if (state.element_id == State::kTagDispatchEndFlag) {
-        // The tag has been dispatched.
-        return;
-      }
-      auto root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
+      const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
       if (!root_tag_dispatch_fsm) {
         XGRAMMAR_LOG(FATAL
         ) << "The grammar does not have a root tag dispatch rule; it is not built.";
@@ -269,8 +269,8 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         // The tag has been dispatched.
         return;
       }
-      auto start_node = root_tag_dispatch_fsm->StartNode();
-      auto next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
+      const auto& start_node = root_tag_dispatch_fsm->StartNode();
+      const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
       auto new_state = state;
       if (next_node == CompactFSM::NO_TRANSITION) {
         // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.

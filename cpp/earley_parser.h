@@ -6,7 +6,6 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
-#include <functional>
 #include <map>
 #include <ostream>
 #include <utility>
@@ -14,6 +13,7 @@
 
 #include "support/container.h"
 #include "support/csr_array.h"
+#include "support/utils.h"
 #include "xgrammar/grammar.h"
 namespace xgrammar {
 
@@ -72,11 +72,11 @@ struct State {
   State& operator=(const State&) = default;
 
   constexpr State(
-      int32_t rule_id,
-      int32_t sequence_id,
-      int32_t element_id,
-      int32_t parent_pos,
-      int32_t sub_element_id
+      const int32_t& rule_id,
+      const int32_t& sequence_id,
+      const int32_t& element_id,
+      const int32_t& parent_pos,
+      const int32_t& sub_element_id
   )
       : rule_id(rule_id),
         sequence_id(sequence_id),
@@ -106,9 +106,7 @@ struct State {
 class StateHash {
  public:
   size_t operator()(const State& state) const {
-    return std::hash<int32_t>()(state.rule_id) << 16 ^
-           std::hash<int32_t>()(state.sequence_id) << 8 ^
-           std::hash<int32_t>()(state.element_id) << 4 ^ std::hash<int32_t>()(state.sub_element_id);
+    return HashCombine(state.rule_id, state.sequence_id, state.element_id, state.sub_element_id);
   }
 };
 
@@ -128,10 +126,9 @@ class CheckingStateEqual {
 class CheckingStateHash {
  public:
   size_t operator()(const State& state) const {
-    return std::hash<int32_t>()(state.rule_id) << 16 ^
-           std::hash<int32_t>()(state.sequence_id) << 8 ^
-           std::hash<int32_t>()(state.element_id) << 4 ^
-           std::hash<int32_t>()(state.parent_pos) << 2 ^ std::hash<int32_t>()(state.sub_element_id);
+    return HashCombine(
+        state.rule_id, state.sequence_id, state.element_id, state.parent_pos, state.sub_element_id
+    );
   }
 };
 class EarleyParser {
