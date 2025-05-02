@@ -195,6 +195,20 @@ class EarleyParser {
   */
   bool IsAccepted(const State& state, uint8_t ch) const;
 
+  /*!
+    \brief Handle the unexpanded rule, used for pushing initial state.
+    \param state The state to be handled.
+    \return True if the rule is unexpanded, false otherwise.
+  */
+  bool HandleUnexpandedRule(const State& state);
+
+  /*!
+    \brief Expand the rule, used for RuleRef and kTagDispatch.
+    \param state The state to be expanded, which is the parent state.
+    The type of the state is kTagDispatch or kSequence.
+  */
+  void ExpandRule(const State& state);
+
  public:
   /*!
     \brief From the current states, advance to the next state.
