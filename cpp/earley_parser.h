@@ -232,7 +232,7 @@ class EarleyParser {
     \param state The initial state to be pushed.
     \param need_expand If true, the initial state will be expanded.
   */
-  void PushInitialState(const State& state, const bool& need_expand = true);
+  void PushInitialState(const State& state, const bool need_expand = true);
 
   /*!
     \brief Constructor of the Earley parser.

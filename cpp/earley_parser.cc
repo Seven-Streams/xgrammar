@@ -109,7 +109,7 @@ std::pair<bool, bool> EarleyParser::Predict(const State& state) {
     if (state.element_id == State::kTagDispatchEndFlag) {
       return std::make_pair(false, true);
     }
-    // The rule can be scanned, bug can't be completed.
+    // The rule can be scanned, but can't be completed.
     if (!grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
       return std::make_pair(true, false);
     }
@@ -143,13 +143,9 @@ std::pair<bool, bool> EarleyParser::Predict(const State& state) {
       return std::make_pair(true, false);
     }
     case RuleExprType::kTagDispatch: {
-      const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
-      if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
-        // A tag has is dispatched.
-        ExpandRule(state);
-        return std::make_pair(false, false);
-      }
-      return std::make_pair(true, false);
+      // A tag has is dispatched.
+      ExpandRule(state);
+      return std::make_pair(false, false);
     }
     default: {
       return std::make_pair(false, false);
@@ -224,9 +220,6 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             auto new_state = state;
             new_state.sub_element_id--;
             if (new_state.sub_element_id == 0) {
-              tmp_states.push_back(new_state);
-              new_state.element_id++;
-              new_state.sub_element_id = 0;
               queue.PushBack(new_state);
             } else {
               tmp_states.push_back(new_state);
@@ -239,10 +232,7 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           }
           // A single byte is accepted.
           if (num_bytes == 1) {
-            auto new_state = state;
-            new_state.element_id++;
-            queue.PushBack(new_state);
-            tmp_states.push_back(state);
+            queue.PushBack(state);
             return;
           }
           // A UTF8 character is accepted.
@@ -263,10 +253,6 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
         XGRAMMAR_LOG(FATAL
         ) << "The grammar does not have a root tag dispatch rule; it is not built.";
         XGRAMMAR_UNREACHABLE();
-      }
-      if (root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
-        // The tag has been dispatched.
-        return;
       }
       const auto& start_node = root_tag_dispatch_fsm->StartNode();
       const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
@@ -362,8 +348,8 @@ EarleyParser::EarleyParser(const Grammar& grammar, const State& init_state, cons
 }
 
 bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
-  auto sequence_expr = grammar_->GetRuleExpr(state.sequence_id);
-  auto element_expr = grammar_->GetRuleExpr(sequence_expr[state.element_id]);
+  const auto& sequence_expr = grammar_->GetRuleExpr(state.sequence_id);
+  const auto& element_expr = grammar_->GetRuleExpr(sequence_expr[state.element_id]);
   XGRAMMAR_DCHECK(
       element_expr.type == RuleExprType::kCharacterClass ||
       element_expr.type == RuleExprType::kCharacterClassStar
@@ -387,7 +373,7 @@ bool EarleyParser::IsAccepted(const State& state, uint8_t ch) const {
   return is_negative;
 }
 
-void EarleyParser::PushInitialState(const State& state, const bool& need_expand) {
+void EarleyParser::PushInitialState(const State& state, const bool need_expand) {
   states.emplace_back();
   if (!need_expand) {
     if (state.IsInvalid() || state.sequence_id == State::kUnexpandedRuleStartSequenceId) {
