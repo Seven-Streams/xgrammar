@@ -57,8 +57,7 @@ bool EarleyParser::Complete(const State& state) {
   }
   // Check all the possible parent states.
   const auto& parent_states_map = states[state.parent_pos];
-  const auto& range =
-      parent_states_map.equal_range(std::make_pair(state.rule_id, state.sequence_id));
+  const auto& range = parent_states_map.equal_range(state.rule_id);
   for (auto parent_state_iter = range.first; parent_state_iter != range.second;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
@@ -492,11 +491,12 @@ void EarleyParser::ExpandRule(const State& state) {
     }
     ref_rule_id = element_expr[0];
   }
+  auto& states_map = states.back();
+  states_map.insert({ref_rule_id, state});
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
   if (ref_rule_expr.type == RuleExprType::kTagDispatch) {
-    states.back().insert({std::make_pair(ref_rule_id, ref_rule_expr_id), state});
     queue.PushBack(State{
         ref_rule_id,
         ref_rule_expr_id,
@@ -507,7 +507,6 @@ void EarleyParser::ExpandRule(const State& state) {
   } else {
     XGRAMMAR_DCHECK(ref_rule_expr.type == RuleExprType::kChoices);
     for (const auto& sequence_id : ref_rule_expr) {
-      states.back().insert({std::make_pair(ref_rule_id, sequence_id), state});
       queue.PushBack(State{ref_rule_id, sequence_id, 0, int32_t(states.size()) - 1, 0});
     }
   }
