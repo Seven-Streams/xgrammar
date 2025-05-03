@@ -466,15 +466,9 @@ void EarleyParser::ExpandRule(const State& state) {
   const auto& cur_rule_expr = grammar_->GetRuleExpr(state.sequence_id);
   int ref_rule_id;
   if (cur_rule_expr.type == RuleExprType::kTagDispatch) {
-    if (!grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
-      return;
-    }
     ref_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
   } else {
     const auto& element_expr = grammar_->GetRuleExpr(cur_rule_expr[state.element_id]);
-    if (element_expr.type != RuleExprType::kRuleRef) {
-      return;
-    }
     ref_rule_id = element_expr[0];
   }
   auto& states_map = states.back();

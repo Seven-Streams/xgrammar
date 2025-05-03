@@ -202,7 +202,9 @@ class EarleyParser {
   /*!
     \brief Expand the rule, used for RuleRef and kTagDispatch.
     \param state The state to be expanded, which is the parent state.
-    The type of the state is kTagDispatch or kSequence.
+    The type of the state is kTagDispatch or kSequence. Moreover, the
+    element of the sequence should be a rule reference; the node in
+    the kTagDispatch should be an end node.
   */
   void ExpandRule(const State& state);
 
