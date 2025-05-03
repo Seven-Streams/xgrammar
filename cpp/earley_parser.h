@@ -65,6 +65,7 @@ struct State {
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
 
+  /*! \brief If the rule is completed.*/
   bool completed = false;
 
   constexpr State() = default;
@@ -209,6 +210,33 @@ class EarleyParser {
     the kTagDispatch should be an end node.
   */
   void ExpandRule(const State& state);
+
+  /*! The vector to check if a state has been added into the queue.*/
+  std::vector<State> visited;
+
+  /*!
+  \brief Check if the state has been added into the queue.
+  \param state The state to check.
+  \return True if in the vector, false otherwise.
+*/
+  bool Invec(const State& state) const {
+    return (std::find_if(visited.begin(), visited.end(), [&](const State& s) {
+              return CheckingStateEqual()(state, s);
+            }) != visited.end());
+  }
+
+  /*!
+    \brief Push the state into the queue. If the state is already in the queue,
+    then we don't need to push it again.
+    \param state The state to be pushed.
+  */
+  void EnQueue(const State& state) {
+    if (!Invec(state)) {
+      queue.PushBack(state);
+      visited.push_back(state);
+    }
+    return;
+  }
 
  public:
   /*!
