@@ -172,6 +172,9 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             if (new_state.sub_element_id == element_expr.size()) {
               new_state.element_id++;
               new_state.sub_element_id = 0;
+              if (new_state.element_id == cur_rule.size()) {
+                new_state.completed = true;
+              }
               queue.PushBack(new_state);
             } else {
               tmp_states.push_back(new_state);
@@ -189,6 +192,9 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
             if (new_state.sub_element_id == 0) {
               new_state.element_id++;
               new_state.sub_element_id = 0;
+              if (new_state.element_id == cur_rule.size()) {
+                new_state.completed = true;
+              }
               queue.PushBack(new_state);
             } else {
               tmp_states.push_back(new_state);
@@ -203,6 +209,9 @@ void EarleyParser::Scan(const State& state, const uint8_t& ch) {
           if (num_bytes == 1) {
             auto new_state = state;
             new_state.element_id++;
+            if (new_state.element_id == cur_rule.size()) {
+              new_state.completed = true;
+            }
             queue.PushBack(new_state);
             return;
           }
@@ -316,6 +325,14 @@ bool EarleyParser::Advance(const uint8_t& ch) {
       continue;
     }
     visited.push_back(state);
+    if (state.completed) {
+      Complete(state);
+      if (state.parent_pos == State::kNoParent) {
+        tmp_states.push_back(state);
+      }
+      queue.Erase(state_iter);
+      continue;
+    }
     auto [flag, can_complete] = Predict(state);
     if (can_complete) {
       flag = Complete(state) && flag;

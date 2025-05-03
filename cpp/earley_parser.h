@@ -65,6 +65,8 @@ struct State {
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
 
+  bool completed = false;
+
   constexpr State() = default;
 
   constexpr State(const State&) = default;
