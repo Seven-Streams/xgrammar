@@ -473,6 +473,10 @@ void EarleyParser::ExpandRule(const State& state) {
   }
   auto& states_map = states.back();
   states_map.insert({ref_rule_id, state});
+  if (Invec({ref_rule_id, -1, -1, -1, -1})) {
+    return;
+  }
+  visited.push_back({ref_rule_id, -1, -1, -1, -1});
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
