@@ -326,9 +326,8 @@ class EarleyParser {
   /*!
     \brief Push the initial state into the Earley parser.
     \param state The initial state to be pushed.
-    \param need_expand If true, the initial state will be expanded.
   */
-  void PushStateAndExpand(const ParserState& state, const bool need_expand = true);
+  void PushStateAndExpand(const ParserState& state);
 
   /*!
     \brief Reset the parser.

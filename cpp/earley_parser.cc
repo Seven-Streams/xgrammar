@@ -255,19 +255,11 @@ EarleyParser::EarleyParser(
   PushStateAndExpand(init);
 }
 
-void EarleyParser::PushStateAndExpand(const ParserState& state, const bool need_expand) {
+void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_states_visited_in_queue_.clear();
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
   rule_id_to_completeable_states_.emplace_back();
-  if (!need_expand) {
-    if (state.IsInvalid() || state.sequence_id == ParserState::kUnexpandedRuleStartSequenceId) {
-      XGRAMMAR_LOG(FATAL) << "When not expanding, the initial state should be valid.";
-    }
-    can_accept_stop_token_.push_back(false);
-    scanable_state_history_.PushBack({state});
-    return;
-  }
   if (state.IsInvalid()) {
     ExpandAndEnqueueUnexpandedState(ParserState{
         grammar_->GetRootRuleId(),

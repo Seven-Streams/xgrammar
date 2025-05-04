@@ -203,7 +203,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   GrammarMatcherForTokenMaskCache(
       const Grammar& grammar, const ParserState& init_state, const bool& need_expand = true
   )
-      : EarleyParser(grammar, init_state, need_expand), init_rule_id(init_state.rule_id) {}
+      : EarleyParser(grammar, init_state), init_rule_id(init_state.rule_id) {}
   /*!
    * \brief Get the adaptive token mask for the given ParserState.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
