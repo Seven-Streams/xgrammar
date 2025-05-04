@@ -308,19 +308,18 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
-  if (queue.begin() == queue.end() && tmp_states.empty()) {
+  if (queue.empty() && tmp_states.empty()) {
     return false;
   }
   states.emplace_back();
-  while (queue.begin() != queue.end()) {
-    const auto& state_iter = queue.begin();
-    const auto state = *state_iter;
+  while (!queue.empty()) {
+    const auto state = queue.front();
+    queue.pop();
     if (state.completed) {
       Complete(state);
       if (state.parent_pos == State::kNoParent) {
         tmp_states.push_back(state);
       }
-      queue.Erase(state_iter);
       continue;
     }
     auto [flag, can_complete] = Predict(state);
@@ -330,7 +329,6 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     if (flag) {
       tmp_states.push_back(state);
     }
-    queue.Erase(state_iter);
   }
   history_states.Insert(tmp_states);
   tmp_states.clear();
@@ -400,9 +398,9 @@ void EarleyParser::PushInitialState(const State& state, const bool need_expand) 
       EnQueue(state);
     }
   }
-  while (queue.begin() != queue.end()) {
-    const auto& state_iter = queue.begin();
-    const auto state = *state_iter;
+  while (!queue.empty()) {
+    const auto state = queue.front();
+    queue.pop();
     auto [flag, can_complete] = Predict(state);
     if (can_complete) {
       flag = Complete(state) && flag;
@@ -410,7 +408,6 @@ void EarleyParser::PushInitialState(const State& state, const bool need_expand) 
     if (flag) {
       tmp_states.push_back(state);
     }
-    queue.Erase(state_iter);
   }
   history_states.Insert(tmp_states);
   tmp_states.clear();
@@ -420,7 +417,6 @@ void EarleyParser::PushInitialState(const State& state, const bool need_expand) 
 void EarleyParser::ParserReset() {
   states.clear();
   history_states.PopBack(history_states.Size());
-  queue.Clear();
   PushInitialState(State(
       grammar_->GetRootRuleId(), State::kUnexpandedRuleStartSequenceId, 0, State::kNoParent, 0
   ));

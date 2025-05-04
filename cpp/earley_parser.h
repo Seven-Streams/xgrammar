@@ -8,10 +8,10 @@
 #include <cstdint>
 #include <map>
 #include <ostream>
+#include <queue>
 #include <utility>
 #include <vector>
 
-#include "support/container.h"
 #include "support/csr_array.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
@@ -153,7 +153,7 @@ class EarleyParser {
   std::vector<State> tmp_states;
 
   /*! \brief It's the processing queue of the earley parser.*/
-  List<State> queue;
+  std::queue<State> queue;
 
   /*! \brief The initial state, used for debugging.*/
   State init_state;
@@ -232,7 +232,7 @@ class EarleyParser {
   */
   void EnQueue(const State& state) {
     if (!Invec(state)) {
-      queue.PushBack(state);
+      queue.push(state);
       visited.push_back(state);
     }
     return;
