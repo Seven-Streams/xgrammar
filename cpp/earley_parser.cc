@@ -106,7 +106,7 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
     // If the current state is the end of the rule, we do not need to predict,
     // since the rule is already completed.
     if (state.element_id == cur_rule.size()) {
-      return std::make_pair(state.input_pos == ParserState::kNoPrevInputPos, true);
+      return std::make_pair(false, true);
     }
   }
   switch (cur_rule.type) {
@@ -544,6 +544,7 @@ void EarleyParser::AdvanceTagDispatch(
     if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
       Enqueue(new_state);
     } else {
+      tmp_accept_stop_token_ = true;
       tmp_states_to_be_added_.push_back(new_state);
     }
   }
