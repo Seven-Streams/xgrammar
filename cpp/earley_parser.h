@@ -14,6 +14,7 @@
 
 #include "grammar_data_structure.h"
 #include "support/csr_array.h"
+#include "support/tsl/robin_set.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
 
@@ -164,7 +165,7 @@ class EarleyParser {
   std::queue<ParserState> tmp_process_state_queue_;
 
   /*! The vector to check if a state has been added into the queue.*/
-  std::vector<ParserState> tmp_states_visited_in_queue_;
+  tsl::robin_set<ParserState, StateHashChecker, StateEqual> tmp_states_visited_in_queue_;
 
   /*!
   \brief Check if the state has been added into the queue.
@@ -172,13 +173,7 @@ class EarleyParser {
   \return True if in the vector, false otherwise.
 */
   bool IsStateVisitedInQueue(const ParserState& state) const {
-    return (
-        std::find_if(
-            tmp_states_visited_in_queue_.begin(),
-            tmp_states_visited_in_queue_.end(),
-            [&](const ParserState& s) { return StateEqual()(state, s); }
-        ) != tmp_states_visited_in_queue_.end()
-    );
+    return tmp_states_visited_in_queue_.find(state) != tmp_states_visited_in_queue_.end();
   }
 
   /*!
@@ -189,7 +184,7 @@ class EarleyParser {
   void Enqueue(const ParserState& state) {
     if (!IsStateVisitedInQueue(state)) {
       tmp_process_state_queue_.push(state);
-      tmp_states_visited_in_queue_.push_back(state);
+      tmp_states_visited_in_queue_.insert(state);
     }
     return;
   }

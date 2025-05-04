@@ -344,7 +344,7 @@ void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const Rule
   if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
     return;
   }
-  tmp_states_visited_in_queue_.push_back({ref_rule_id, -1, -1, -1, -1});
+  tmp_states_visited_in_queue_.insert({ref_rule_id, -1, -1, -1, -1});
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
