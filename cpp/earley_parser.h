@@ -8,11 +8,10 @@
 #include <cstdint>
 #include <map>
 #include <ostream>
-#include <queue>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "support/container.h"
 #include "support/csr_array.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
@@ -154,7 +153,7 @@ class EarleyParser {
   std::vector<State> tmp_states;
 
   /*! \brief It's the processing queue of the earley parser.*/
-  std::queue<State> queue;
+  List<State> queue;
 
   /*! \brief The initial state, used for debugging.*/
   State init_state;
@@ -213,24 +212,28 @@ class EarleyParser {
   void ExpandRule(const State& state);
 
   /*! The vector to check if a state has been added into the queue.*/
-  std::unordered_set<State, CheckingStateHash, CheckingStateEqual> visited;
+  std::vector<State> visited;
 
   /*!
   \brief Check if the state has been added into the queue.
   \param state The state to check.
   \return True if in the vector, false otherwise.
 */
-  bool IsVisited(const State& state) const { return visited.find(state) != visited.end(); }
+  bool Invec(const State& state) const {
+    return (std::find_if(visited.begin(), visited.end(), [&](const State& s) {
+              return CheckingStateEqual()(state, s);
+            }) != visited.end());
+  }
 
   /*!
     \brief Push the state into the queue. If the state is already in the queue,
     then we don't need to push it again.
     \param state The state to be pushed.
   */
-  void Enqueue(const State& state) {
-    if (!IsVisited(state)) {
-      queue.push(state);
-      visited.insert(state);
+  void EnQueue(const State& state) {
+    if (!Invec(state)) {
+      queue.PushBack(state);
+      visited.push_back(state);
     }
     return;
   }
@@ -276,6 +279,11 @@ class EarleyParser {
     parser with the root rule.
   */
   void ParserReset();
+
+  /*!
+    \brief Popfront the history states to save memory.
+  */
+  void PopFrontStates(const int32_t& cnt);
 };
 
 }  // namespace xgrammar
