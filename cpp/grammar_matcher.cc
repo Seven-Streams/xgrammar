@@ -409,7 +409,6 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   }
   token_length_history.push_back(token.size());
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
-    PopFrontStates(1);
     token_length_history.pop_front();
   }
   return true;
@@ -443,7 +442,6 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
   }
   token_length_history.push_back(input_str.size());
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
-    PopFrontStates(1);
     token_length_history.pop_front();
   }
   if (debug_print) {
