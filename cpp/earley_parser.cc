@@ -177,33 +177,7 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
       break;
     }
     case (RuleExprType::kTagDispatch): {
-      const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
-      if (!root_tag_dispatch_fsm) {
-        XGRAMMAR_LOG(FATAL
-        ) << "The grammar does not have a root tag dispatch rule; it is not built.";
-        XGRAMMAR_UNREACHABLE();
-      }
-      const auto& start_node = root_tag_dispatch_fsm->StartNode();
-      const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
-      auto new_state = state;
-      if (next_node == CompactFSM::NO_TRANSITION) {
-        // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
-        // We try to accept the new char from the start node. If accepted, we go to the target
-        // node. If it still cannot be accepted, we stay at the start node.
-        auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
-        new_state.element_id =
-            new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
-        Enqueue(new_state);
-      } else {
-        // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
-        // We need to update the element id to the next node.
-        new_state.element_id = next_node;
-        if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
-          Enqueue(new_state);
-        } else {
-          tmp_states_to_be_added_.push_back(new_state);
-        }
-      }
+      AdvanceTagDispatch(state, ch, cur_rule);
       break;
     }
     default: {
@@ -565,6 +539,36 @@ void EarleyParser::AdvanceCharacterClassStar(
   }
   if (is_negative) {
     Enqueue(state);
+  }
+}
+
+void EarleyParser::AdvanceTagDispatch(
+    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& cur_sequence
+) {
+  const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
+  if (!root_tag_dispatch_fsm) {
+    XGRAMMAR_LOG(FATAL) << "The grammar does not have a root tag dispatch rule; it is not built.";
+    XGRAMMAR_UNREACHABLE();
+  }
+  const auto& start_node = root_tag_dispatch_fsm->StartNode();
+  const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
+  auto new_state = state;
+  if (next_node == CompactFSM::NO_TRANSITION) {
+    // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
+    // We try to accept the new char from the start node. If accepted, we go to the target
+    // node. If it still cannot be accepted, we stay at the start node.
+    auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
+    new_state.element_id = new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
+    Enqueue(new_state);
+  } else {
+    // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
+    // We need to update the element id to the next node.
+    new_state.element_id = next_node;
+    if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
+      Enqueue(new_state);
+    } else {
+      tmp_states_to_be_added_.push_back(new_state);
+    }
   }
 }
 

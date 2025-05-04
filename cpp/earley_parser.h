@@ -242,7 +242,7 @@ class EarleyParser {
   void ExpandNextRuleRefElement(const ParserState& state, const Grammar::Impl::RuleExpr& rule_expr);
 
   /*!
-    \brief Advance the parser to the next state, with the sub rule is kCharacterClass.
+    \brief Advance the parser to the next state, with the sub sequence is kCharacterClass.
     \param state The state to be advanced.
     \param ch The character to be advanced.
     \param cur_sequence The sequence of the current state.
@@ -257,7 +257,7 @@ class EarleyParser {
   );
 
   /*!
-    \brief Advance the parser to the next state, with the sub rule is kByteString.
+    \brief Advance the parser to the next state, with the sub sequence is kByteString.
     \param state The state to be advanced.
     \param ch The character to be advanced.
     \param cur_sequence The sequence of the current state.
@@ -272,7 +272,7 @@ class EarleyParser {
   );
 
   /*!
-    \brief Advance the parser to the next state, with the sub rule is kCharacterClassStar.
+    \brief Advance the parser to the next state, with the sub sequence is kCharacterClassStar.
     \param state The state to be advanced.
     \param ch The character to be advanced.
     \param cur_sequence The sequence of the current state.
@@ -284,6 +284,17 @@ class EarleyParser {
       const uint8_t& ch,
       const Grammar::Impl::RuleExpr& cur_sequence,
       const Grammar::Impl::RuleExpr& sub_sequence
+  );
+
+  /*!
+    \brief Advance the parser to the next state, with the sequence is kTagDispatch.
+    \param state The state to be advanced.
+    \param ch The character to be advanced.
+    \param cur_sequence The sequence of the current state.
+    \return The next state, Invalid state if the character is not accepted.
+  */
+  void AdvanceTagDispatch(
+      const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& cur_sequence
   );
 
  public:
