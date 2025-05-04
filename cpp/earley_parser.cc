@@ -158,89 +158,15 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
       // The element is a rule reference, we do not need to scan it.
       switch (element_expr.type) {
         case (RuleExprType::kByteString): {
-          if (element_expr[state.sub_element_id] == ch) {
-            auto new_state = state;
-            new_state.sub_element_id++;
-            // The rule is finished, and is possible to predict.
-            if (new_state.sub_element_id == element_expr.size()) {
-              new_state.element_id++;
-              new_state.sub_element_id = 0;
-              if (new_state.element_id == cur_rule.size()) {
-                new_state.completed = true;
-              }
-              Enqueue(new_state);
-            } else {
-              tmp_states_to_be_added_.push_back(new_state);
-            }
-          }
+          AdvanceByteString(state, ch, cur_rule, element_expr);
           break;
         }
         case (RuleExprType::kCharacterClass): {
-          if (!IsAccepted(state, ch)) {
-            break;
-          }
-          if (state.sub_element_id > 0) {
-            auto new_state = state;
-            new_state.sub_element_id--;
-            if (new_state.sub_element_id == 0) {
-              new_state.element_id++;
-              new_state.sub_element_id = 0;
-              if (new_state.element_id == cur_rule.size()) {
-                new_state.completed = true;
-              }
-              Enqueue(new_state);
-            } else {
-              tmp_states_to_be_added_.push_back(new_state);
-            }
-            break;
-          }
-          auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-          if (!accepted) {
-            break;
-          }
-          // A single byte is accepted.
-          if (num_bytes == 1) {
-            auto new_state = state;
-            new_state.element_id++;
-            if (new_state.element_id == cur_rule.size()) {
-              new_state.completed = true;
-            }
-            Enqueue(new_state);
-            break;
-          }
-          // A UTF8 character is accepted.
-          auto new_state = state;
-          new_state.sub_element_id = num_bytes - 1;
-          tmp_states_to_be_added_.push_back(new_state);
+          AdvanceCharacterClass(state, ch, cur_rule, element_expr);
           break;
         }
         case (RuleExprType::kCharacterClassStar): {
-          if (!IsAccepted(state, ch)) {
-            break;
-          }
-          if (state.sub_element_id > 0) {
-            auto new_state = state;
-            new_state.sub_element_id--;
-            if (new_state.sub_element_id == 0) {
-              Enqueue(new_state);
-            } else {
-              tmp_states_to_be_added_.push_back(new_state);
-            }
-            break;
-          }
-          auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-          if (!accepted) {
-            break;
-          }
-          // A single byte is accepted.
-          if (num_bytes == 1) {
-            Enqueue(state);
-            break;
-          }
-          // A UTF8 character is accepted.
-          auto new_state = state;
-          new_state.sub_element_id = num_bytes - 1;
-          tmp_states_to_be_added_.push_back(new_state);
+          AdvanceCharacterClassStar(state, ch, cur_rule, element_expr);
           break;
         }
         default: {
@@ -494,6 +420,151 @@ void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const Rule
           ref_rule_id, sequence_id, 0, int32_t(rule_id_to_completeable_states.size()) - 1, 0
       });
     }
+  }
+}
+
+void EarleyParser::AdvanceByteString(
+    const ParserState& state, const uint8_t& ch, const RuleExpr& cur_rule, const RuleExpr& sub_rule
+) {
+  XGRAMMAR_DCHECK(sub_rule.type == RuleExprType::kByteString);
+  XGRAMMAR_DCHECK(sub_rule.size() > state.sub_element_id);
+  if (sub_rule[state.sub_element_id] == ch) {
+    auto new_state = state;
+    new_state.sub_element_id++;
+    if (new_state.sub_element_id == sub_rule.size()) {
+      new_state.element_id++;
+      new_state.sub_element_id = 0;
+      if (new_state.element_id == cur_rule.size()) {
+        new_state.completed = true;
+      }
+      Enqueue(new_state);
+    } else {
+      tmp_states_to_be_added_.push_back(new_state);
+    }
+  }
+  return;
+}
+
+void EarleyParser::AdvanceCharacterClass(
+    const ParserState& state,
+    const uint8_t& ch,
+    const Grammar::Impl::RuleExpr& cur_sequence,
+    const Grammar::Impl::RuleExpr& sub_sequence
+) {
+  XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClass)
+      << "The element type is not supported!";
+
+  // The state is matching a UTF8 character.
+  if (state.sub_element_id > 0) {
+    if ((ch & 0xC0) == 0x80) {
+      auto new_state = state;
+      new_state.sub_element_id--;
+      // Check if the UTF8 character is completed.
+      if (new_state.sub_element_id == 0) {
+        new_state.element_id++;
+        // Check if the sequence is completed.
+        if (new_state.element_id == cur_sequence.size()) {
+          new_state.completed = true;
+        }
+        Enqueue(new_state);
+      } else {
+        tmp_states_to_be_added_.push_back(new_state);
+      }
+    }
+    return;
+  }
+
+  auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+  if (!accepted) {
+    return;
+  }
+  bool is_negative = static_cast<bool>(sub_sequence[0]);
+
+  // A new UTF8 character is accepted.
+  if (num_bytes > 1) {
+    if (is_negative) {
+      auto new_state = state;
+      new_state.sub_element_id = num_bytes - 1;
+      tmp_states_to_be_added_.push_back(new_state);
+    }
+    return;
+  }
+
+  for (int i = 1; i < sub_sequence.size(); i += 2) {
+    if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
+      if (!is_negative) {
+        auto new_state = state;
+        new_state.element_id++;
+        new_state.sub_element_id = 0;
+        if (new_state.element_id == cur_sequence.size()) {
+          new_state.completed = true;
+        }
+        Enqueue(new_state);
+      }
+      return;
+    }
+  }
+  if (is_negative) {
+    auto new_state = state;
+    new_state.element_id++;
+    new_state.sub_element_id = 0;
+    if (new_state.element_id == cur_sequence.size()) {
+      new_state.completed = true;
+    }
+    Enqueue(new_state);
+  }
+}
+
+void EarleyParser::AdvanceCharacterClassStar(
+    const ParserState& state,
+    const uint8_t& ch,
+    const Grammar::Impl::RuleExpr& cur_sequence,
+    const Grammar::Impl::RuleExpr& sub_sequence
+) {
+  XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClassStar)
+      << "The element type is not supported!";
+
+  // The state is matching a UTF8 character.
+  if (state.sub_element_id > 0) {
+    if ((ch & 0xC0) == 0x80) {
+      auto new_state = state;
+      new_state.sub_element_id--;
+      // Check if the UTF8 character is completed.
+      if (new_state.sub_element_id == 0) {
+        Enqueue(new_state);
+      } else {
+        tmp_states_to_be_added_.push_back(new_state);
+      }
+    }
+    return;
+  }
+
+  auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+  if (!accepted) {
+    return;
+  }
+  bool is_negative = static_cast<bool>(sub_sequence[0]);
+
+  // A new UTF8 character is accepted.
+  if (num_bytes > 1) {
+    if (is_negative) {
+      auto new_state = state;
+      new_state.sub_element_id = num_bytes - 1;
+      tmp_states_to_be_added_.push_back(new_state);
+    }
+    return;
+  }
+
+  for (int i = 1; i < sub_sequence.size(); i += 2) {
+    if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
+      if (!is_negative) {
+        Enqueue(state);
+      }
+      return;
+    }
+  }
+  if (is_negative) {
+    Enqueue(state);
   }
 }
 
