@@ -9,6 +9,7 @@
 #include <map>
 #include <ostream>
 #include <queue>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -93,6 +94,17 @@ struct State {
   bool operator==(const State& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
            element_id == other.element_id && sub_element_id == other.sub_element_id;
+  }
+
+  bool operator<(const State& other) const {
+    return std::tie(rule_id, sequence_id, element_id, sub_element_id, parent_pos) <
+           std::tie(
+               other.rule_id,
+               other.sequence_id,
+               other.element_id,
+               other.sub_element_id,
+               other.parent_pos
+           );
   }
 
   friend std::ostream& operator<<(std::ostream& os, const State& state) {
@@ -212,18 +224,14 @@ class EarleyParser {
   void ExpandRule(const State& state);
 
   /*! The vector to check if a state has been added into the queue.*/
-  std::vector<State> visited;
+  std::set<State> visited;
 
   /*!
   \brief Check if the state has been added into the queue.
   \param state The state to check.
   \return True if in the vector, false otherwise.
 */
-  bool Invec(const State& state) const {
-    return (std::find_if(visited.begin(), visited.end(), [&](const State& s) {
-              return CheckingStateEqual()(state, s);
-            }) != visited.end());
-  }
+  bool Invec(const State& state) const { return visited.find(state) != visited.end(); }
 
   /*!
     \brief Push the state into the queue. If the state is already in the queue,
@@ -233,7 +241,7 @@ class EarleyParser {
   void EnQueue(const State& state) {
     if (!Invec(state)) {
       queue.push(state);
-      visited.push_back(state);
+      visited.insert(state);
     }
     return;
   }
