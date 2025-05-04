@@ -140,9 +140,15 @@ class EarleyParser {
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
 
+  /*! \brief In this round of advancing, check if the stop token can be accepted.*/
+  bool tmp_accept_stop_token_ = false;
+
+  /*! \brief store when accepting i characters, if the stop token can be accepted.*/
+  std::vector<bool> can_accept_stop_token_;
+
   /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. It's used for
    * completion. */
-  std::vector<std::multimap<int32_t, ParserState>> rule_id_to_completeable_states;
+  std::vector<std::multimap<int32_t, ParserState>> rule_id_to_completeable_states_;
 
   /*!
       \brief The states history. state_stack[i] is a vector storing the states after accepting the
@@ -212,18 +218,6 @@ class EarleyParser {
       then return false, true otherwise.
   */
   std::pair<bool, bool> Predict(const ParserState& state);
-
-  /*!
-    \brief Check if the state is the end of the grammar.
-    \param state The state to be checked.
-    \return True if the state is the end of the grammar, false otherwise.
-  */
-  bool IsStateCompleted(const ParserState& state) const;
-
-  /*!
-    \brief Check if a character can be accepted.
-  */
-  bool IsAccepted(const ParserState& state, uint8_t ch) const;
 
   /*!
     \brief Handle the unexpanded rule, used for pushing initial state.
