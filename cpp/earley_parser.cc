@@ -472,7 +472,7 @@ void EarleyParser::ExpandRule(const State& state) {
   if (Invec({ref_rule_id, -1, -1, -1, -1})) {
     return;
   }
-  visited.insert({ref_rule_id, -1, -1, -1, -1});
+  visited.push_back({ref_rule_id, -1, -1, -1, -1});
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
