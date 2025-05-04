@@ -201,11 +201,11 @@ TokenizerInfo CompiledGrammar::GetTokenizerInfo() const { return pimpl_->GetToke
 class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
   GrammarMatcherForTokenMaskCache(
-      const Grammar& grammar, const State& init_state, const bool& need_expand = true
+      const Grammar& grammar, const ParserState& init_state, const bool& need_expand = true
   )
       : EarleyParser(grammar, init_state, need_expand), init_rule_id(init_state.rule_id) {}
   /*!
-   * \brief Get the adaptive token mask for the given State.
+   * \brief Get the adaptive token mask for the given ParserState.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
    * no uncertain tokens. Useful for the root rule.
    */
@@ -239,8 +239,9 @@ bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
   if (lookahead_assertion_id == -1) {
     return true;
   }
-  auto lookahead_state = State(-1, lookahead_assertion_id, 0, -1, 0);
-  PushInitialState(lookahead_state);
+  auto lookahead_state =
+      ParserState(/*rule_id*/ -1, lookahead_assertion_id, 0, ParserState::kNoPrevInputPos, 0);
+  PushStateAndExpand(lookahead_state);
   int token_len = token.size();
 
   // Find all positions that can come to and end. Then check if the suffix from that position
@@ -256,23 +257,23 @@ bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
       }
       last_accept_pos = pos;
       // Case 1. The whole rule is finished.
-      if (CanReachEnd()) {
+      if (IsCompleted()) {
         // accepted chars: pos - i + 1
         // we need to rollback the pushed initial state as well
-        PopBackStates(pos - i + 2);
+        PopLastStates(pos - i + 2);
         return true;
       }
     }
     // Case 2. The whole token is accepted
     if (last_accept_pos == token_len - 1) {
-      PopBackStates(last_accept_pos - i + 2);
+      PopLastStates(last_accept_pos - i + 2);
       return true;
     }
     // Case 3. The token is not accepted. Check the next position.
-    PopBackStates(last_accept_pos - i + 1);
+    PopLastStates(last_accept_pos - i + 1);
   }
 
-  PopBackStates(1);
+  PopLastStates(1);
   return false;
 }
 
@@ -286,7 +287,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   tmp_uncertain_indices_.clear();
   // For every character in the current token, stores whether it is possible to reach the end of
   // the rule when matching until this character. Store it in a stack for later rollback.
-  tmp_can_reach_end_stack_.assign({CanReachEnd()});
+  tmp_can_reach_end_stack_.assign({IsCompleted()});
   tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
   int prev_matched_size = 0;
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
@@ -307,7 +308,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       } else if (lcp_len < prev_matched_size) {
         // Case 2. The common prefix is shorter than the previous matched size. Rollback
         // the non-common part.
-        PopBackStates(prev_matched_size - lcp_len);
+        PopLastStates(prev_matched_size - lcp_len);
         tmp_can_reach_end_stack_.erase(
             tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
             tmp_can_reach_end_stack_.end()
@@ -327,7 +328,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
           accepted = false;
           break;
         }
-        tmp_can_reach_end_stack_.push_back(CanReachEnd());
+        tmp_can_reach_end_stack_.push_back(IsCompleted());
         tmp_can_reach_end_prefix_or_stack_.push_back(
             tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
         );
@@ -352,7 +353,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     }
   }
   // Rollback the last matched part
-  PopBackStates(prev_matched_size);
+  PopLastStates(prev_matched_size);
   return AdaptiveTokenMask(
       vocab_size,
       sorted_decoded_vocab,
@@ -517,7 +518,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     adaptive_token_mask_cache_mutex.emplace();
   }
 
-  auto add_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
+  auto add_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
     auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state, false);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(), tokenizer_info_.GetSortedDecodedVocab(), is_root_rule
@@ -530,7 +531,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     }
   };
 
-  auto add_task_adaptive_token_mask = [&](const State& state, bool is_root_rule) {
+  auto add_task_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
     // Execute depending on whether we use thread_pool
     if (max_threads_ > 1) {
       thread_pool->Execute([add_adaptive_token_mask, state, is_root_rule]() {
@@ -546,7 +547,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     auto rule_body = grammar->GetRuleExpr(rule.body_expr_id);
 
     if (rule_body.type == RuleExprType::kTagDispatch) {
-      auto state = State(rule_id, rule.body_expr_id, 0, State::kNoParent, 0);
+      auto state = ParserState(rule_id, rule.body_expr_id, 0, ParserState::kNoPrevInputPos, 0);
       for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
         state.element_id = i;
         add_task_adaptive_token_mask(state, rule_id == root_rule_id);
@@ -561,7 +562,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
         continue;
       }
       XGRAMMAR_DCHECK(sequence.type == RuleExprType::kSequence);
-      auto state = State(rule_id, sequence_id, 0, State::kNoParent, 0);
+      auto state = ParserState(rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0);
       for (int element_id = 0; element_id < sequence.size(); ++element_id) {
         state.element_id = element_id;
         auto element = grammar->GetRuleExpr(sequence[element_id]);

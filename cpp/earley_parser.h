@@ -15,6 +15,7 @@
 #include "support/csr_array.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
+
 namespace xgrammar {
 
 /* \brief The state of the Earley parser.
@@ -34,19 +35,17 @@ namespace xgrammar {
     - kcharacterclass: How many bytes are left to be read in the utf8 character.
     - kcharacterclassstar: How many bytes are left to be read in the utf8 character.
 */
-struct State {
+struct ParserState {
   /*! \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
    * expanded.*/
   static constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
 
-  /*! \brief A element_id value of kUnexpanedRuleFinishFlag means an unexpanded rule is ended.*/
-  static constexpr int32_t kUnexpanedRuleFinishFlag = 128001;
+  /*! \brief A parent_id value of kNoParent means this ParserState is the root of the parsing stack.
+   */
+  static constexpr int32_t kNoPrevInputPos = -1;
 
-  /*! \brief A element_id value of kTagDispatchEndFlag means the kTagDispatch pair is finished.*/
-  static constexpr int32_t kTagDispatchEndFlag = -2;
-
-  /*! \brief A parent_id value of kNoParent means this State is the root of the tree. */
-  static constexpr int32_t kNoParent = -1;
+  /*! \brief A sequence_id value of kInvalid means the ParserState is invalid.*/
+  static constexpr int32_t kInvalid = -2;
 
   /*! \brief The rule's id.*/
   int32_t rule_id = -1;
@@ -58,9 +57,8 @@ struct State {
    * a tag dispatch rule, this element id the currently visited node. */
   int32_t element_id = -1;
 
-  /*! \brief The id of the parent node in the Earley parser. i.e. from the k-th character, the
-   * rule starts to match the string.*/
-  int32_t parent_pos = -1;
+  /*! \brief The position of the state, i.e. from which position, the rule starts.*/
+  int32_t input_pos = -1;
 
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
@@ -68,13 +66,13 @@ struct State {
   /*! \brief If the rule is completed.*/
   bool completed = false;
 
-  constexpr State() = default;
+  constexpr ParserState() = default;
 
-  constexpr State(const State&) = default;
+  constexpr ParserState(const ParserState&) = default;
 
-  State& operator=(const State&) = default;
+  ParserState& operator=(const ParserState&) = default;
 
-  constexpr State(
+  constexpr ParserState(
       const int32_t& rule_id,
       const int32_t& sequence_id,
       const int32_t& element_id,
@@ -84,20 +82,22 @@ struct State {
       : rule_id(rule_id),
         sequence_id(sequence_id),
         element_id(element_id),
-        parent_pos(parent_pos),
+        input_pos(parent_pos),
         sub_element_id(sub_element_id) {}
 
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
 
-  bool operator==(const State& other) const {
+  static ParserState GetInvalidState() { return {-1, -1, -1, -1, -1}; }
+
+  bool operator==(const ParserState& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
            element_id == other.element_id && sub_element_id == other.sub_element_id;
   }
 
-  friend std::ostream& operator<<(std::ostream& os, const State& state) {
-    os << "State(rule_id=" << state.rule_id << ", sequence_id=" << state.sequence_id
-       << ", element_id=" << state.element_id << ", parent_pos=" << state.parent_pos
+  friend std::ostream& operator<<(std::ostream& os, const ParserState& state) {
+    os << "ParserState(rule_id=" << state.rule_id << ", sequence_id=" << state.sequence_id
+       << ", element_id=" << state.element_id << ", parent_pos=" << state.input_pos
        << ", sub_element_id=" << state.sub_element_id << ")";
     return os;
   }
@@ -108,7 +108,7 @@ struct State {
 */
 class StateHash {
  public:
-  size_t operator()(const State& state) const {
+  size_t operator()(const ParserState& state) const {
     return HashCombine(state.rule_id, state.sequence_id, state.element_id, state.sub_element_id);
   }
 };
@@ -117,20 +117,20 @@ class StateHash {
   When matching the state, we need to consider the parent_pos, since if two states
   don't have the same parent_pos, they are not the same state.
 */
-class CheckingStateEqual {
+class StateEqual {
  public:
-  bool operator()(const State& lhs, const State& rhs) const {
+  bool operator()(const ParserState& lhs, const ParserState& rhs) const {
     return lhs.rule_id == rhs.rule_id && lhs.sequence_id == rhs.sequence_id &&
-           lhs.element_id == rhs.element_id && lhs.parent_pos == rhs.parent_pos &&
+           lhs.element_id == rhs.element_id && lhs.input_pos == rhs.input_pos &&
            lhs.sub_element_id == rhs.sub_element_id;
   }
 };
 
-class CheckingStateHash {
+class StateHashChecker {
  public:
-  size_t operator()(const State& state) const {
+  size_t operator()(const ParserState& state) const {
     return HashCombine(
-        state.rule_id, state.sequence_id, state.element_id, state.parent_pos, state.sub_element_id
+        state.rule_id, state.sequence_id, state.element_id, state.input_pos, state.sub_element_id
     );
   }
 };
@@ -139,68 +139,97 @@ class EarleyParser {
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
 
-  /*! \brief The tree storing all states. It's used for completation. */
-  std::vector<std::multimap<int32_t, State>> states;
+  /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. It's used for
+   * completion. */
+  std::vector<std::multimap<int32_t, ParserState>> rule_id_to_completeable_states;
 
   /*!
-      \brief The history of states. i.e. the i-th(0-base) vector
-      will store the states after matching i characters. It's used
-      for rollback.
+      \brief The states history. state_stack[i] is a vector storing the states after accepting the
+     input[i-1].
    */
-  CSRArray<State> history_states;
+  CSRArray<ParserState> scanable_state_history_;
 
-  /*! \brief The vector stores the states that are going to be added into the CSRArray. */
-  std::vector<State> tmp_states;
+  /*! \brief A temperate vector only used in Advance, used to add states in the
+   * scanable_state_history. */
+  std::vector<ParserState> tmp_states_to_be_added_;
 
   /*! \brief It's the processing queue of the earley parser.*/
-  List<State> queue;
+  List<ParserState> tmp_process_state_queue_;
 
-  /*! \brief The initial state, used for debugging.*/
-  State init_state;
+  /*! The vector to check if a state has been added into the queue.*/
+  std::vector<ParserState> tmp_states_visited_in_queue_;
+
+  /*!
+  \brief Check if the state has been added into the queue.
+  \param state The state to check.
+  \return True if in the vector, false otherwise.
+*/
+  bool IsStateVisitedInQueue(const ParserState& state) const {
+    return (
+        std::find_if(
+            tmp_states_visited_in_queue_.begin(),
+            tmp_states_visited_in_queue_.end(),
+            [&](const ParserState& s) { return StateEqual()(state, s); }
+        ) != tmp_states_visited_in_queue_.end()
+    );
+  }
+
+  /*!
+    \brief Push the state into the queue. If the state is already in the queue,
+    then we don't need to push it again.
+    \param state The state to be pushed.
+  */
+  void Enqueue(const ParserState& state) {
+    if (!IsStateVisitedInQueue(state)) {
+      tmp_process_state_queue_.PushBack(state);
+      tmp_states_visited_in_queue_.push_back(state);
+    }
+    return;
+  }
 
   /*!
     \brief The scanning operation of the Earley parser.
   */
-  void Scan(const State& state, const uint8_t& ch);
+  void Scan(const ParserState& state, const uint8_t& ch);
 
   /*!
       \brief The completion operation of the Earley parser.
-      \return If the state can't be scanned, and the state
-      is not the end of the grammar, then we return false.
+      \return If the state is scannable then we return false(which means that
+      the state can't predict and complete), otherwise we return true.
       \details The reason is that if the state can't be scanned, then
       add it into the next states is useless. Moreover, the end
       of the grammar is used to check if the grammar is completed,
       so it should be added into the next states.
   */
-  bool Complete(const State& state);
+  bool Complete(const ParserState& state);
 
   /*!
       \brief The prediction operation of the Earley parser.
-      \return Fitst: If the state can't be scanned, and the state
-      is not the end of the grammar, then we return false.
+      \return Fitst: If the state scanable, or the state is the end of the grammar,
+      then return true, otherwise return false.
       \return Second: If the state is obviously that it can't complete,
       then return false, true otherwise.
   */
-  std::pair<bool, bool> Predict(const State& state);
+  std::pair<bool, bool> Predict(const ParserState& state);
 
   /*!
     \brief Check if the state is the end of the grammar.
     \param state The state to be checked.
     \return True if the state is the end of the grammar, false otherwise.
   */
-  bool IsEndOfGrammar(const State& state) const;
+  bool IsStateCompleted(const ParserState& state) const;
 
   /*!
     \brief Check if a character can be accepted.
   */
-  bool IsAccepted(const State& state, uint8_t ch) const;
+  bool IsAccepted(const ParserState& state, uint8_t ch) const;
 
   /*!
     \brief Handle the unexpanded rule, used for pushing initial state.
     \param state The state to be handled.
     \return True if the rule is unexpanded, false otherwise.
   */
-  bool HandleUnexpandedRule(const State& state);
+  bool ExpandAndEnqueueUnexpandedState(const ParserState& state);
 
   /*!
     \brief Expand the rule, used for RuleRef and kTagDispatch.
@@ -209,36 +238,18 @@ class EarleyParser {
     element of the sequence should be a rule reference; the node in
     the kTagDispatch should be an end node.
   */
-  void ExpandRule(const State& state);
-
-  /*! The vector to check if a state has been added into the queue.*/
-  std::vector<State> visited;
-
-  /*!
-  \brief Check if the state has been added into the queue.
-  \param state The state to check.
-  \return True if in the vector, false otherwise.
-*/
-  bool Invec(const State& state) const {
-    return (std::find_if(visited.begin(), visited.end(), [&](const State& s) {
-              return CheckingStateEqual()(state, s);
-            }) != visited.end());
-  }
-
-  /*!
-    \brief Push the state into the queue. If the state is already in the queue,
-    then we don't need to push it again.
-    \param state The state to be pushed.
-  */
-  void EnQueue(const State& state) {
-    if (!Invec(state)) {
-      queue.PushBack(state);
-      visited.push_back(state);
-    }
-    return;
-  }
+  void ExpandNextRuleRefElement(const ParserState& state);
 
  public:
+  /*!
+   \brief Constructor of the Earley parser.
+   \param grammar The grammar to be parsed.
+   \param initial_state The initial state to be pushed into the parser.
+ */
+  EarleyParser(
+      const Grammar& grammar, const ParserState& initial_state, const bool& need_expand = true
+  );
+
   /*!
     \brief From the current states, advance to the next state.
     \param ch The character to be advanced.
@@ -251,39 +262,29 @@ class EarleyParser {
     \brief Remove the newly added states.
     \param count The number of states to be removed.
   */
-  void PopBackStates(int32_t count);
+  void PopLastStates(int32_t count = 1);
 
   /*!
-    \brief Check if the root rule is completed.
-    \return True if the root rule is completed, false otherwise.
+    \brief Check whether any of the multiple states stored in the parser has already completed.
+    \note Since the parser contains multiple parallel states, some may have already completed, while
+    others might still be able to accept more characters. \return True if the root rule is
+    completed, false otherwise.
   */
-  bool CanReachEnd() const;
+  bool IsCompleted() const;
 
   /*!
     \brief Push the initial state into the Earley parser.
     \param state The initial state to be pushed.
     \param need_expand If true, the initial state will be expanded.
   */
-  void PushInitialState(const State& state, const bool need_expand = true);
-
-  /*!
-    \brief Constructor of the Earley parser.
-    \param grammar The grammar to be parsed.
-    \param initial_state The initial state to be pushed into the parser.
-  */
-  EarleyParser(const Grammar& grammar, const State& initial_state, const bool& need_expand = true);
+  void PushStateAndExpand(const ParserState& state, const bool need_expand = true);
 
   /*!
     \brief Reset the parser.
     \note This function is used to reset the parser, and initialize the
     parser with the root rule.
   */
-  void ParserReset();
-
-  /*!
-    \brief Popfront the history states to save memory.
-  */
-  void PopFrontStates(const int32_t& cnt);
+  void Reset();
 };
 
 }  // namespace xgrammar

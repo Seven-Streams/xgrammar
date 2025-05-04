@@ -273,7 +273,7 @@ inline CompactFSM FSM::ToCompact() {
     std::sort(edges_[i].begin(), edges_[i].end(), [](const Edge& a, const Edge& b) {
       return a.min_ch < b.min_ch;
     });
-    compact_fsm.edges_.Insert(edges_[i]);
+    compact_fsm.edges_.PushBack(edges_[i]);
   }
   return compact_fsm;
 }
