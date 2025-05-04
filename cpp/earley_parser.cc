@@ -113,6 +113,7 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
       return std::make_pair(state.input_pos == ParserState::kNoPrevInputPos, true);
     }
   }
+  const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
   switch (cur_rule.type) {
     // If the type is kSequence, then it should be a sequence consisting of:
     // - kByteString
@@ -122,9 +123,8 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
     // RuleRef need to be predicted,
     // and the others only need to be completed or scanned.
     case RuleExprType::kSequence: {
-      const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
       if (element_expr.type == RuleExprType::kRuleRef) {
-        ExpandNextRuleRefElement(state);
+        ExpandNextRuleRefElement(state, cur_rule);
         return std::make_pair(false, false);
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
@@ -137,7 +137,7 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
     }
     case RuleExprType::kTagDispatch: {
       // A tag has is dispatched.
-      ExpandNextRuleRefElement(state);
+      ExpandNextRuleRefElement(state, cur_rule);
       return std::make_pair(false, false);
     }
     default: {
@@ -147,7 +147,7 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
 }
 
 void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
-  auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  const auto& cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   // If the current state is the end of the rule, we do not need to scan.
   if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
     return;
@@ -298,7 +298,7 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
   to the history_states[0], and perform prediction and completion on the initial state.
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
-  XGRAMMAR_DCHECK(tmp_process_state_queue_.begin() == tmp_process_state_queue_.end())
+  XGRAMMAR_DCHECK(tmp_process_state_queue_.empty())
       << "The tmp_process_state_queue_ should be empty before the scan.";
   tmp_states_visited_in_queue_.clear();
   tmp_states_to_be_added_.clear();
@@ -306,21 +306,19 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
-  if (tmp_process_state_queue_.begin() == tmp_process_state_queue_.end() &&
-      tmp_states_to_be_added_.empty()) {
+  if (tmp_process_state_queue_.empty() && tmp_states_to_be_added_.empty()) {
     return false;
   }
   rule_id_to_completeable_states.emplace_back();
   // execute Predict and Complete for all states in the queue until empty.
-  while (tmp_process_state_queue_.begin() != tmp_process_state_queue_.end()) {
-    const auto& state_iter = tmp_process_state_queue_.begin();
-    const auto state = *state_iter;
+  while (!tmp_process_state_queue_.empty()) {
+    const auto state = tmp_process_state_queue_.front();
+    tmp_process_state_queue_.pop();
     if (state.completed) {
       Complete(state);
       if (state.input_pos == ParserState::kNoPrevInputPos) {
         tmp_states_to_be_added_.push_back(state);
       }
-      tmp_process_state_queue_.Erase(state_iter);
       continue;
     }
     auto [flag, can_complete] = Predict(state);
@@ -330,7 +328,6 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     if (flag) {
       tmp_states_to_be_added_.push_back(state);
     }
-    tmp_process_state_queue_.Erase(state_iter);
   }
   scanable_state_history_.PushBack(tmp_states_to_be_added_);
   return true;
@@ -410,9 +407,9 @@ void EarleyParser::PushStateAndExpand(const ParserState& state, const bool need_
       Enqueue(state);
     }
   }
-  while (tmp_process_state_queue_.begin() != tmp_process_state_queue_.end()) {
-    const auto& state_iter = tmp_process_state_queue_.begin();
-    const auto state = *state_iter;
+  while (!tmp_process_state_queue_.empty()) {
+    const auto state = tmp_process_state_queue_.front();
+    tmp_process_state_queue_.pop();
     auto [flag, can_complete] = Predict(state);
     if (can_complete) {
       flag = Complete(state) && flag;
@@ -420,7 +417,6 @@ void EarleyParser::PushStateAndExpand(const ParserState& state, const bool need_
     if (flag) {
       tmp_states_to_be_added_.push_back(state);
     }
-    tmp_process_state_queue_.Erase(state_iter);
   }
   scanable_state_history_.PushBack(tmp_states_to_be_added_);
 }
@@ -428,7 +424,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state, const bool need_
 void EarleyParser::Reset() {
   rule_id_to_completeable_states.clear();
   scanable_state_history_.PopBack(scanable_state_history_.Size());
-  tmp_process_state_queue_.Clear();
+  XGRAMMAR_DCHECK(tmp_process_state_queue_.empty());
   PushStateAndExpand(ParserState(
       grammar_->GetRootRuleId(),
       ParserState::kUnexpandedRuleStartSequenceId,
@@ -466,13 +462,12 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
   return true;
 }
 
-void EarleyParser::ExpandNextRuleRefElement(const ParserState& state) {
-  const auto& cur_rule_expr = grammar_->GetRuleExpr(state.sequence_id);
+void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const RuleExpr& rule_expr) {
   int ref_rule_id;
-  if (cur_rule_expr.type == RuleExprType::kTagDispatch) {
+  if (rule_expr.type == RuleExprType::kTagDispatch) {
     ref_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
   } else {
-    const auto& element_expr = grammar_->GetRuleExpr(cur_rule_expr[state.element_id]);
+    const auto& element_expr = grammar_->GetRuleExpr(rule_expr[state.element_id]);
     ref_rule_id = element_expr[0];
   }
   auto& states_map = rule_id_to_completeable_states.back();

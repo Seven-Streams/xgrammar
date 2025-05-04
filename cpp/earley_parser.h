@@ -8,10 +8,11 @@
 #include <cstdint>
 #include <map>
 #include <ostream>
+#include <queue>
 #include <utility>
 #include <vector>
 
-#include "support/container.h"
+#include "grammar_data_structure.h"
 #include "support/csr_array.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
@@ -154,7 +155,7 @@ class EarleyParser {
   std::vector<ParserState> tmp_states_to_be_added_;
 
   /*! \brief It's the processing queue of the earley parser.*/
-  List<ParserState> tmp_process_state_queue_;
+  std::queue<ParserState> tmp_process_state_queue_;
 
   /*! The vector to check if a state has been added into the queue.*/
   std::vector<ParserState> tmp_states_visited_in_queue_;
@@ -181,7 +182,7 @@ class EarleyParser {
   */
   void Enqueue(const ParserState& state) {
     if (!IsStateVisitedInQueue(state)) {
-      tmp_process_state_queue_.PushBack(state);
+      tmp_process_state_queue_.push(state);
       tmp_states_visited_in_queue_.push_back(state);
     }
     return;
@@ -238,7 +239,7 @@ class EarleyParser {
     element of the sequence should be a rule reference; the node in
     the kTagDispatch should be an end node.
   */
-  void ExpandNextRuleRefElement(const ParserState& state);
+  void ExpandNextRuleRefElement(const ParserState& state, const Grammar::Impl::RuleExpr& rule_expr);
 
  public:
   /*!
