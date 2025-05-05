@@ -546,37 +546,35 @@ bool RepeatDetector::IsVisited(const ParserState& state) const {
   // If the size is larger than the threshold, the variant is a set.
   // Otherwise, it's a vector.
   if (size_ > transition_threshold_) {
-    const auto& visited_set =
-        std::get<tsl::robin_set<ParserState, StateHashChecker, StateEqual>>(visited_states_);
-    return visited_set.find(state) != visited_set.end();
+    return visited_set_.find(state) != visited_set_.end();
   }
-  const auto& visited_vector = std::get<std::vector<ParserState>>(visited_states_);
-  return std::find_if(visited_vector.begin(), visited_vector.end(), [&state](const ParserState& s) {
-           return StateEqual()(state, s);
-         }) != visited_vector.end();
+  return std::find_if(
+             visited_vector_.begin(),
+             visited_vector_.end(),
+             [&state](const ParserState& s) { return StateEqual()(state, s); }
+         ) != visited_vector_.end();
 }
 
 void RepeatDetector::Insert(const ParserState& state) {
   if (size_ == transition_threshold_) {
-    tsl::robin_set<ParserState, StateHashChecker, StateEqual> visited_set;
-    for (const auto& s : std::get<std::vector<ParserState>>(visited_states_)) {
-      visited_set.insert(s);
+    for (const auto& s : visited_vector_) {
+      visited_set_.insert(s);
     }
-    visited_states_ = visited_set;
   }
   size_++;
   if (size_ > transition_threshold_) {
-    std::get<tsl::robin_set<ParserState, StateHashChecker, StateEqual>>(visited_states_)
-        .insert(state);
+    visited_set_.insert(state);
   } else {
-    std::get<std::vector<ParserState>>(visited_states_).push_back(state);
+    visited_vector_.push_back(state);
   }
 }
 
 void RepeatDetector::Clear() {
-  visited_states_ = std::vector<ParserState>();
+  if (size_ > transition_threshold_) {
+    visited_set_.clear();
+  }
+  visited_vector_.clear();
   size_ = 0;
-  std::get<std::vector<ParserState>>(visited_states_).reserve(transition_threshold_);
 }
 
 }  // namespace xgrammar

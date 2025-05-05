@@ -10,7 +10,6 @@
 #include <ostream>
 #include <queue>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "grammar_data_structure.h"
@@ -143,17 +142,16 @@ class RepeatDetector {
  private:
   int transition_threshold_;
 
-  std::variant<std::vector<ParserState>, tsl::robin_set<ParserState, StateHashChecker, StateEqual>>
-      visited_states_;
+  std::vector<ParserState> visited_vector_;
+
+  tsl::robin_set<ParserState, StateHashChecker, StateEqual> visited_set_;
 
   int size_ = 0;
 
  public:
-  RepeatDetector(const int& transition_threshold = 50)
-      : transition_threshold_(transition_threshold),
-        visited_states_(std::vector<ParserState>()),
-        size_(0) {
-    std::get<std::vector<ParserState>>(visited_states_).reserve(transition_threshold_);
+  RepeatDetector(const int& transition_threshold = 70)
+      : transition_threshold_(transition_threshold), size_(0) {
+    visited_vector_.reserve(transition_threshold_);
   }
 
   /*! \brief Check if the elemenet is visited.
