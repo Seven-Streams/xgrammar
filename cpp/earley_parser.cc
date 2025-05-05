@@ -63,7 +63,7 @@ bool EarleyParser::Complete(const ParserState& state) {
             grammar_->GetRuleExpr(parent_expr[parent_state.element_id]).type ==
             RuleExprType::kRuleRef
         );
-        Enqueue(ParserState{
+        tmp_process_state_queue_.push(ParserState{
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_state.element_id + 1,
@@ -73,7 +73,7 @@ bool EarleyParser::Complete(const ParserState& state) {
         break;
       }
       case RuleExprType::kTagDispatch: {
-        Enqueue(
+        tmp_process_state_queue_.push(
             {parent_state.rule_id,
              parent_state.sequence_id,
              grammar_->root_tag_dispatch_fsm->StartNode(),
@@ -271,7 +271,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   } else {
     // If the rule can't be expanded, we need to add it to the queue.
     if (!ExpandAndEnqueueUnexpandedState(state)) {
-      Enqueue(state);
+      tmp_process_state_queue_.push(state);
     }
   }
   while (!tmp_process_state_queue_.empty()) {
@@ -315,7 +315,7 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
   // 1. The rule is a tag dispatch rule.
   // 2. The rule is a choice, consisting of multiple sequences.
   if (cur_rule_body.type == RuleExprType::kTagDispatch) {
-    Enqueue(ParserState{
+    tmp_process_state_queue_.push(ParserState{
         cur_rule_id,
         cur_rule_body_id,
         grammar_->root_tag_dispatch_fsm->StartNode(),
@@ -326,7 +326,9 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
   }
   XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
   for (auto sequence_id : cur_rule_body) {
-    Enqueue(ParserState{cur_rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0});
+    tmp_process_state_queue_.push(
+        ParserState{cur_rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0}
+    );
   }
   return true;
 }
@@ -349,7 +351,7 @@ void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const Rule
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
   if (ref_rule_expr.type == RuleExprType::kTagDispatch) {
-    Enqueue(ParserState{
+    tmp_process_state_queue_.push(ParserState{
         ref_rule_id,
         ref_rule_expr_id,
         grammar_->root_tag_dispatch_fsm->StartNode(),
@@ -359,7 +361,7 @@ void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const Rule
   } else {
     XGRAMMAR_DCHECK(ref_rule_expr.type == RuleExprType::kChoices);
     for (const auto& sequence_id : ref_rule_expr) {
-      Enqueue(ParserState{
+      tmp_process_state_queue_.push(ParserState{
           ref_rule_id, sequence_id, 0, int32_t(rule_id_to_completeable_states_.size()) - 1, 0
       });
     }
@@ -380,7 +382,7 @@ void EarleyParser::AdvanceByteString(
       if (new_state.element_id == cur_rule.size()) {
         new_state.completed = true;
       }
-      Enqueue(new_state);
+      tmp_process_state_queue_.push(new_state);
     } else {
       tmp_states_to_be_added_.push_back(new_state);
     }
@@ -409,7 +411,7 @@ void EarleyParser::AdvanceCharacterClass(
         if (new_state.element_id == cur_sequence.size()) {
           new_state.completed = true;
         }
-        Enqueue(new_state);
+        tmp_process_state_queue_.push(new_state);
       } else {
         tmp_states_to_be_added_.push_back(new_state);
       }
@@ -442,7 +444,7 @@ void EarleyParser::AdvanceCharacterClass(
         if (new_state.element_id == cur_sequence.size()) {
           new_state.completed = true;
         }
-        Enqueue(new_state);
+        tmp_process_state_queue_.push(new_state);
       }
       return;
     }
@@ -454,7 +456,7 @@ void EarleyParser::AdvanceCharacterClass(
     if (new_state.element_id == cur_sequence.size()) {
       new_state.completed = true;
     }
-    Enqueue(new_state);
+    tmp_process_state_queue_.push(new_state);
   }
 }
 
@@ -474,7 +476,7 @@ void EarleyParser::AdvanceCharacterClassStar(
       new_state.sub_element_id--;
       // Check if the UTF8 character is completed.
       if (new_state.sub_element_id == 0) {
-        Enqueue(new_state);
+        tmp_process_state_queue_.push(new_state);
       } else {
         tmp_states_to_be_added_.push_back(new_state);
       }
@@ -501,13 +503,13 @@ void EarleyParser::AdvanceCharacterClassStar(
   for (int i = 1; i < sub_sequence.size(); i += 2) {
     if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
       if (!is_negative) {
-        Enqueue(state);
+        tmp_process_state_queue_.push(state);
       }
       return;
     }
   }
   if (is_negative) {
-    Enqueue(state);
+    tmp_process_state_queue_.push(state);
   }
 }
 
@@ -528,13 +530,13 @@ void EarleyParser::AdvanceTagDispatch(
     // node. If it still cannot be accepted, we stay at the start node.
     auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
     new_state.element_id = new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
-    Enqueue(new_state);
+    tmp_process_state_queue_.push(new_state);
   } else {
     // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
     // We need to update the element id to the next node.
     new_state.element_id = next_node;
     if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
-      Enqueue(new_state);
+      tmp_process_state_queue_.push(new_state);
     } else {
       tmp_accept_stop_token_ = true;
       tmp_states_to_be_added_.push_back(new_state);
