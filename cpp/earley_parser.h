@@ -181,7 +181,7 @@ class RuleStateMapping {
 
   bool accept_stop_token_ = false;
 
-  RuleStateMapping(const int& transition_threshold = 70, bool accept_stop_token = false)
+  RuleStateMapping(const int& transition_threshold = 20, bool accept_stop_token = false)
       : transition_threshold_(transition_threshold),
         size_(0),
         accept_stop_token_(accept_stop_token) {}
