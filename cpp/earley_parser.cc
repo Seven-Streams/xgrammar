@@ -44,7 +44,7 @@ bool EarleyParser::Complete(const ParserState& state) {
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
-  auto parent_state_iter = parent_states_map.find(state.rule_id);
+  auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
   for (; parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
@@ -57,22 +57,22 @@ bool EarleyParser::Complete(const ParserState& state) {
             grammar_->GetRuleExpr(parent_expr[parent_state.element_id]).type ==
             RuleExprType::kRuleRef
         );
-        tmp_process_state_queue_.push(ParserState{
+        tmp_process_state_queue_.emplace(
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_state.element_id + 1,
             parent_state.input_pos,
             0
-        });
+        );
         break;
       }
       case RuleExprType::kTagDispatch: {
-        tmp_process_state_queue_.push(
-            {parent_state.rule_id,
-             parent_state.sequence_id,
-             grammar_->root_tag_dispatch_fsm->StartNode(),
-             parent_state.input_pos,
-             0}
+        tmp_process_state_queue_.emplace(
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            grammar_->root_tag_dispatch_fsm->StartNode(),
+            parent_state.input_pos,
+            0
         );
         break;
       }
@@ -123,8 +123,8 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
         if (IsStateVisitedInQueue(state)) {
           return std::make_pair(false, false);
         }
-        tmp_process_state_queue_.push(
-            ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+        tmp_process_state_queue_.emplace(
+            state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0
         );
         tmp_states_visited_in_queue_.Insert(state);
         return std::make_pair(true, false);
@@ -222,7 +222,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
       scanable = Complete(state) && scanable;
     }
     if (scanable) {
-      tmp_states_to_be_added_.push_back(state);
+      tmp_states_to_be_added_.emplace_back(state);
     }
   }
 
@@ -278,7 +278,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   } else {
     // If the rule can't be expanded, we need to add it to the queue.
     if (!ExpandAndEnqueueUnexpandedState(state)) {
-      tmp_process_state_queue_.push(state);
+      tmp_process_state_queue_.emplace(state);
     }
   }
   while (!tmp_process_state_queue_.empty()) {
@@ -289,7 +289,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
       scanable = Complete(state) && scanable;
     }
     if (scanable) {
-      tmp_states_to_be_added_.push_back(state);
+      tmp_states_to_be_added_.emplace_back(state);
     }
   }
   can_accept_stop_token_.push_back(tmp_accept_stop_token_);
@@ -322,20 +322,18 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
   // 1. The rule is a tag dispatch rule.
   // 2. The rule is a choice, consisting of multiple sequences.
   if (cur_rule_body.type == RuleExprType::kTagDispatch) {
-    tmp_process_state_queue_.push(ParserState{
+    tmp_process_state_queue_.emplace(
         cur_rule_id,
         cur_rule_body_id,
         grammar_->root_tag_dispatch_fsm->StartNode(),
         ParserState::kNoPrevInputPos,
         0
-    });
+    );
     return true;
   }
   XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
   for (auto sequence_id : cur_rule_body) {
-    tmp_process_state_queue_.push(
-        ParserState{cur_rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0}
-    );
+    tmp_process_state_queue_.emplace(cur_rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0);
   }
   return true;
 }
@@ -366,18 +364,18 @@ void EarleyParser::ExpandNextRuleRefElement(
             ref_rule_id
         ) != grammar_->allow_empty_rule_ids.end()) {
       if (rule_expr.type == RuleExprType::kTagDispatch) {
-        tmp_states_to_be_added_.push_back(ParserState{
+        tmp_states_to_be_added_.emplace_back(
             state.rule_id,
             state.sequence_id,
             grammar_->root_tag_dispatch_fsm->StartNode(),
             state.input_pos,
             0
-        });
+        );
         return;
       }
       XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
-      tmp_process_state_queue_.push(
-          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+      tmp_process_state_queue_.emplace(
+          state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0
       );
     }
     return;
@@ -389,19 +387,19 @@ void EarleyParser::ExpandNextRuleRefElement(
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
   if (ref_rule_expr.type == RuleExprType::kTagDispatch) {
-    tmp_process_state_queue_.push(ParserState{
+    tmp_process_state_queue_.emplace(
         ref_rule_id,
         ref_rule_expr_id,
         grammar_->root_tag_dispatch_fsm->StartNode(),
         int32_t(rule_id_to_completeable_states_.size()) - 1,
         0
-    });
+    );
   } else {
     XGRAMMAR_DCHECK(ref_rule_expr.type == RuleExprType::kChoices);
     for (const auto& sequence_id : ref_rule_expr) {
-      tmp_process_state_queue_.push(ParserState{
+      tmp_process_state_queue_.emplace(
           ref_rule_id, sequence_id, 0, int32_t(rule_id_to_completeable_states_.size()) - 1, 0
-      });
+      );
     }
   }
 }
@@ -412,14 +410,18 @@ void EarleyParser::AdvanceByteString(
   XGRAMMAR_DCHECK(sub_rule.type == RuleExprType::kByteString);
   XGRAMMAR_DCHECK(sub_rule.size() > state.sub_element_id);
   if (sub_rule[state.sub_element_id] == ch) {
-    auto new_state = state;
-    new_state.sub_element_id++;
-    if (new_state.sub_element_id == sub_rule.size()) {
-      new_state.element_id++;
-      new_state.sub_element_id = 0;
-      tmp_process_state_queue_.push(new_state);
+    if (state.sub_element_id + 1 == sub_rule.size()) {
+      tmp_process_state_queue_.emplace(
+          state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0
+      );
     } else {
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.emplace_back(
+          state.rule_id,
+          state.sequence_id,
+          state.element_id,
+          state.input_pos,
+          state.sub_element_id + 1
+      );
     }
   }
   return;
@@ -437,15 +439,20 @@ void EarleyParser::AdvanceCharacterClass(
   // The state is matching a UTF8 character.
   if (state.sub_element_id > 0) {
     if ((ch & 0xC0) == 0x80) {
-      auto new_state = state;
-      new_state.sub_element_id--;
       // Check if the UTF8 character is completed.
-      if (new_state.sub_element_id == 0) {
-        new_state.element_id++;
+      if (state.sub_element_id == 1) {
         // Check if the sequence is completed.
-        tmp_process_state_queue_.push(new_state);
+        tmp_process_state_queue_.emplace(
+            state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0
+        );
       } else {
-        tmp_states_to_be_added_.push_back(new_state);
+        tmp_states_to_be_added_.emplace_back(
+            state.rule_id,
+            state.sequence_id,
+            state.element_id,
+            state.input_pos,
+            state.sub_element_id - 1
+        );
       }
     }
     return;
@@ -460,9 +467,9 @@ void EarleyParser::AdvanceCharacterClass(
   // A new UTF8 character is accepted.
   if (num_bytes > 1) {
     if (is_negative) {
-      auto new_state = state;
-      new_state.sub_element_id = num_bytes - 1;
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.emplace_back(
+          state.rule_id, state.sequence_id, state.element_id, state.input_pos, num_bytes - 1
+      );
     }
     return;
   }
@@ -470,19 +477,17 @@ void EarleyParser::AdvanceCharacterClass(
   for (int i = 1; i < sub_sequence.size(); i += 2) {
     if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
       if (!is_negative) {
-        auto new_state = state;
-        new_state.element_id++;
-        new_state.sub_element_id = 0;
-        tmp_process_state_queue_.push(new_state);
+        tmp_process_state_queue_.emplace(
+            state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0
+        );
       }
       return;
     }
   }
   if (is_negative) {
-    auto new_state = state;
-    new_state.element_id++;
-    new_state.sub_element_id = 0;
-    tmp_process_state_queue_.push(new_state);
+    tmp_process_state_queue_.emplace(
+        state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0
+    );
   }
 }
 
@@ -502,9 +507,17 @@ void EarleyParser::AdvanceCharacterClassStar(
       new_state.sub_element_id--;
       // Check if the UTF8 character is completed.
       if (new_state.sub_element_id == 0) {
-        tmp_process_state_queue_.push(new_state);
+        tmp_process_state_queue_.emplace(
+            state.rule_id, state.sequence_id, state.element_id, state.input_pos, 0
+        );
       } else {
-        tmp_states_to_be_added_.push_back(new_state);
+        tmp_states_to_be_added_.emplace_back(
+            state.rule_id,
+            state.sequence_id,
+            state.element_id,
+            state.input_pos,
+            state.sub_element_id - 1
+        );
       }
     }
     return;
@@ -519,9 +532,9 @@ void EarleyParser::AdvanceCharacterClassStar(
   // A new UTF8 character is accepted.
   if (num_bytes > 1) {
     if (is_negative) {
-      auto new_state = state;
-      new_state.sub_element_id = num_bytes - 1;
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.emplace_back(
+          state.rule_id, state.sequence_id, state.element_id, state.input_pos, num_bytes - 1
+      );
     }
     return;
   }
@@ -529,13 +542,13 @@ void EarleyParser::AdvanceCharacterClassStar(
   for (int i = 1; i < sub_sequence.size(); i += 2) {
     if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
       if (!is_negative) {
-        tmp_process_state_queue_.push(state);
+        tmp_process_state_queue_.emplace(state);
       }
       return;
     }
   }
   if (is_negative) {
-    tmp_process_state_queue_.push(state);
+    tmp_process_state_queue_.emplace(state);
   }
 }
 
@@ -549,24 +562,30 @@ void EarleyParser::AdvanceTagDispatch(
   }
   const auto& start_node = root_tag_dispatch_fsm->StartNode();
   const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
-  auto new_state = state;
   if (next_node == CompactFSMWithStartEnd::NO_TRANSITION) {
     // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
     // We try to accept the new char from the start node. If accepted, we go to the target
     // node. If it still cannot be accepted, we stay at the start node.
     auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
-    new_state.element_id =
-        new_next_node == CompactFSMWithStartEnd::NO_TRANSITION ? start_node : new_next_node;
-    tmp_process_state_queue_.push(new_state);
+    tmp_process_state_queue_.emplace(
+        state.rule_id,
+        state.sequence_id,
+        new_next_node == CompactFSMWithStartEnd::NO_TRANSITION ? start_node : new_next_node,
+        state.input_pos,
+        0
+    );
   } else {
     // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
     // We need to update the element id to the next node.
-    new_state.element_id = next_node;
     if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
-      tmp_process_state_queue_.push(new_state);
+      tmp_process_state_queue_.emplace(
+          state.rule_id, state.sequence_id, next_node, state.input_pos, 0
+      );
     } else {
       tmp_accept_stop_token_ = true;
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.emplace_back(
+          state.rule_id, state.sequence_id, next_node, state.input_pos, 0
+      );
     }
   }
 }
