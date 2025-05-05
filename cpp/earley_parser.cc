@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "fsm.h"
 #include "grammar_data_structure.h"
 #include "support/encoding.h"
 #include "support/logging.h"
@@ -522,12 +523,13 @@ void EarleyParser::AdvanceTagDispatch(
   const auto& start_node = root_tag_dispatch_fsm->StartNode();
   const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
   auto new_state = state;
-  if (next_node == CompactFSM::NO_TRANSITION) {
+  if (next_node == CompactFSMWithStartEnd::NO_TRANSITION) {
     // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
     // We try to accept the new char from the start node. If accepted, we go to the target
     // node. If it still cannot be accepted, we stay at the start node.
     auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
-    new_state.element_id = new_next_node == CompactFSM::NO_TRANSITION ? start_node : new_next_node;
+    new_state.element_id =
+        new_next_node == CompactFSMWithStartEnd::NO_TRANSITION ? start_node : new_next_node;
     tmp_process_state_queue_.push(new_state);
   } else {
     // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
