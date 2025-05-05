@@ -208,13 +208,6 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
-    if (state.completed) {
-      Complete(state);
-      if (state.input_pos == ParserState::kNoPrevInputPos) {
-        tmp_states_to_be_added_.push_back(state);
-      }
-      continue;
-    }
     auto [flag, can_complete] = Predict(state);
     if (can_complete) {
       flag = Complete(state) && flag;
@@ -377,9 +370,6 @@ void EarleyParser::AdvanceByteString(
     if (new_state.sub_element_id == sub_rule.size()) {
       new_state.element_id++;
       new_state.sub_element_id = 0;
-      if (new_state.element_id == cur_rule.size()) {
-        new_state.completed = true;
-      }
       tmp_process_state_queue_.push(new_state);
     } else {
       tmp_states_to_be_added_.push_back(new_state);
@@ -406,9 +396,6 @@ void EarleyParser::AdvanceCharacterClass(
       if (new_state.sub_element_id == 0) {
         new_state.element_id++;
         // Check if the sequence is completed.
-        if (new_state.element_id == cur_sequence.size()) {
-          new_state.completed = true;
-        }
         tmp_process_state_queue_.push(new_state);
       } else {
         tmp_states_to_be_added_.push_back(new_state);
@@ -439,9 +426,6 @@ void EarleyParser::AdvanceCharacterClass(
         auto new_state = state;
         new_state.element_id++;
         new_state.sub_element_id = 0;
-        if (new_state.element_id == cur_sequence.size()) {
-          new_state.completed = true;
-        }
         tmp_process_state_queue_.push(new_state);
       }
       return;
@@ -451,9 +435,6 @@ void EarleyParser::AdvanceCharacterClass(
     auto new_state = state;
     new_state.element_id++;
     new_state.sub_element_id = 0;
-    if (new_state.element_id == cur_sequence.size()) {
-      new_state.completed = true;
-    }
     tmp_process_state_queue_.push(new_state);
   }
 }
