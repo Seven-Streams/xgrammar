@@ -144,7 +144,8 @@ class RepeatDetector {
 
   std::vector<ParserState> visited_vector_;
 
-  tsl::robin_set<ParserState, StateHashChecker, StateEqual> visited_set_;
+  tsl::robin_set<ParserState, StateHashChecker, StateEqual, std::allocator<ParserState>, true>
+      visited_set_;
 
   int size_ = 0;
 
