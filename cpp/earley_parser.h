@@ -164,6 +164,16 @@ class RepeatDetector {
 };
 
 class EarleyParser {
+  /*!
+    \brief Here is an article about Earley
+    Parser.https://en.wikipedia.org/wiki/Earley_parser#Pseudocode We divide the parser states into
+    three categories:
+    - Scanable (which will be stored in scanable_state_history_).
+    - Predictable(If it predict a new rule successfully, then it will be stored in
+    rule_id_to_completeable_states).
+    - Completeable(which can perform a completion operation).
+    One state can be in multiple categories, and thus can be stored in multiple places.
+    */
  protected:
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;

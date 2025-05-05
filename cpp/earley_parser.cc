@@ -192,31 +192,39 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
   to the history_states[0], and perform prediction and completion on the initial state.
 */
 bool EarleyParser::Advance(const uint8_t& ch) {
+  // Initialize the containers.
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty())
       << "The tmp_process_state_queue_ should be empty before the scan.";
   tmp_states_visited_in_queue_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
   const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
+
+  // Scan all the scanable states.
   for (const auto& state : latest_states) {
     Scan(state, ch);
   }
+
+  // Check if the character is accepted.
   if (tmp_process_state_queue_.empty() && tmp_states_to_be_added_.empty()) {
     return false;
   }
-  rule_id_to_completeable_states_.emplace_back();
+
   // execute Predict and Complete for all states in the queue until empty.
+  rule_id_to_completeable_states_.emplace_back();
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
-    auto [flag, can_complete] = Predict(state);
-    if (can_complete) {
-      flag = Complete(state) && flag;
+    auto [scanable, completable] = Predict(state);
+    if (completable) {
+      scanable = Complete(state) && scanable;
     }
-    if (flag) {
+    if (scanable) {
       tmp_states_to_be_added_.push_back(state);
     }
   }
+
+  // Check if the grammar is completed, and add the scannable states to the history.
   can_accept_stop_token_.push_back(tmp_accept_stop_token_);
   scanable_state_history_.PushBack(tmp_states_to_be_added_);
   return true;
@@ -226,6 +234,7 @@ EarleyParser::EarleyParser(
     const Grammar& grammar, const ParserState& init_state, const bool& need_expand
 )
     : grammar_(grammar) {
+  // Check if the initial state is valid. If invalid, then we choose the root state as default.
   ParserState init = init_state;
   if (init_state.IsInvalid()) {
     init = ParserState(
@@ -238,11 +247,16 @@ EarleyParser::EarleyParser(
   } else {
     init = init_state;
   }
+
+  // If there is no need to expand the initial state, we only need to add it to the
+  // scanable states history.
   if (!need_expand) {
     rule_id_to_completeable_states_.emplace_back();
     can_accept_stop_token_.push_back(false);
     scanable_state_history_.PushBack({init});
   }
+
+  // Otherwise, we expand the initial state, and process the queue.
   PushStateAndExpand(init);
 }
 
@@ -268,11 +282,11 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
-    auto [flag, can_complete] = Predict(state);
-    if (can_complete) {
-      flag = Complete(state) && flag;
+    auto [scanable, completable] = Predict(state);
+    if (completable) {
+      scanable = Complete(state) && scanable;
     }
-    if (flag) {
+    if (scanable) {
       tmp_states_to_be_added_.push_back(state);
     }
   }
