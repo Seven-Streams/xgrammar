@@ -34,24 +34,17 @@ bool EarleyParser::Complete(const ParserState& state) {
   // Check if a rule is completed.
   if (state.input_pos == ParserState::kNoPrevInputPos) {
     const auto& cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-    if (cur_rule.type == RuleExprType::kTagDispatch) {
-      if (!grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
-        tmp_accept_stop_token_ = true;
-        return true;
-      }
+    XGRAMMAR_DCHECK(cur_rule.type == RuleExprType::kSequence);
+    if (state.element_id == cur_rule.size()) {
+      tmp_accept_stop_token_ = true;
       return false;
-    } else {
-      if (state.element_id == cur_rule.size()) {
-        tmp_accept_stop_token_ = true;
-        return false;
-      }
-      return true;
     }
+    return true;
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
-  const auto& range = parent_states_map.equal_range(state.rule_id);
-  for (auto parent_state_iter = range.first; parent_state_iter != range.second;
+  auto parent_state_iter = parent_states_map.find(state.rule_id);
+  for (; parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
