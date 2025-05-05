@@ -124,9 +124,13 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
         return std::make_pair(false, false);
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
-        Enqueue(
+        if (IsStateVisitedInQueue(state)) {
+          return std::make_pair(false, false);
+        }
+        tmp_process_state_queue_.push(
             ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
         );
+        tmp_states_visited_in_queue_.Insert(state);
         return std::make_pair(true, false);
       }
       return std::make_pair(true, false);
