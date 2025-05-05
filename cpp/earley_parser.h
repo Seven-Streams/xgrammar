@@ -38,6 +38,25 @@ namespace xgrammar {
     - kcharacterclassstar: How many bytes are left to be read in the utf8 character.
 */
 struct ParserState {
+  constexpr ParserState() = default;
+
+  constexpr ParserState(const ParserState&) = default;
+
+  ParserState& operator=(const ParserState&) = default;
+
+  constexpr ParserState(
+      const int32_t& rule_id,
+      const int32_t& sequence_id,
+      const int32_t& element_id,
+      const int32_t& parent_pos,
+      const int32_t& sub_element_id
+  )
+      : rule_id(rule_id),
+        sequence_id(sequence_id),
+        element_id(element_id),
+        input_pos(parent_pos),
+        sub_element_id(sub_element_id) {}
+
   /*! \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
    * expanded.*/
   static constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
@@ -64,28 +83,6 @@ struct ParserState {
 
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
-
-  /*! \brief If the rule is completed.*/
-  bool completed = false;
-
-  constexpr ParserState() = default;
-
-  constexpr ParserState(const ParserState&) = default;
-
-  ParserState& operator=(const ParserState&) = default;
-
-  constexpr ParserState(
-      const int32_t& rule_id,
-      const int32_t& sequence_id,
-      const int32_t& element_id,
-      const int32_t& parent_pos,
-      const int32_t& sub_element_id
-  )
-      : rule_id(rule_id),
-        sequence_id(sequence_id),
-        element_id(element_id),
-        input_pos(parent_pos),
-        sub_element_id(sub_element_id) {}
 
   // The element is invalid when sequence_id is -1.
   bool IsInvalid() const { return sequence_id == -1; }
