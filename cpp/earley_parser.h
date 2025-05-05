@@ -177,8 +177,8 @@ class EarleyParser {
   /*! \brief store when accepting i characters, if the stop token can be accepted.*/
   std::vector<bool> can_accept_stop_token_;
 
-  /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. It's used for
-   * completion. */
+  /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. Earley
+      parser needs it to complete. */
   std::vector<std::multimap<int32_t, ParserState>> rule_id_to_completeable_states_;
 
   /*!
