@@ -207,19 +207,6 @@ class EarleyParser {
   }
 
   /*!
-    \brief Push the state into the queue. If the state is already in the queue,
-    then we don't need to push it again.
-    \param state The state to be pushed.
-  */
-  void Enqueue(const ParserState& state) {
-    if (!IsStateVisitedInQueue(state)) {
-      tmp_process_state_queue_.push(state);
-      tmp_states_visited_in_queue_.Insert(state);
-    }
-    return;
-  }
-
-  /*!
     \brief The scanning operation of the Earley parser.
   */
   void Scan(const ParserState& state, const uint8_t& ch);
