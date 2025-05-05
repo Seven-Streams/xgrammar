@@ -179,8 +179,12 @@ class RuleStateMapping {
  public:
   std::vector<ParserState> tmp_result;
 
-  RuleStateMapping(const int& transition_threshold = 70)
-      : transition_threshold_(transition_threshold), size_(0) {}
+  bool accept_stop_token_ = false;
+
+  RuleStateMapping(const int& transition_threshold = 70, bool accept_stop_token = false)
+      : transition_threshold_(transition_threshold),
+        size_(0),
+        accept_stop_token_(accept_stop_token) {}
 
   /*! \brief Insert a pair of rule_id and state.
       \param rule_id The rule id to be inserted.
@@ -192,17 +196,6 @@ class RuleStateMapping {
       \param rule_id The ref_rule's id.
       \param states Where to store the result.*/
   void GetStates(const int32_t& rule_id);
-
-  bool Find(const int32_t& rule_id) const {
-    if (size_ > transition_threshold_) {
-      return map_container_.find(rule_id) != map_container_.end();
-    }
-    return std::find_if(
-               vector_container_.begin(),
-               vector_container_.end(),
-               [&rule_id](const std::pair<int32_t, ParserState>& s) { return s.first == rule_id; }
-           ) != vector_container_.end();
-  }
 
   /*! \brief Clear the container.*/
   void Clear() {

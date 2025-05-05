@@ -347,8 +347,7 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
     return false;
   }
   scanable_state_history_.PushBack(std::vector<ParserState>());
-  rule_id_to_completeable_states_.emplace_back();
-  rule_id_to_completeable_states_.back().Insert(-1, ParserState::GetInvalidState());
+  rule_id_to_completeable_states_.push_back(RuleStateMapping(1, true));
   can_accept_stop_token_.push_back(true);
   token_length_history.push_back(1
   );  // When rolling back a stop token, we need to rollback 1 ParserState
@@ -363,7 +362,7 @@ bool GrammarMatcher::Impl::IsTerminated() const {
 }
 
 bool GrammarMatcher::Impl::IsStopTokenAccepted() const {
-  return rule_id_to_completeable_states_.back().Find(-1);
+  return rule_id_to_completeable_states_.back().accept_stop_token_;
 }
 
 // TODO(yixin): Polish verbose logging
