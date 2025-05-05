@@ -9,12 +9,12 @@
 #include <map>
 #include <ostream>
 #include <queue>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "grammar_data_structure.h"
 #include "support/csr_array.h"
-#include "support/tsl/robin_set.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
 
@@ -144,7 +144,7 @@ class RepeatDetector {
 
   std::vector<ParserState> visited_vector_;
 
-  tsl::robin_set<ParserState, StateHashChecker, StateEqual> visited_set_;
+  std::unordered_set<ParserState, StateHashChecker, StateEqual> visited_set_;
 
   int size_ = 0;
 
