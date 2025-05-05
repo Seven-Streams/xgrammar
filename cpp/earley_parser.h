@@ -9,6 +9,7 @@
 #include <map>
 #include <ostream>
 #include <queue>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -165,7 +166,7 @@ class EarleyParser {
   std::queue<ParserState> tmp_process_state_queue_;
 
   /*! The vector to check if a state has been added into the queue.*/
-  tsl::robin_set<ParserState, StateHashChecker, StateEqual> tmp_states_visited_in_queue_;
+  std::unordered_set<ParserState, StateHashChecker, StateEqual> tmp_states_visited_in_queue_;
 
   /*!
   \brief Check if the state has been added into the queue.
