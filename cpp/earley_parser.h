@@ -149,7 +149,7 @@ class RepeatDetector {
   int size_ = 0;
 
  public:
-  RepeatDetector(const int& transition_threshold = 70)
+  RepeatDetector(const int& transition_threshold = 50)
       : transition_threshold_(transition_threshold), size_(0) {
     visited_vector_.reserve(transition_threshold_);
   }
