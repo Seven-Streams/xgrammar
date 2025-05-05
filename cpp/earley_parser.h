@@ -149,7 +149,7 @@ class RepeatDetector {
   int size_ = 0;
 
  public:
-  RepeatDetector(const int& transition_threshold = 100)
+  RepeatDetector(const int& transition_threshold = 200)
       : transition_threshold_(transition_threshold),
         visited_states_(std::vector<ParserState>()),
         size_(0) {
