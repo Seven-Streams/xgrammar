@@ -131,7 +131,7 @@ class CSRArray {
    * \param data_2_len Length of the remaining data to be inserted.
    * \return The index of the newly inserted row.
    */
-  int32_t InsertNonContiguous(DataType data_1, const DataType* data_2, int32_t data_2_len);
+  int32_t PushBackNonContiguous(DataType data_1, const DataType* data_2, int32_t data_2_len);
 
   /*!
    * \brief Pop back the last one or multiple rows of the CSRArray.
@@ -216,7 +216,7 @@ inline int32_t CSRArray<DataType>::PushBack(const std::vector<DataType>& new_dat
 }
 
 template <typename DataType>
-inline int32_t CSRArray<DataType>::InsertNonContiguous(
+inline int32_t CSRArray<DataType>::PushBackNonContiguous(
     DataType data_1, const DataType* data_2, int32_t data_2_len
 ) {
   if (data_2 >= data_.data() && data_2 < data_.data() + data_.size()) {
