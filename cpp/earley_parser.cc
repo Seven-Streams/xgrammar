@@ -49,13 +49,12 @@ bool EarleyParser::Complete(const ParserState& state) {
     }
   }
   // Check all the possible parent states.
-  const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
-  std::vector<ParserState> parent_states;
-  parent_states_map.GetStates(state.rule_id, &parent_states);
-  for (const auto& parent_state : parent_states) {
+  auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
+  parent_states_map.GetStates(state.rule_id);
+  for (const auto& parent_state : parent_states_map.tmp_result) {
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
     switch (parent_expr.type) {
-      // These two types can predict other new rules. We need to
+      // These two types can predict others new rules. We need to
       // to move to the next element.
       case RuleExprType::kSequence: {
         XGRAMMAR_DCHECK(
@@ -590,16 +589,17 @@ void RuleStateMapping::Insert(const int32_t& rule_id, const ParserState& state) 
   }
 }
 
-void RuleStateMapping::GetStates(const int32_t& rule_id, std::vector<ParserState>* states) const {
+void RuleStateMapping::GetStates(const int32_t& rule_id) {
+  tmp_result.clear();
   if (size_ > transition_threshold_) {
     auto range = map_container_.equal_range(rule_id);
     for (auto iter = range.first; iter != range.second; ++iter) {
-      states->push_back(iter->second);
+      tmp_result.push_back(iter->second);
     }
   } else {
     for (const auto& s : vector_container_) {
       if (s.first == rule_id) {
-        states->push_back(s.second);
+        tmp_result.push_back(s.second);
       }
     }
   }

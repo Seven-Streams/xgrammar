@@ -363,9 +363,7 @@ bool GrammarMatcher::Impl::IsTerminated() const {
 }
 
 bool GrammarMatcher::Impl::IsStopTokenAccepted() const {
-  std::vector<ParserState> invalid_states;
-  rule_id_to_completeable_states_.back().GetStates(-1, &invalid_states);
-  return !invalid_states.empty();
+  return rule_id_to_completeable_states_.back().Find(-1);
 }
 
 // TODO(yixin): Polish verbose logging
