@@ -166,6 +166,41 @@ class RepeatDetector {
   void Clear();
 };
 
+class RuleStateMapping {
+ private:
+  int transition_threshold_;
+
+  std::vector<std::pair<int32_t, ParserState>> vector_container_;
+
+  std::multimap<int32_t, ParserState> map_container_;
+
+  int size_ = 0;
+
+ public:
+  RuleStateMapping(const int& transition_threshold = 70)
+      : transition_threshold_(transition_threshold), size_(0) {
+    vector_container_.reserve(transition_threshold_);
+  }
+
+  /*! \brief Insert a pair of rule_id and state.
+      \param rule_id The rule id to be inserted.
+      \param state The state to be inserted.
+  */
+  void Insert(const int32_t& rule_id, const ParserState& state);
+
+  /*! Get the corresponding states of the rule_id.
+      \param rule_id The ref_rule's id.
+      \param states Where to store the result.*/
+  void GetStates(const int32_t& rule_id, std::vector<ParserState>* states) const;
+
+  /*! \brief Clear the container.*/
+  void Clear() {
+    vector_container_.clear();
+    map_container_.clear();
+    size_ = 0;
+  }
+};
+
 class EarleyParser {
  protected:
   /*! \brief The grammar to be parsed. */
@@ -179,7 +214,7 @@ class EarleyParser {
 
   /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. It's used for
    * completion. */
-  std::vector<std::multimap<int32_t, ParserState>> rule_id_to_completeable_states_;
+  std::vector<RuleStateMapping> rule_id_to_completeable_states_;
 
   /*!
       \brief The states history. state_stack[i] is a vector storing the states after accepting the
@@ -194,7 +229,7 @@ class EarleyParser {
   /*! \brief It's the processing queue of the earley parser.*/
   std::queue<ParserState> tmp_process_state_queue_;
 
-  /*! The vector to check if a state has been added into the queue.*/
+  /*! The class to check if a state has been added into the queue.*/
   RepeatDetector tmp_states_visited_in_queue_;
 
   /*!

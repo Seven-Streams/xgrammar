@@ -50,10 +50,9 @@ bool EarleyParser::Complete(const ParserState& state) {
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
-  const auto& range = parent_states_map.equal_range(state.rule_id);
-  for (auto parent_state_iter = range.first; parent_state_iter != range.second;
-       parent_state_iter++) {
-    const auto& parent_state = parent_state_iter->second;
+  std::vector<ParserState> parent_states;
+  parent_states_map.GetStates(state.rule_id, &parent_states);
+  for (const auto& parent_state : parent_states) {
     auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
     switch (parent_expr.type) {
       // These two types can predict other new rules. We need to
@@ -340,7 +339,7 @@ void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const Rule
     ref_rule_id = element_expr[0];
   }
   auto& states_map = rule_id_to_completeable_states_.back();
-  states_map.insert({ref_rule_id, state});
+  states_map.Insert(ref_rule_id, state);
   if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
     return;
   }
@@ -575,6 +574,35 @@ void RepeatDetector::Clear() {
   }
   visited_vector_.clear();
   size_ = 0;
+}
+
+void RuleStateMapping::Insert(const int32_t& rule_id, const ParserState& state) {
+  if (size_ == transition_threshold_) {
+    for (const auto& s : vector_container_) {
+      map_container_.insert({s.first, s.second});
+    }
+  }
+  size_++;
+  if (size_ > transition_threshold_) {
+    map_container_.insert({rule_id, state});
+  } else {
+    vector_container_.emplace_back(rule_id, state);
+  }
+}
+
+void RuleStateMapping::GetStates(const int32_t& rule_id, std::vector<ParserState>* states) const {
+  if (size_ > transition_threshold_) {
+    auto range = map_container_.equal_range(rule_id);
+    for (auto iter = range.first; iter != range.second; ++iter) {
+      states->push_back(iter->second);
+    }
+  } else {
+    for (const auto& s : vector_container_) {
+      if (s.first == rule_id) {
+        states->push_back(s.second);
+      }
+    }
+  }
 }
 
 }  // namespace xgrammar
