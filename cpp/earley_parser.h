@@ -178,9 +178,7 @@ class RuleStateMapping {
 
  public:
   RuleStateMapping(const int& transition_threshold = 70)
-      : transition_threshold_(transition_threshold), size_(0) {
-    vector_container_.reserve(transition_threshold_);
-  }
+      : transition_threshold_(transition_threshold), size_(0) {}
 
   /*! \brief Insert a pair of rule_id and state.
       \param rule_id The rule id to be inserted.
