@@ -85,7 +85,9 @@ bool EarleyParser::Complete(const ParserState& state) {
   return false;
 }
 
-std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
+std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
+    const ParserState& state
+) {
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
   auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
@@ -109,7 +111,7 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
     // - kCharacterClass
     // - kCharacterClassStar
     // - RuleRef
-    // RuleRef need to be predicted,
+    // RuleRef and CharacterClassStar need to be predicted,
     // and the others only need to be completed or scanned.
     case RuleExprType::kSequence: {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
@@ -341,17 +343,27 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
 void EarleyParser::ExpandNextRuleRefElement(
     const ParserState& state, const RuleExpr& rule_expr, const RuleExpr* sub_rule_expr
 ) {
+  // Get the reference rule id.
   int ref_rule_id;
   if (rule_expr.type == RuleExprType::kTagDispatch) {
+    XGRAMMAR_DCHECK(grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id));
     ref_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
   } else {
+    XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
+    XGRAMMAR_DCHECK(sub_rule_expr->type == RuleExprType::kRuleRef);
     ref_rule_id = (*sub_rule_expr)[0];
   }
+
+  // Add the reference rule to map.
   auto& states_map = rule_id_to_completeable_states_.back();
   states_map.insert({ref_rule_id, state});
+
+  // Check if the reference rule is already visited.
   if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
     return;
   }
+
+  // If the reference rule is not visited, we need to add it to the queue.
   tmp_states_visited_in_queue_.Insert({ref_rule_id, -1, -1, -1, -1});
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
