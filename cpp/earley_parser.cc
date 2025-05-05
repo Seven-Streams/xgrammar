@@ -360,6 +360,26 @@ void EarleyParser::ExpandNextRuleRefElement(
 
   // Check if the reference rule is already visited.
   if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
+    if (std::find(
+            grammar_->allow_empty_rule_ids.begin(),
+            grammar_->allow_empty_rule_ids.end(),
+            ref_rule_id
+        ) != grammar_->allow_empty_rule_ids.end()) {
+      if (rule_expr.type == RuleExprType::kTagDispatch) {
+        tmp_states_to_be_added_.push_back(ParserState{
+            state.rule_id,
+            state.sequence_id,
+            grammar_->root_tag_dispatch_fsm->StartNode(),
+            state.input_pos,
+            0
+        });
+        return;
+      }
+      XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
+      tmp_process_state_queue_.push(
+          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+      );
+    }
     return;
   }
 
