@@ -9,8 +9,8 @@
 #include <map>
 #include <ostream>
 #include <queue>
-#include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "grammar_data_structure.h"
@@ -137,6 +137,37 @@ class StateHashChecker {
     );
   }
 };
+
+/*! \brief This class is used to detect the repeated states.*/
+class RepeatDetector {
+ private:
+  int transition_threshold_;
+
+  std::variant<std::vector<ParserState>, tsl::robin_set<ParserState, StateHashChecker, StateEqual>>
+      visited_states_;
+
+  int size_ = 0;
+
+ public:
+  RepeatDetector(const int& transition_threshold = 20)
+      : transition_threshold_(transition_threshold),
+        visited_states_(std::vector<ParserState>()),
+        size_(0) {
+    std::get<std::vector<ParserState>>(visited_states_).reserve(transition_threshold_);
+  }
+
+  /*! \brief Check if the elemenet is visited.
+      \return True if visited, false otherwise.*/
+  bool IsVisited(const ParserState& state) const;
+
+  /*! \brief Add the state into the visited states.
+      \param state The state to be added.*/
+  void Insert(const ParserState& state);
+
+  /*! \brief Reset the detector.*/
+  void Clear();
+};
+
 class EarleyParser {
  protected:
   /*! \brief The grammar to be parsed. */
@@ -166,7 +197,7 @@ class EarleyParser {
   std::queue<ParserState> tmp_process_state_queue_;
 
   /*! The vector to check if a state has been added into the queue.*/
-  std::unordered_set<ParserState, StateHashChecker, StateEqual> tmp_states_visited_in_queue_;
+  RepeatDetector tmp_states_visited_in_queue_;
 
   /*!
   \brief Check if the state has been added into the queue.
@@ -174,7 +205,7 @@ class EarleyParser {
   \return True if in the vector, false otherwise.
 */
   bool IsStateVisitedInQueue(const ParserState& state) const {
-    return tmp_states_visited_in_queue_.find(state) != tmp_states_visited_in_queue_.end();
+    return tmp_states_visited_in_queue_.IsVisited(state);
   }
 
   /*!
@@ -185,7 +216,7 @@ class EarleyParser {
   void Enqueue(const ParserState& state) {
     if (!IsStateVisitedInQueue(state)) {
       tmp_process_state_queue_.push(state);
-      tmp_states_visited_in_queue_.insert(state);
+      tmp_states_visited_in_queue_.Insert(state);
     }
     return;
   }

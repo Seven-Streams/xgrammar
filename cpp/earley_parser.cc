@@ -196,7 +196,7 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
 bool EarleyParser::Advance(const uint8_t& ch) {
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty())
       << "The tmp_process_state_queue_ should be empty before the scan.";
-  tmp_states_visited_in_queue_.clear();
+  tmp_states_visited_in_queue_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
   const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
@@ -256,7 +256,7 @@ EarleyParser::EarleyParser(
 }
 
 void EarleyParser::PushStateAndExpand(const ParserState& state) {
-  tmp_states_visited_in_queue_.clear();
+  tmp_states_visited_in_queue_.Clear();
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
   rule_id_to_completeable_states_.emplace_back();
@@ -344,7 +344,7 @@ void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const Rule
   if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
     return;
   }
-  tmp_states_visited_in_queue_.insert({ref_rule_id, -1, -1, -1, -1});
+  tmp_states_visited_in_queue_.Insert({ref_rule_id, -1, -1, -1, -1});
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
@@ -540,6 +540,43 @@ void EarleyParser::AdvanceTagDispatch(
       tmp_states_to_be_added_.push_back(new_state);
     }
   }
+}
+
+bool RepeatDetector::IsVisited(const ParserState& state) const {
+  // If the size is larger than the threshold, the variant is a set.
+  // Otherwise, it's a vector.
+  if (size_ > transition_threshold_) {
+    const auto& visited_set =
+        std::get<tsl::robin_set<ParserState, StateHashChecker, StateEqual>>(visited_states_);
+    return visited_set.find(state) != visited_set.end();
+  }
+  const auto& visited_vector = std::get<std::vector<ParserState>>(visited_states_);
+  return std::find_if(visited_vector.begin(), visited_vector.end(), [&state](const ParserState& s) {
+           return StateEqual()(state, s);
+         }) != visited_vector.end();
+}
+
+void RepeatDetector::Insert(const ParserState& state) {
+  if (size_ == transition_threshold_) {
+    tsl::robin_set<ParserState, StateHashChecker, StateEqual> visited_set;
+    for (const auto& s : std::get<std::vector<ParserState>>(visited_states_)) {
+      visited_set.insert(s);
+    }
+    visited_states_ = visited_set;
+  }
+  size_++;
+  if (size_ > transition_threshold_) {
+    std::get<tsl::robin_set<ParserState, StateHashChecker, StateEqual>>(visited_states_)
+        .insert(state);
+  } else {
+    std::get<std::vector<ParserState>>(visited_states_).push_back(state);
+  }
+}
+
+void RepeatDetector::Clear() {
+  visited_states_ = std::vector<ParserState>();
+  size_ = 0;
+  std::get<std::vector<ParserState>>(visited_states_).reserve(transition_threshold_);
 }
 
 }  // namespace xgrammar
