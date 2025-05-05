@@ -120,7 +120,7 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
     case RuleExprType::kSequence: {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
       if (element_expr.type == RuleExprType::kRuleRef) {
-        ExpandNextRuleRefElement(state, cur_rule);
+        ExpandNextRuleRefElement(state, cur_rule, &element_expr);
         return std::make_pair(false, false);
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
@@ -137,7 +137,7 @@ std::pair<bool, bool> EarleyParser::Predict(const ParserState& state) {
     }
     case RuleExprType::kTagDispatch: {
       // A tag has is dispatched.
-      ExpandNextRuleRefElement(state, cur_rule);
+      ExpandNextRuleRefElement(state, cur_rule, nullptr);
       return std::make_pair(false, false);
     }
     default: {
@@ -337,13 +337,14 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
   return true;
 }
 
-void EarleyParser::ExpandNextRuleRefElement(const ParserState& state, const RuleExpr& rule_expr) {
+void EarleyParser::ExpandNextRuleRefElement(
+    const ParserState& state, const RuleExpr& rule_expr, const RuleExpr* sub_rule_expr
+) {
   int ref_rule_id;
   if (rule_expr.type == RuleExprType::kTagDispatch) {
     ref_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
   } else {
-    const auto& element_expr = grammar_->GetRuleExpr(rule_expr[state.element_id]);
-    ref_rule_id = element_expr[0];
+    ref_rule_id = (*sub_rule_expr)[0];
   }
   auto& states_map = rule_id_to_completeable_states_.back();
   states_map.insert({ref_rule_id, state});

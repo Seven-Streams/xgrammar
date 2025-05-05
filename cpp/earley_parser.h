@@ -244,8 +244,15 @@ class EarleyParser {
     The type of the state is kTagDispatch or kSequence. Moreover, the
     element of the sequence should be a rule reference; the node in
     the kTagDispatch should be an end node.
+    \param rule_expr The rule expression to be expanded.
+    \param sub_rule_expr The sub rule expression to be expanded, esqpecially
+    when the rule is a kSequence, and the sub rule is a kRuleRef.
   */
-  void ExpandNextRuleRefElement(const ParserState& state, const Grammar::Impl::RuleExpr& rule_expr);
+  void ExpandNextRuleRefElement(
+      const ParserState& state,
+      const Grammar::Impl::RuleExpr& rule_expr,
+      const Grammar::Impl::RuleExpr* sub_rule_expr
+  );
 
   /*!
     \brief Advance the parser to the next state, with the sub sequence is kCharacterClass.
