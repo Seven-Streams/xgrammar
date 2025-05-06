@@ -120,9 +120,6 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
         return std::make_pair(false, false);
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
-        if (IsStateVisitedInQueue(state)) {
-          return std::make_pair(false, false);
-        }
         Enque(
             ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
         );
@@ -223,7 +220,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
       scanable = Complete(state, rule_expr) && scanable;
     }
     if (scanable) {
-      EnqueWithoutProcess(state);
+      tmp_states_to_be_added_.push_back(state);
     }
   }
 
@@ -291,7 +288,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
       scanable = Complete(state, rule_expr) && scanable;
     }
     if (scanable) {
-      EnqueWithoutProcess(state);
+      tmp_states_to_be_added_.push_back(state);
     }
   }
   can_accept_stop_token_.push_back(tmp_accept_stop_token_);
