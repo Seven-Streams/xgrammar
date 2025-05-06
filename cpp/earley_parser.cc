@@ -366,10 +366,7 @@ void EarleyParser::ExpandNextRuleRefElement(
          parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
          parent_state_iter++) {
       const auto& parent_state = parent_state_iter->second;
-      const auto& parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
-      if (parent_expr.type == RuleExprType::kSequence) {
-        states_map.insert({ref_rule_id, parent_state});
-      }
+      states_map.insert({ref_rule_id, parent_state});
     }
   }
 
