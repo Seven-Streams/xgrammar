@@ -317,6 +317,25 @@ class EarleyParser {
       const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& cur_sequence
   );
 
+  /*!
+    \brief Enqueue the state into the queue.
+    \param state The state to be enqueued.
+    \details The state is enqueued if it is not visited in the queue.
+  */
+  void Enque(const ParserState& state) {
+    if (!IsStateVisitedInQueue(state)) {
+      tmp_process_state_queue_.push(state);
+      tmp_states_visited_in_queue_.Insert(state);
+    }
+  }
+
+  void EnqueWithoutProcess(const ParserState& state) {
+    if (!IsStateVisitedInQueue(state)) {
+      tmp_states_to_be_added_.push_back(state);
+      tmp_states_visited_in_queue_.Insert(state);
+    }
+  }
+
  public:
   /*!
    \brief Constructor of the Earley parser.
