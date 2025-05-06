@@ -388,21 +388,18 @@ void EarleyParser::ExpandNextRuleRefElement(
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
-  if (ref_rule_expr.type == RuleExprType::kTagDispatch) {
-    tmp_process_state_queue_.push(ParserState{
-        ref_rule_id,
-        ref_rule_expr_id,
-        grammar_->root_tag_dispatch_fsm->StartNode(),
-        int32_t(rule_id_to_completeable_states_.size()) - 1,
-        0
-    });
-  } else {
-    XGRAMMAR_DCHECK(ref_rule_expr.type == RuleExprType::kChoices);
-    for (const auto& sequence_id : ref_rule_expr) {
-      tmp_process_state_queue_.push(ParserState{
-          ref_rule_id, sequence_id, 0, int32_t(rule_id_to_completeable_states_.size()) - 1, 0
-      });
+  XGRAMMAR_DCHECK(ref_rule_expr.type == RuleExprType::kChoices);
+  for (const auto& sequence_id : ref_rule_expr) {
+    const auto& sequence = grammar_->GetRuleExpr(sequence_id);
+    if (sequence.type == RuleExprType::kEmptyStr) {
+      tmp_process_state_queue_.push(
+          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+      );
+      continue;
     }
+    tmp_process_state_queue_.push(ParserState{
+        ref_rule_id, sequence_id, 0, int32_t(rule_id_to_completeable_states_.size()) - 1, 0
+    });
   }
 }
 
