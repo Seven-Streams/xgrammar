@@ -348,7 +348,7 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
     return false;
   }
   scanable_state_history_.PushBack(std::vector<ParserState>());
-  rule_id_to_completeable_states_.push_back(std::multimap<int32_t, ParserState>());
+  rule_id_to_completeable_states_.emplace_back();
   rule_id_to_completeable_states_.back().insert(std::make_pair(-1, ParserState::GetInvalidState()));
   can_accept_stop_token_.push_back(true);
   token_length_history.push_back(1
