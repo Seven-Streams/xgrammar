@@ -227,7 +227,7 @@ class EarleyParser {
       of the grammar is used to check if the grammar is completed,
       so it should be added into the next states.
   */
-  bool Complete(const ParserState& state);
+  bool Complete(const ParserState& state, const Grammar::Impl::RuleExpr& rule_expr);
 
   /*!
       \brief The prediction operation of the Earley parser.
@@ -236,7 +236,7 @@ class EarleyParser {
       \return Second: If the state is obviously that it can't complete,
       then return false, true otherwise.
   */
-  std::pair<bool, bool> Predict(const ParserState& state);
+  std::pair<bool, bool> Predict(const ParserState& state, Grammar::Impl::RuleExpr* rule_expr);
 
   /*!
     \brief Handle the unexpanded rule, used for pushing initial state.

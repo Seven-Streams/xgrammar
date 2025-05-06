@@ -31,12 +31,11 @@ void EarleyParser::PopLastStates(int32_t cnt) {
   scanable_state_history_.PopBack(cnt);
 }
 
-bool EarleyParser::Complete(const ParserState& state) {
+bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr) {
   // Check if a rule is completed.
   if (state.input_pos == ParserState::kNoPrevInputPos) {
-    const auto& cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-    XGRAMMAR_DCHECK(cur_rule.type == RuleExprType::kSequence);
-    if (state.element_id == cur_rule.size()) {
+    XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
+    if (state.element_id == rule_expr.size()) {
       tmp_accept_stop_token_ = true;
       return false;
     }
@@ -86,11 +85,12 @@ bool EarleyParser::Complete(const ParserState& state) {
 }
 
 std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
-    const ParserState& state
+    const ParserState& state, RuleExpr* rule_expr
 ) {
   // If it's an unexpanded rule, we need to expand it,
   // and add all the possible rules into the queue.
-  auto cur_rule = grammar_->GetRuleExpr(state.sequence_id);
+  *rule_expr = grammar_->GetRuleExpr(state.sequence_id);
+  const auto& cur_rule = *rule_expr;
   //  If the current state is the end of the rule, we do not need to predict.
   if (cur_rule.type == RuleExprType::kTagDispatch) {
     // The rule can be scanned, but can't be completed.
@@ -217,9 +217,10 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
-    auto [scanable, completable] = Predict(state);
+    RuleExpr rule_expr;
+    auto [scanable, completable] = Predict(state, &rule_expr);
     if (completable) {
-      scanable = Complete(state) && scanable;
+      scanable = Complete(state, rule_expr) && scanable;
     }
     if (scanable) {
       tmp_states_to_be_added_.push_back(state);
@@ -284,9 +285,10 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
-    auto [scanable, completable] = Predict(state);
+    RuleExpr rule_expr;
+    auto [scanable, completable] = Predict(state, &rule_expr);
     if (completable) {
-      scanable = Complete(state) && scanable;
+      scanable = Complete(state, rule_expr) && scanable;
     }
     if (scanable) {
       tmp_states_to_be_added_.push_back(state);
