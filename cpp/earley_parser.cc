@@ -33,11 +33,6 @@ void EarleyParser::PopLastStates(int32_t cnt) {
 
 bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr) {
   // Check if a rule is completed.
-  if (complete_repeat_checker_.find(std::make_pair(state.rule_id, state.input_pos)) !=
-      complete_repeat_checker_.end()) {
-    return false;
-  }
-  complete_repeat_checker_.insert(std::make_pair(state.rule_id, state.input_pos));
   if (state.input_pos == ParserState::kNoPrevInputPos) {
     XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
     if (state.element_id == rule_expr.size()) {
@@ -202,7 +197,6 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   // Initialize the containers.
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty())
       << "The tmp_process_state_queue_ should be empty before the scan.";
-  complete_repeat_checker_.clear();
   tmp_states_visited_in_queue_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
@@ -273,7 +267,6 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_states_visited_in_queue_.Clear();
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
-  complete_repeat_checker_.clear();
   rule_id_to_completeable_states_.emplace_back();
   if (state.IsInvalid()) {
     ExpandAndEnqueueUnexpandedState(ParserState{
