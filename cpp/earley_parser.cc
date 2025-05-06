@@ -357,8 +357,26 @@ void EarleyParser::ExpandNextRuleRefElement(
   }
 
   // Add the reference rule to map.
-  auto& states_map = rule_id_to_completeable_states_.back();
-  states_map.insert({ref_rule_id, state});
+  if ((state.element_id != rule_expr.size() - 1) ||
+      state.input_pos == ParserState::kNoPrevInputPos) {
+    // It's not the right recursion, or it's the root rule.
+    auto& states_map = rule_id_to_completeable_states_.back();
+    states_map.insert({ref_rule_id, state});
+  } else {
+    // If it's the right recursion, we need to add the ancestors of the parent state.
+    auto& states_map = rule_id_to_completeable_states_.back();
+    auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
+    auto parent_state_iter = parent_states_map.find(state.rule_id);
+    for (;
+         parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
+         parent_state_iter++) {
+      const auto& parent_state = parent_state_iter->second;
+      const auto& parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
+      if (parent_expr.type == RuleExprType::kSequence) {
+        states_map.insert({ref_rule_id, parent_state});
+      }
+    }
+  }
 
   // Check if the reference rule is already visited.
   if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
