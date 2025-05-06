@@ -48,7 +48,7 @@ bool EarleyParser::Complete(const ParserState& state) {
   for (; parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
-    auto parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
+    const auto& parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
     switch (parent_expr.type) {
       // These two types can predict other new rules. We need to
       // to move to the next element.
