@@ -201,8 +201,11 @@ class EarleyParser {
   /*! \brief It's the processing queue of the earley parser.*/
   std::queue<ParserState> tmp_process_state_queue_;
 
-  /*! The vector to check if a state has been added into the queue.*/
+  /*! \brief The vector to check if a state has been added into the queue.*/
   RepeatDetector tmp_states_visited_in_queue_;
+
+  /*! \brief The set is used to detect the repetation in completation.*/
+  std::unordered_set<std::pair<int32_t, int32_t>> complete_repeat_checker_;
 
   /*!
   \brief Check if the state has been added into the queue.
