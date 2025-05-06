@@ -6,6 +6,7 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <ostream>
 #include <queue>
@@ -135,13 +136,14 @@ class StateHashChecker {
 };
 
 /*! \brief This class is used to detect the repeated states.*/
+template <class T = ParserState, class Hash = std::hash<T>, class Equal = std::equal_to<T>>
 class RepeatDetector {
  private:
   int transition_threshold_;
 
-  std::vector<ParserState> visited_vector_;
+  std::vector<T> visited_vector_;
 
-  std::unordered_set<ParserState, StateHashChecker, StateEqual> visited_set_;
+  std::unordered_set<T, Hash, Equal> visited_set_;
 
   int size_ = 0;
 
@@ -153,11 +155,11 @@ class RepeatDetector {
 
   /*! \brief Check if the elemenet is visited.
       \return True if visited, false otherwise.*/
-  bool IsVisited(const ParserState& state) const;
+  bool IsVisited(const T& state) const;
 
   /*! \brief Add the state into the visited states.
       \param state The state to be added.*/
-  void Insert(const ParserState& state);
+  void Insert(const T& state);
 
   /*! \brief Reset the detector.*/
   void Clear();
@@ -201,8 +203,11 @@ class EarleyParser {
   /*! \brief It's the processing queue of the earley parser.*/
   std::queue<ParserState> tmp_process_state_queue_;
 
-  /*! The vector to check if a state has been added into the queue.*/
-  RepeatDetector tmp_states_visited_in_queue_;
+  /*! \brief The class is used to to check if a state has been added into the queue.*/
+  RepeatDetector<ParserState, StateHash, StateEqual> tmp_states_visited_in_queue_;
+
+  /*! \brief The class to check if a rule has been checked.*/
+  RepeatDetector<std::pair<int32_t, int32_t>> tmp_completed_rules_;
 
   /*!
   \brief Check if the state has been added into the queue.

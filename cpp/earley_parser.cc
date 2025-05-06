@@ -33,6 +33,11 @@ void EarleyParser::PopLastStates(int32_t cnt) {
 
 bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr) {
   // Check if a rule is completed.
+  if (tmp_completed_rules_.IsVisited(std::make_pair(state.rule_id, state.input_pos))) {
+    return false;
+  }
+  tmp_completed_rules_.Insert(std::make_pair(state.rule_id, state.input_pos));
+  // if(tmp_completed_rules_.IsVisited(const ParserState &state))
   if (state.input_pos == ParserState::kNoPrevInputPos) {
     XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
     if (state.element_id == rule_expr.size()) {
@@ -66,13 +71,14 @@ bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
         break;
       }
       case RuleExprType::kTagDispatch: {
-        Enque(
+        EnqueWithoutProcess(
             {parent_state.rule_id,
              parent_state.sequence_id,
              grammar_->root_tag_dispatch_fsm->StartNode(),
              parent_state.input_pos,
              0}
         );
+        tmp_accept_stop_token_ = true;
         break;
       }
       default: {
@@ -195,6 +201,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty())
       << "The tmp_process_state_queue_ should be empty before the scan.";
   tmp_states_visited_in_queue_.Clear();
+  tmp_completed_rules_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
   const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
@@ -262,6 +269,7 @@ EarleyParser::EarleyParser(
 
 void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_states_visited_in_queue_.Clear();
+  tmp_completed_rules_.Clear();
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
   rule_id_to_completeable_states_.emplace_back();
@@ -581,20 +589,20 @@ void EarleyParser::AdvanceTagDispatch(
   }
 }
 
-bool RepeatDetector::IsVisited(const ParserState& state) const {
+template <class T, class Hash, class Equal>
+bool RepeatDetector<T, Hash, Equal>::IsVisited(const T& state) const {
   // If the size is larger than the threshold, the variant is a set.
   // Otherwise, it's a vector.
   if (size_ > transition_threshold_) {
     return visited_set_.find(state) != visited_set_.end();
   }
-  return std::find_if(
-             visited_vector_.begin(),
-             visited_vector_.end(),
-             [&state](const ParserState& s) { return StateEqual()(state, s); }
-         ) != visited_vector_.end();
+  return std::find_if(visited_vector_.begin(), visited_vector_.end(), [&state](const T& s) {
+           return Equal()(state, s);
+         }) != visited_vector_.end();
 }
 
-void RepeatDetector::Insert(const ParserState& state) {
+template <class T, class Hash, class Equal>
+void RepeatDetector<T, Hash, Equal>::Insert(const T& state) {
   if (size_ == transition_threshold_) {
     for (const auto& s : visited_vector_) {
       visited_set_.insert(s);
@@ -608,7 +616,8 @@ void RepeatDetector::Insert(const ParserState& state) {
   }
 }
 
-void RepeatDetector::Clear() {
+template <class T, class Hash, class Equal>
+void RepeatDetector<T, Hash, Equal>::Clear() {
   if (size_ > transition_threshold_) {
     visited_set_.clear();
   }
