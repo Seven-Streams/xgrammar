@@ -360,13 +360,27 @@ void EarleyParser::ExpandNextRuleRefElement(
   } else {
     // If it's the right recursion, we need to add the ancestors of the parent state.
     auto& states_map = rule_id_to_completeable_states_.back();
-    auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
+    const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
+    const auto& ref_rule_range = states_map.equal_range(ref_rule_id);
+
+    auto have_been_added = [&](const ParserState& state) {
+      auto iter = ref_rule_range.first;
+      while (iter != ref_rule_range.second) {
+        if (StateEqual()(state, iter->second)) {
+          return true;
+        }
+        iter++;
+      }
+      return false;
+    };
     auto parent_state_iter = parent_states_map.find(state.rule_id);
     for (;
          parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
          parent_state_iter++) {
       const auto& parent_state = parent_state_iter->second;
-      states_map.insert({ref_rule_id, parent_state});
+      if (!have_been_added(parent_state)) {
+        states_map.insert({ref_rule_id, parent_state});
+      }
     }
   }
 
@@ -435,8 +449,8 @@ void EarleyParser::AdvanceByteString(
 void EarleyParser::AdvanceCharacterClass(
     const ParserState& state,
     const uint8_t& ch,
-    const Grammar::Impl::RuleExpr& cur_sequence,
-    const Grammar::Impl::RuleExpr& sub_sequence
+    const RuleExpr& cur_sequence,
+    const RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClass)
       << "The element type is not supported!";
@@ -496,8 +510,8 @@ void EarleyParser::AdvanceCharacterClass(
 void EarleyParser::AdvanceCharacterClassStar(
     const ParserState& state,
     const uint8_t& ch,
-    const Grammar::Impl::RuleExpr& cur_sequence,
-    const Grammar::Impl::RuleExpr& sub_sequence
+    const RuleExpr& cur_sequence,
+    const RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClassStar)
       << "The element type is not supported!";
@@ -547,7 +561,7 @@ void EarleyParser::AdvanceCharacterClassStar(
 }
 
 void EarleyParser::AdvanceTagDispatch(
-    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& cur_sequence
+    const ParserState& state, const uint8_t& ch, const RuleExpr& cur_sequence
 ) {
   const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
   if (!root_tag_dispatch_fsm) {
