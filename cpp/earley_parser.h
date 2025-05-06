@@ -6,7 +6,6 @@
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
-#include <map>
 #include <ostream>
 #include <queue>
 #include <unordered_set>
@@ -186,7 +185,7 @@ class EarleyParser {
 
   /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. Earley
       parser needs it to complete. */
-  std::vector<std::multimap<int32_t, ParserState>> rule_id_to_completeable_states_;
+  std::vector<std::unordered_multimap<int32_t, ParserState>> rule_id_to_completeable_states_;
 
   /*!
       \brief The states history. state_stack[i] is a vector storing the states after accepting the
