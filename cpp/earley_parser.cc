@@ -1,5 +1,6 @@
 #include "earley_parser.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <unordered_map>
@@ -45,6 +46,11 @@ bool EarleyParser::Complete(const ParserState& state) {
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
   auto parent_state_iter = parent_states_map.find(state.rule_id);
+  bool nullable = std::find(
+                      grammar_->allow_empty_rule_ids.begin(),
+                      grammar_->allow_empty_rule_ids.end(),
+                      state.rule_id
+                  ) != grammar_->allow_empty_rule_ids.end();
   for (; parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
@@ -57,23 +63,45 @@ bool EarleyParser::Complete(const ParserState& state) {
             grammar_->GetRuleExpr(parent_expr[parent_state.element_id]).type ==
             RuleExprType::kRuleRef
         );
-        tmp_process_state_queue_.push(ParserState{
+        const auto& new_state = ParserState{
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_state.element_id + 1,
             parent_state.input_pos,
             0
-        });
+        };
+        bool possible_repetition = false;
+        if (new_state.element_id < parent_expr.size()) {
+          const auto& nxt_expr = grammar_->GetRuleExpr(parent_expr[new_state.element_id]);
+          if (nxt_expr.type == RuleExprType::kCharacterClassStar) {
+            possible_repetition = true;
+          }
+        }
+        if (nullable) {
+          possible_repetition = true;
+        }
+        if (possible_repetition) {
+          if (tmp_states_visited_in_queue_.IsVisited(new_state)) {
+            break;
+          }
+          tmp_states_visited_in_queue_.Insert(new_state);
+        }
+        tmp_process_state_queue_.push(new_state);
         break;
       }
       case RuleExprType::kTagDispatch: {
-        tmp_process_state_queue_.push(
-            {parent_state.rule_id,
-             parent_state.sequence_id,
-             grammar_->root_tag_dispatch_fsm->StartNode(),
-             parent_state.input_pos,
-             0}
-        );
+        const auto& new_state = ParserState{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            grammar_->root_tag_dispatch_fsm->StartNode(),
+            parent_state.input_pos,
+            0
+        };
+        if (tmp_states_visited_in_queue_.IsVisited(new_state)) {
+          break;
+        }
+        tmp_states_visited_in_queue_.Insert(new_state);
+        tmp_process_state_queue_.push(new_state);
         break;
       }
       default: {
@@ -120,13 +148,10 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
         return std::make_pair(false, false);
       }
       if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
-        if (IsStateVisitedInQueue(state)) {
-          return std::make_pair(false, false);
-        }
         tmp_process_state_queue_.push(
             ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
         );
-        tmp_states_visited_in_queue_.Insert(state);
+        tmp_states_to_be_added_.push_back(state);
         return std::make_pair(true, false);
       }
       return std::make_pair(true, false);
@@ -358,28 +383,36 @@ void EarleyParser::ExpandNextRuleRefElement(
   auto& states_map = rule_id_to_completeable_states_.back();
   states_map.insert({ref_rule_id, state});
 
+  bool nullable =
+      std::find(
+          grammar_->allow_empty_rule_ids.begin(), grammar_->allow_empty_rule_ids.end(), ref_rule_id
+      ) != grammar_->allow_empty_rule_ids.end();
+  if (nullable) {
+    if (rule_expr.type == RuleExprType::kTagDispatch) {
+      const auto& new_state = ParserState{
+          state.rule_id,
+          state.sequence_id,
+          grammar_->root_tag_dispatch_fsm->StartNode(),
+          state.input_pos,
+          0
+      };
+      if (!tmp_states_visited_in_queue_.IsVisited(new_state)) {
+        tmp_states_to_be_added_.push_back(new_state);
+        tmp_states_visited_in_queue_.Insert(new_state);
+      }
+    } else {
+      XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
+      const auto& new_state =
+          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0};
+      if (!tmp_states_visited_in_queue_.IsVisited(new_state)) {
+        tmp_states_visited_in_queue_.Insert(new_state);
+        tmp_process_state_queue_.push(new_state);
+      }
+    }
+  }
+
   // Check if the reference rule is already visited.
   if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
-    if (std::find(
-            grammar_->allow_empty_rule_ids.begin(),
-            grammar_->allow_empty_rule_ids.end(),
-            ref_rule_id
-        ) != grammar_->allow_empty_rule_ids.end()) {
-      if (rule_expr.type == RuleExprType::kTagDispatch) {
-        tmp_states_to_be_added_.push_back(ParserState{
-            state.rule_id,
-            state.sequence_id,
-            grammar_->root_tag_dispatch_fsm->StartNode(),
-            state.input_pos,
-            0
-        });
-        return;
-      }
-      XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
-      tmp_process_state_queue_.push(
-          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
-      );
-    }
     return;
   }
 
@@ -399,6 +432,10 @@ void EarleyParser::ExpandNextRuleRefElement(
   } else {
     XGRAMMAR_DCHECK(ref_rule_expr.type == RuleExprType::kChoices);
     for (const auto& sequence_id : ref_rule_expr) {
+      const auto& sequence = grammar_->GetRuleExpr(sequence_id);
+      if (sequence.type == RuleExprType::kEmptyStr) {
+        continue;
+      }
       tmp_process_state_queue_.push(ParserState{
           ref_rule_id, sequence_id, 0, int32_t(rule_id_to_completeable_states_.size()) - 1, 0
       });
@@ -502,7 +539,11 @@ void EarleyParser::AdvanceCharacterClassStar(
       new_state.sub_element_id--;
       // Check if the UTF8 character is completed.
       if (new_state.sub_element_id == 0) {
+        if (tmp_states_visited_in_queue_.IsVisited(new_state)) {
+          return;
+        }
         tmp_process_state_queue_.push(new_state);
+        tmp_states_visited_in_queue_.Insert(new_state);
       } else {
         tmp_states_to_be_added_.push_back(new_state);
       }
@@ -529,13 +570,21 @@ void EarleyParser::AdvanceCharacterClassStar(
   for (int i = 1; i < sub_sequence.size(); i += 2) {
     if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
       if (!is_negative) {
+        if (tmp_states_visited_in_queue_.IsVisited(state)) {
+          return;
+        }
         tmp_process_state_queue_.push(state);
+        tmp_states_visited_in_queue_.Insert(state);
       }
       return;
     }
   }
   if (is_negative) {
+    if (tmp_states_visited_in_queue_.IsVisited(state)) {
+      return;
+    }
     tmp_process_state_queue_.push(state);
+    tmp_states_visited_in_queue_.Insert(state);
   }
 }
 
