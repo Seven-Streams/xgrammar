@@ -43,7 +43,7 @@ bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
-  auto parent_state_iter = parent_states_map.find(state.rule_id);
+  auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
   for (; parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
