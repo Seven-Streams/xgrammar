@@ -589,9 +589,9 @@ bool RepeatDetector::IsVisited(const ParserState& state) const {
   }
   return std::find_if(
              visited_vector_.begin(),
-             visited_vector_.end(),
+             visited_vector_.begin() + size_,
              [&state](const ParserState& s) { return StateEqual()(state, s); }
-         ) != visited_vector_.end();
+         ) != visited_vector_.begin() + size_;
 }
 
 void RepeatDetector::Insert(const ParserState& state) {
@@ -604,7 +604,7 @@ void RepeatDetector::Insert(const ParserState& state) {
   if (size_ > transition_threshold_) {
     visited_set_.insert(state);
   } else {
-    visited_vector_.push_back(state);
+    visited_vector_[size_ - 1] = state;
   }
 }
 
@@ -612,7 +612,6 @@ void RepeatDetector::Clear() {
   if (size_ > transition_threshold_) {
     visited_set_.clear();
   }
-  visited_vector_.clear();
   size_ = 0;
 }
 

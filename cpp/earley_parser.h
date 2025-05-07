@@ -148,7 +148,7 @@ class RepeatDetector {
  public:
   RepeatDetector(const int& transition_threshold = 50)
       : transition_threshold_(transition_threshold), size_(0) {
-    visited_vector_.reserve(transition_threshold_);
+    visited_vector_.resize(transition_threshold_);
   }
 
   /*! \brief Check if the elemenet is visited.
