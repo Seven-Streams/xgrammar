@@ -249,7 +249,7 @@ class EarleyParser {
     element of the sequence should be a rule reference; the node in
     the kTagDispatch should be an end node.
     \param rule_expr The rule expression to be expanded.
-    \param sub_rule_expr The sub rule expression to be expanded, esqpecially
+    \param sub_rule_expr The sub rule expression to be expanded, especially
     when the rule is a kSequence, and the sub rule is a kRuleRef.
   */
   void ExpandNextRuleRefElement(
