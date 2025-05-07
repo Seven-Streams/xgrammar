@@ -220,21 +220,18 @@ class EarleyParser {
 
   /*!
       \brief The completion operation of the Earley parser.
-      \return If the state is scannable then we return false(which means that
-      the state can't predict and complete), otherwise we return true.
       \details The reason is that if the state can't be scanned, then
       add it into the next states is useless. Moreover, the end
       of the grammar is used to check if the grammar is completed,
       so it should be added into the next states.
   */
-  bool Complete(const ParserState& state, const Grammar::Impl::RuleExpr& rule_expr);
+  void Complete(const ParserState& state, const Grammar::Impl::RuleExpr& rule_expr);
 
   /*!
       \brief The prediction operation of the Earley parser.
       \return Fitst: If the state scanable, or the state is the end of the grammar,
       then return true, otherwise return false.
-      \return Second: If the state is obviously that it can't complete,
-      then return false, true otherwise.
+      \return Second: If the state is completable, then return true, otherwise return false.
   */
   std::pair<bool, bool> Predict(const ParserState& state, Grammar::Impl::RuleExpr* rule_expr);
 

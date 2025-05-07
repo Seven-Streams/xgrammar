@@ -31,14 +31,14 @@ void EarleyParser::PopLastStates(int32_t cnt) {
   scanable_state_history_.PopBack(cnt);
 }
 
-bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr) {
+void EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr) {
   // Check if a rule is completed.
   if (state.input_pos == ParserState::kNoPrevInputPos) {
     // assert: if a root rule can achieve here, then it must be completed.
     XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
     XGRAMMAR_DCHECK(rule_expr.size() == state.element_id);
     tmp_accept_stop_token_ = true;
-    return false;
+    return;
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
@@ -80,7 +80,6 @@ bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
       }
     }
   }
-  return false;
 }
 
 std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
@@ -140,10 +139,9 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
 
 void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
   const auto& cur_rule = grammar_->GetRuleExpr(state.sequence_id);
-  // If the current state is the end of the rule, we do not need to scan.
-  if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
-    return;
-  }
+  XGRAMMAR_DCHECK(
+      state.element_id != cur_rule.size() || cur_rule.type == RuleExprType::kTagDispatch
+  );
   switch (cur_rule.type) {
     case (RuleExprType::kSequence): {
       const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
@@ -216,7 +214,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     RuleExpr rule_expr;
     auto [scanable, completable] = Predict(state, &rule_expr);
     if (completable) {
-      scanable = Complete(state, rule_expr) && scanable;
+      Complete(state, rule_expr);
     }
     if (scanable) {
       tmp_states_to_be_added_.push_back(state);
@@ -284,7 +282,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
     RuleExpr rule_expr;
     auto [scanable, completable] = Predict(state, &rule_expr);
     if (completable) {
-      scanable = Complete(state, rule_expr) && scanable;
+      Complete(state, rule_expr);
     }
     if (scanable) {
       tmp_states_to_be_added_.push_back(state);
