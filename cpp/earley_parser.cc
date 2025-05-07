@@ -434,7 +434,7 @@ void EarleyParser::AdvanceByteString(
       new_state.sub_element_id = 0;
       Enque(new_state);
     } else {
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.push_back(std::move(new_state));
     }
   }
   return;
@@ -457,7 +457,7 @@ void EarleyParser::AdvanceCharacterClass(
         // Check if the sequence is completed.
         Enque(new_state);
       } else {
-        tmp_states_to_be_added_.push_back(new_state);
+        tmp_states_to_be_added_.push_back(std::move(new_state));
       }
     }
     return;
@@ -474,7 +474,7 @@ void EarleyParser::AdvanceCharacterClass(
     if (is_negative) {
       auto new_state = state;
       new_state.sub_element_id = num_bytes - 1;
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.push_back(std::move(new_state));
     }
     return;
   }
@@ -513,7 +513,7 @@ void EarleyParser::AdvanceCharacterClassStar(
       if (new_state.sub_element_id == 0) {
         Enque(new_state);
       } else {
-        tmp_states_to_be_added_.push_back(new_state);
+        tmp_states_to_be_added_.push_back(std::move(new_state));
       }
     }
     return;
@@ -530,7 +530,7 @@ void EarleyParser::AdvanceCharacterClassStar(
     if (is_negative) {
       auto new_state = state;
       new_state.sub_element_id = num_bytes - 1;
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.push_back(std::move(new_state));
     }
     return;
   }
@@ -575,7 +575,7 @@ void EarleyParser::AdvanceTagDispatch(
       Enque(new_state);
     } else {
       tmp_accept_stop_token_ = true;
-      tmp_states_to_be_added_.push_back(new_state);
+      tmp_states_to_be_added_.push_back(std::move(new_state));
     }
   }
 }
