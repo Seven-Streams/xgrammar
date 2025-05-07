@@ -308,14 +308,14 @@ class EarleyParser {
     \details The state is enqueued if it is not visited in the queue.
   */
   void Enque(const ParserState& state) {
-    if (!IsStateVisitedInQueue(state)) {
+    if (true) {
       tmp_process_state_queue_.push(state);
-      tmp_states_visited_in_queue_.Insert(state);
+      // tmp_states_visited_in_queue_.Insert(state);
     }
   }
 
   void EnqueWithoutProcess(const ParserState& state) {
-    if (!IsStateVisitedInQueue(state)) {
+    if (true) {
       tmp_states_to_be_added_.push_back(state);
       tmp_states_visited_in_queue_.Insert(state);
     }
