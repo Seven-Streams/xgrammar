@@ -150,15 +150,15 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
       // The element is a rule reference, we do not need to scan it.
       switch (element_expr.type) {
         case (RuleExprType::kByteString): {
-          AdvanceByteString(state, ch, cur_rule, element_expr);
+          AdvanceByteString(state, ch, element_expr);
           break;
         }
         case (RuleExprType::kCharacterClass): {
-          AdvanceCharacterClass(state, ch, cur_rule, element_expr);
+          AdvanceCharacterClass(state, ch, element_expr);
           break;
         }
         case (RuleExprType::kCharacterClassStar): {
-          AdvanceCharacterClassStar(state, ch, cur_rule, element_expr);
+          AdvanceCharacterClassStar(state, ch, element_expr);
           break;
         }
         default: {
@@ -423,7 +423,7 @@ void EarleyParser::ExpandNextRuleRefElement(
 }
 
 void EarleyParser::AdvanceByteString(
-    const ParserState& state, const uint8_t& ch, const RuleExpr& cur_rule, const RuleExpr& sub_rule
+    const ParserState& state, const uint8_t& ch, const RuleExpr& sub_rule
 ) {
   XGRAMMAR_DCHECK(sub_rule.type == RuleExprType::kByteString);
   XGRAMMAR_DCHECK(sub_rule.size() > state.sub_element_id);
@@ -442,10 +442,7 @@ void EarleyParser::AdvanceByteString(
 }
 
 void EarleyParser::AdvanceCharacterClass(
-    const ParserState& state,
-    const uint8_t& ch,
-    const Grammar::Impl::RuleExpr& cur_sequence,
-    const Grammar::Impl::RuleExpr& sub_sequence
+    const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClass)
       << "The element type is not supported!";
@@ -503,10 +500,7 @@ void EarleyParser::AdvanceCharacterClass(
 }
 
 void EarleyParser::AdvanceCharacterClassStar(
-    const ParserState& state,
-    const uint8_t& ch,
-    const Grammar::Impl::RuleExpr& cur_sequence,
-    const Grammar::Impl::RuleExpr& sub_sequence
+    const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClassStar)
       << "The element type is not supported!";
@@ -556,7 +550,7 @@ void EarleyParser::AdvanceCharacterClassStar(
 }
 
 void EarleyParser::AdvanceTagDispatch(
-    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& cur_sequence
+    const ParserState& state, const uint8_t& ch, const RuleExpr& cur_sequence
 ) {
   const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
   if (!root_tag_dispatch_fsm) {
@@ -573,7 +567,12 @@ void EarleyParser::AdvanceTagDispatch(
     auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
     new_state.element_id =
         new_next_node == CompactFSMWithStartEnd::NO_TRANSITION ? start_node : new_next_node;
-    Enque(new_state);
+    if (root_tag_dispatch_fsm->IsEndNode(new_state.element_id)) {
+      Enque(new_state);
+    } else {
+      tmp_accept_stop_token_ = true;
+      tmp_states_to_be_added_.push_back(new_state);
+    }
   } else {
     // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
     // We need to update the element id to the next node.
@@ -588,8 +587,7 @@ void EarleyParser::AdvanceTagDispatch(
 }
 
 bool RepeatDetector::IsVisited(const ParserState& state) const {
-  // If the size is larger than the threshold, the variant is a set.
-  // Otherwise, it's a vector.
+  // If the size is larger than the threshold, then we use the set to check.
   if (size_ > transition_threshold_) {
     return visited_set_.find(state) != visited_set_.end();
   }
