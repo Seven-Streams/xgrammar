@@ -548,8 +548,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   };
 
   for (int32_t rule_id = 0; rule_id < static_cast<int>(grammar->NumRules()); ++rule_id) {
-    auto rule = grammar->GetRule(rule_id);
-    auto rule_body = grammar->GetRuleExpr(rule.body_expr_id);
+    const auto& rule = grammar->GetRule(rule_id);
+    const auto& rule_body = grammar->GetRuleExpr(rule.body_expr_id);
 
     if (rule_body.type == RuleExprType::kTagDispatch) {
       auto state = ParserState(rule_id, rule.body_expr_id, 0, ParserState::kNoPrevInputPos, 0);
@@ -562,7 +562,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
 
     XGRAMMAR_DCHECK(rule_body.type == RuleExprType::kChoices);
     for (auto sequence_id : rule_body) {
-      auto sequence = grammar->GetRuleExpr(sequence_id);
+      const auto& sequence = grammar->GetRuleExpr(sequence_id);
       if (sequence.type == RuleExprType::kEmptyStr) {
         continue;
       }
