@@ -150,15 +150,15 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
       // The element is a rule reference, we do not need to scan it.
       switch (element_expr.type) {
         case (RuleExprType::kByteString): {
-          AdvanceByteString(state, ch, cur_rule, element_expr);
+          AdvanceByteString(state, ch, element_expr);
           break;
         }
         case (RuleExprType::kCharacterClass): {
-          AdvanceCharacterClass(state, ch, cur_rule, element_expr);
+          AdvanceCharacterClass(state, ch, element_expr);
           break;
         }
         case (RuleExprType::kCharacterClassStar): {
-          AdvanceCharacterClassStar(state, ch, cur_rule, element_expr);
+          AdvanceCharacterClassStar(state, ch, element_expr);
           break;
         }
         default: {
@@ -392,6 +392,7 @@ void EarleyParser::ExpandNextRuleRefElement(
             state.input_pos,
             0
         });
+        tmp_accept_stop_token_ = true;
         return;
       }
       XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
@@ -421,7 +422,7 @@ void EarleyParser::ExpandNextRuleRefElement(
 }
 
 void EarleyParser::AdvanceByteString(
-    const ParserState& state, const uint8_t& ch, const RuleExpr& cur_rule, const RuleExpr& sub_rule
+    const ParserState& state, const uint8_t& ch, const RuleExpr& sub_rule
 ) {
   XGRAMMAR_DCHECK(sub_rule.type == RuleExprType::kByteString);
   XGRAMMAR_DCHECK(sub_rule.size() > state.sub_element_id);
@@ -440,10 +441,7 @@ void EarleyParser::AdvanceByteString(
 }
 
 void EarleyParser::AdvanceCharacterClass(
-    const ParserState& state,
-    const uint8_t& ch,
-    const Grammar::Impl::RuleExpr& cur_sequence,
-    const Grammar::Impl::RuleExpr& sub_sequence
+    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClass)
       << "The element type is not supported!";
@@ -501,10 +499,7 @@ void EarleyParser::AdvanceCharacterClass(
 }
 
 void EarleyParser::AdvanceCharacterClassStar(
-    const ParserState& state,
-    const uint8_t& ch,
-    const Grammar::Impl::RuleExpr& cur_sequence,
-    const Grammar::Impl::RuleExpr& sub_sequence
+    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClassStar)
       << "The element type is not supported!";
