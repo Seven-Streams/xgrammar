@@ -138,7 +138,7 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
   }
 }
 
-void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
+void EarleyParser::Scan(const ParserState& state, const uint8_t ch) {
   const auto& cur_rule = grammar_->GetRuleExpr(state.sequence_id);
   // If the current state is the end of the rule, we do not need to scan.
   if (state.element_id == cur_rule.size() && cur_rule.type != RuleExprType::kTagDispatch) {
@@ -189,7 +189,7 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
   \note Thus, when initializing the Earley parser, we need to add the initial state
   to the history_states[0], and perform prediction and completion on the initial state.
 */
-bool EarleyParser::Advance(const uint8_t& ch) {
+bool EarleyParser::Advance(const uint8_t ch) {
   // Initialize the containers.
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty())
       << "The tmp_process_state_queue_ should be empty before the scan.";
@@ -230,7 +230,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
 }
 
 EarleyParser::EarleyParser(
-    const Grammar& grammar, const ParserState& init_state, const bool& need_expand
+    const Grammar& grammar, const ParserState& init_state, const bool need_expand
 )
     : grammar_(grammar) {
   // Check if the initial state is valid. If invalid, then we choose the root state as default.
@@ -422,7 +422,7 @@ void EarleyParser::ExpandNextRuleRefElement(
 }
 
 void EarleyParser::AdvanceByteString(
-    const ParserState& state, const uint8_t& ch, const RuleExpr& sub_rule
+    const ParserState& state, const uint8_t ch, const RuleExpr& sub_rule
 ) {
   XGRAMMAR_DCHECK(sub_rule.type == RuleExprType::kByteString);
   XGRAMMAR_DCHECK(sub_rule.size() > state.sub_element_id);
@@ -441,7 +441,7 @@ void EarleyParser::AdvanceByteString(
 }
 
 void EarleyParser::AdvanceCharacterClass(
-    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& sub_sequence
+    const ParserState& state, const uint8_t ch, const Grammar::Impl::RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClass)
       << "The element type is not supported!";
@@ -499,7 +499,7 @@ void EarleyParser::AdvanceCharacterClass(
 }
 
 void EarleyParser::AdvanceCharacterClassStar(
-    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& sub_sequence
+    const ParserState& state, const uint8_t ch, const Grammar::Impl::RuleExpr& sub_sequence
 ) {
   XGRAMMAR_DCHECK(sub_sequence.type == RuleExprType::kCharacterClassStar)
       << "The element type is not supported!";
@@ -549,7 +549,7 @@ void EarleyParser::AdvanceCharacterClassStar(
 }
 
 void EarleyParser::AdvanceTagDispatch(
-    const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& cur_sequence
+    const ParserState& state, const uint8_t ch, const Grammar::Impl::RuleExpr& cur_sequence
 ) {
   const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
   if (!root_tag_dispatch_fsm) {
