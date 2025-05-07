@@ -34,12 +34,11 @@ void EarleyParser::PopLastStates(int32_t cnt) {
 bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr) {
   // Check if a rule is completed.
   if (state.input_pos == ParserState::kNoPrevInputPos) {
+    // assert: if a root rule can achieve here, then it must be completed.
     XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
-    if (state.element_id == rule_expr.size()) {
-      tmp_accept_stop_token_ = true;
-      return false;
-    }
-    return true;
+    XGRAMMAR_DCHECK(rule_expr.size() == state.element_id);
+    tmp_accept_stop_token_ = true;
+    return false;
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
