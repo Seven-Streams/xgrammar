@@ -343,7 +343,7 @@ void EarleyParser::ExpandNextRuleRefElement(
   int ref_rule_id;
   if (rule_expr.type == RuleExprType::kTagDispatch) {
     XGRAMMAR_DCHECK(grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id));
-    ref_rule_id = grammar_->tag_dispatch_end_node_to_rule_id.at(state.element_id);
+    ref_rule_id = grammar_->tag_dispatch_end_node_to_rule_id[state.element_id];
   } else {
     XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
     XGRAMMAR_DCHECK(sub_rule_expr->type == RuleExprType::kRuleRef);
@@ -414,7 +414,9 @@ void EarleyParser::ExpandNextRuleRefElement(
       );
       continue;
     }
-    Enque(ParserState{
+    // Assert: the state can't be repeated. Since the input_pos is the current
+    // position, and the rule can only be predicted once.
+    tmp_process_state_queue_.push(ParserState{
         ref_rule_id, sequence_id, 0, int32_t(rule_id_to_completeable_states_.size()) - 1, 0
     });
   }
