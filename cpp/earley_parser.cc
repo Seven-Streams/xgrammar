@@ -14,6 +14,30 @@
 
 namespace xgrammar {
 
+int GetUT8Length(uint8_t byte) {
+  // clang-format off
+  static const std::array<int, 256> kUtf8Bytes = {
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+     2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+     2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,
+     3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,
+    4,  4,  4,  4,  4,  4,  4,  4, -1, -1, -1, -1, -1, -1, -1, -1,
+  };
+  // clang-format on
+  return kUtf8Bytes[static_cast<uint8_t>(byte)];
+}
+
 using RuleExprType = Grammar::Impl::RuleExprType;
 
 using RuleExpr = Grammar::Impl::RuleExpr;
@@ -465,8 +489,8 @@ void EarleyParser::AdvanceCharacterClass(
     return;
   }
 
-  auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-  if (!accepted) {
+  const auto& num_bytes = GetUT8Length(ch);
+  if (num_bytes == -1) {
     return;
   }
   bool is_negative = static_cast<bool>(sub_sequence[0]);
@@ -524,8 +548,8 @@ void EarleyParser::AdvanceCharacterClassStar(
     return;
   }
 
-  auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-  if (!accepted) {
+  const auto& num_bytes = GetUT8Length(ch);
+  if (num_bytes == -1) {
     return;
   }
   bool is_negative = static_cast<bool>(sub_sequence[0]);
