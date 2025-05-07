@@ -361,7 +361,7 @@ void EarleyParser::ExpandNextRuleRefElement(
     // If it's the right recursion, we need to add the ancestors of the parent state.
     auto& states_map = rule_id_to_completeable_states_.back();
     auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
-    auto parent_state_iter = parent_states_map.find(state.rule_id);
+    auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
     for (;
          parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
          parent_state_iter++) {
