@@ -42,7 +42,7 @@ bool EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
     return true;
   }
   // Check all the possible parent states.
-  const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
+  const auto& parent_states_map = *rule_id_to_completeable_states_[state.input_pos];
   auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
   for (; parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
@@ -210,7 +210,9 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   }
 
   // execute Predict and Complete for all states in the queue until empty.
-  rule_id_to_completeable_states_.emplace_back();
+  rule_id_to_completeable_states_.push_back(
+      std::make_unique<std::multimap<int32_t, ParserState>>(std::multimap<int, ParserState>())
+  );
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
@@ -251,7 +253,9 @@ EarleyParser::EarleyParser(
   // If there is no need to expand the initial state, we only need to add it to the
   // scanable states history.
   if (!need_expand) {
-    rule_id_to_completeable_states_.emplace_back();
+    rule_id_to_completeable_states_.push_back(
+        std::make_unique<std::multimap<int32_t, ParserState>>(std::multimap<int, ParserState>())
+    );
     can_accept_stop_token_.push_back(false);
     scanable_state_history_.PushBack({init});
   }
@@ -264,7 +268,9 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_states_visited_in_queue_.Clear();
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
-  rule_id_to_completeable_states_.emplace_back();
+  rule_id_to_completeable_states_.push_back(
+      std::make_unique<std::multimap<int32_t, ParserState>>(std::multimap<int, ParserState>())
+  );
   if (state.IsInvalid()) {
     ExpandAndEnqueueUnexpandedState(ParserState{
         grammar_->GetRootRuleId(),
@@ -355,12 +361,12 @@ void EarleyParser::ExpandNextRuleRefElement(
   if ((state.element_id != rule_expr.size() - 1) ||
       state.input_pos == ParserState::kNoPrevInputPos) {
     // It's not the right recursion, or it's the root rule.
-    auto& states_map = rule_id_to_completeable_states_.back();
+    auto& states_map = *rule_id_to_completeable_states_.back();
     states_map.insert({ref_rule_id, state});
   } else {
     // If it's the right recursion, we need to add the ancestors of the parent state.
-    auto& states_map = rule_id_to_completeable_states_.back();
-    auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
+    auto& states_map = *rule_id_to_completeable_states_.back();
+    auto& parent_states_map = *rule_id_to_completeable_states_[state.input_pos];
     auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
     for (;
          parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
