@@ -562,7 +562,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
 
     XGRAMMAR_DCHECK(rule_body.type == RuleExprType::kChoices);
     for (auto sequence_id : rule_body) {
-      auto sequence = grammar->GetRuleExpr(sequence_id);
+      const auto& sequence = grammar->GetRuleExpr(sequence_id);
       if (sequence.type == RuleExprType::kEmptyStr) {
         continue;
       }
@@ -570,10 +570,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
       auto state = ParserState(rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0);
       for (int element_id = 0; element_id < sequence.size(); ++element_id) {
         state.element_id = element_id;
-        auto element = grammar->GetRuleExpr(sequence[element_id]);
-        if (element.type == RuleExprType::kRuleRef) {
-          continue;
-        }
+        const auto& element = grammar->GetRuleExpr(sequence[element_id]);
         if (element.type == RuleExprType::kByteString) {
           for (int idx = 0; idx < element.size(); ++idx) {
             state.sub_element_id = idx;
