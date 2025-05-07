@@ -5,14 +5,12 @@ import time
 from typing import List, Optional
 
 import pytest
-import torch
 from transformers import AutoTokenizer
 
 import xgrammar as xgr
 from xgrammar.testing import (
     _get_masked_tokens_from_bitmask,
     _get_matcher_from_grammar_and_tokenizer_info,
-    _is_grammar_accept_string,
 )
 
 tokenizer_path__input_str__expected_rejected_sizes = [
