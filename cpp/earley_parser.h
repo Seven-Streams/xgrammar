@@ -348,8 +348,8 @@ class EarleyParser {
   /*!
     \brief Check whether any of the multiple states stored in the parser has already completed.
     \note Since the parser contains multiple parallel states, some may have already completed, while
-    others might still be able to accept more characters. \return True if the root rule is
-    completed, false otherwise.
+    others might still be able to accept more characters.
+    \return True if the root rule is completed, false otherwise.
   */
   bool IsCompleted() const;
 
