@@ -204,6 +204,9 @@ class EarleyParser {
   /*! The class is used to check if a state has been added into the queue.*/
   RepeatDetector tmp_states_visited_in_queue_;
 
+  /*! \brief The set of the expanded rules, used for preventing repeatation.*/
+  std::unordered_set<int32_t> tmp_expanded_rule_set_;
+
   /*!
   \brief Check if the state has been added into the queue.
   \param state The state to check.

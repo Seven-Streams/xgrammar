@@ -195,6 +195,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty())
       << "The tmp_process_state_queue_ should be empty before the scan.";
   tmp_states_visited_in_queue_.Clear();
+  tmp_expanded_rule_set_.clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
   const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
@@ -262,6 +263,7 @@ EarleyParser::EarleyParser(
 
 void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_states_visited_in_queue_.Clear();
+  tmp_expanded_rule_set_.clear();
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
   rule_id_to_completeable_states_.emplace_back();
@@ -379,7 +381,7 @@ void EarleyParser::ExpandNextRuleRefElement(
   }
 
   // Check if the reference rule is already visited.
-  if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
+  if (tmp_expanded_rule_set_.find(ref_rule_id) != tmp_expanded_rule_set_.end()) {
     if (std::find(
             grammar_->allow_empty_rule_ids.begin(),
             grammar_->allow_empty_rule_ids.end(),
@@ -403,7 +405,7 @@ void EarleyParser::ExpandNextRuleRefElement(
   }
 
   // If the reference rule is not visited, we need to add it to the queue.
-  tmp_states_visited_in_queue_.Insert({ref_rule_id, -1, -1, -1, -1});
+  tmp_expanded_rule_set_.insert(ref_rule_id);
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_rule_expr_id = ref_rule.body_expr_id;
   const auto& ref_rule_expr = grammar_->GetRuleExpr(ref_rule_expr_id);
