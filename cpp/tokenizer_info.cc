@@ -360,7 +360,7 @@ TokenizerInfo::Impl::Impl(
 
   auto f_compare_token = [](const std::pair<int32_t, std::string>& a,
                             const std::pair<int32_t, std::string>& b) {
-    return a.second < b.second;
+    return a.second > b.second;
   };
   std::sort(sorted_decoded_vocab_.begin(), sorted_decoded_vocab_.end(), f_compare_token);
 }
