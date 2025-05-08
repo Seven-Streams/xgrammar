@@ -554,10 +554,8 @@ void EarleyParser::AdvanceTagDispatch(
     const ParserState& state, const uint8_t& ch, const RuleExpr& cur_sequence
 ) {
   const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
-  if (!root_tag_dispatch_fsm) {
-    XGRAMMAR_LOG(FATAL) << "The grammar does not have a root tag dispatch rule; it is not built.";
-    XGRAMMAR_UNREACHABLE();
-  }
+  XGRAMMAR_DCHECK(root_tag_dispatch_fsm)
+      << "The grammar does not have a root tag dispatch rule; it is not built.";
   const auto& start_node = root_tag_dispatch_fsm->StartNode();
   const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
   auto new_state = state;
