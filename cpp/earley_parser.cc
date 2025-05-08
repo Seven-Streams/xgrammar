@@ -425,7 +425,7 @@ void EarleyParser::AdvanceByteString(
 ) {
   XGRAMMAR_DCHECK(sub_rule.type == RuleExprType::kByteString);
   XGRAMMAR_DCHECK(sub_rule.size() > state.sub_element_id);
-  if (sub_rule[state.sub_element_id] == ch) {
+  if (static_cast<uint8_t>(sub_rule[state.sub_element_id]) == ch) {
     auto new_state = state;
     new_state.sub_element_id++;
     if (new_state.sub_element_id == sub_rule.size()) {
@@ -482,7 +482,8 @@ void EarleyParser::AdvanceCharacterClass(
   }
 
   for (int i = 1; i < sub_sequence.size(); i += 2) {
-    if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
+    if (static_cast<uint8_t>(sub_sequence[i]) <= ch &&
+        ch <= static_cast<uint8_t>(sub_sequence[i + 1])) {
       if (!is_negative) {
         auto new_state = state;
         new_state.element_id++;
@@ -538,7 +539,8 @@ void EarleyParser::AdvanceCharacterClassStar(
   }
 
   for (int i = 1; i < sub_sequence.size(); i += 2) {
-    if (sub_sequence[i] <= ch && ch <= sub_sequence[i + 1]) {
+    if (static_cast<uint8_t>(sub_sequence[i]) <= ch &&
+        ch <= static_cast<uint8_t>(sub_sequence[i + 1])) {
       if (!is_negative) {
         Enque(state);
       }
