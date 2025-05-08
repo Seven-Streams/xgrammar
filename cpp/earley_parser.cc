@@ -431,7 +431,8 @@ void EarleyParser::AdvanceByteString(
     if (new_state.sub_element_id == sub_rule.size()) {
       new_state.element_id++;
       new_state.sub_element_id = 0;
-      Enque(new_state);
+      tmp_process_state_queue_.push(new_state);
+      // Assert: In a sequence, the bytestring can't be skipped. So the state can't be repeated.
     } else {
       tmp_states_to_be_added_.push_back(new_state);
     }
@@ -454,7 +455,9 @@ void EarleyParser::AdvanceCharacterClass(
       if (new_state.sub_element_id == 0) {
         new_state.element_id++;
         // Check if the sequence is completed.
-        Enque(new_state);
+        tmp_process_state_queue_.push(new_state);
+        // Assert: In a sequence, the CharacterClass can't be skipped. So the state can't be
+        // repeated. the fllowing tmp_process_state_queue_.push(new_state) is for the same reason.
       } else {
         tmp_states_to_be_added_.push_back(new_state);
       }
@@ -484,7 +487,7 @@ void EarleyParser::AdvanceCharacterClass(
         auto new_state = state;
         new_state.element_id++;
         new_state.sub_element_id = 0;
-        Enque(new_state);
+        tmp_process_state_queue_.push(new_state);
       }
       return;
     }
@@ -493,7 +496,7 @@ void EarleyParser::AdvanceCharacterClass(
     auto new_state = state;
     new_state.element_id++;
     new_state.sub_element_id = 0;
-    Enque(new_state);
+    tmp_process_state_queue_.push(new_state);
   }
 }
 
