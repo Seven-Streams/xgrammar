@@ -569,7 +569,7 @@ void EarleyParser::AdvanceTagDispatch(
     new_state.element_id =
         new_next_node == CompactFSMWithStartEnd::NO_TRANSITION ? start_node : new_next_node;
     if (root_tag_dispatch_fsm->IsEndNode(new_state.element_id)) {
-      Enque(new_state);
+      tmp_process_state_queue_.push(new_state);
     } else {
       tmp_accept_stop_token_ = true;
       tmp_states_to_be_added_.push_back(new_state);
@@ -579,7 +579,7 @@ void EarleyParser::AdvanceTagDispatch(
     // We need to update the element id to the next node.
     new_state.element_id = next_node;
     if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
-      Enque(new_state);
+      tmp_process_state_queue_.push(new_state);
     } else {
       tmp_accept_stop_token_ = true;
       tmp_states_to_be_added_.push_back(new_state);
