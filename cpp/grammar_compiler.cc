@@ -326,12 +326,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
             CompareIntStringPair()
         );
         end_pos = last_same_token - sorted_decoded_vocab.begin();
-        for (int i = 0; i < start_pos; i++) {
-          tmp_rejected_indices_.push_back(i);
-        }
-        for (size_t i = end_pos; i < sorted_decoded_vocab.size(); i++) {
-          tmp_rejected_indices_.push_back(i);
-        }
         break;
       }
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
@@ -359,12 +353,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
             CompareIntStringPair()
         );
         end_pos = last_same_token - sorted_decoded_vocab.begin();
-        for (int i = 0; i < start_pos; i++) {
-          tmp_rejected_indices_.push_back(i);
-        }
-        for (size_t i = end_pos; i < sorted_decoded_vocab.size(); i++) {
-          tmp_rejected_indices_.push_back(i);
-        }
         break;
       }
       default: {
@@ -374,6 +362,10 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   }
 
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
+    if (i < start_pos || i >= end_pos) {
+      tmp_rejected_indices_.push_back(i);
+      continue;
+    }
     const auto& token = sorted_decoded_vocab[i].second;
     bool accepted = true;
 
