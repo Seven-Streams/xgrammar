@@ -416,7 +416,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     if (accepted) {
       tmp_accepted_indices_.push_back(i);
     } else if (can_reach_end && !is_root_rule &&
-               IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
+               IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) &&
+               prev_matched_size > 0) {
       ;
       // 1. If the current rule is the root rule (is_root_rule=true), there are no
       // uncertain tokens. Not accepted tokens are just rejected.
