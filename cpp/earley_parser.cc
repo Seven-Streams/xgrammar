@@ -454,7 +454,6 @@ void EarleyParser::AdvanceCharacterClass(
       // Check if the UTF8 character is completed.
       if (new_state.sub_element_id == 0) {
         new_state.element_id++;
-        // Check if the sequence is completed.
         tmp_process_state_queue_.push(new_state);
         // Assert: In a sequence, the CharacterClass can't be skipped. So the state can't be
         // repeated. the fllowing tmp_process_state_queue_.push(new_state) is for the same reason.

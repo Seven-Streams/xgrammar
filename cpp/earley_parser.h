@@ -66,7 +66,7 @@ struct ParserState {
   static constexpr int32_t kNoPrevInputPos = -1;
 
   /*! \brief A sequence_id value of kInvalid means the ParserState is invalid.*/
-  static constexpr int32_t kInvalid = -2;
+  static constexpr int32_t kInvalid = -1;
 
   /*! \brief The rule's id.*/
   int32_t rule_id = -1;
