@@ -309,29 +309,29 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     const auto& sub_sequence = grammar_->GetRuleExpr(sequence[init_state.element_id]);
     switch (sub_sequence.type) {
       case Grammar::Impl::RuleExprType::kByteString: {
-        // std::string accepted_token_prefix;
-        // accepted_token_prefix += sub_sequence[init_state.sub_element_id];
-        // const auto& first_same_token = std::lower_bound(
-        //     sorted_decoded_vocab.begin() + start_pos,
-        //     sorted_decoded_vocab.begin() + end_pos,
-        //     std::make_pair(0, accepted_token_prefix),
-        //     CompareIntStringPair()
-        // );
-        // start_pos = first_same_token - sorted_decoded_vocab.begin();
-        // accepted_token_prefix = (sub_sequence[init_state.sub_element_id] + 1);
-        // const auto& last_same_token = std::lower_bound(
-        //     sorted_decoded_vocab.begin() + start_pos,
-        //     sorted_decoded_vocab.begin() + end_pos,
-        //     std::make_pair(0, accepted_token_prefix),
-        //     CompareIntStringPair()
-        // );
-        // end_pos = last_same_token - sorted_decoded_vocab.begin();
-        // for (int i = 0; i < start_pos; i++) {
-        //   tmp_rejected_indices_.push_back(i);
-        // }
-        // for (size_t i = end_pos; i < sorted_decoded_vocab.size(); i++) {
-        //   tmp_rejected_indices_.push_back(i);
-        // }
+        std::string accepted_token_prefix;
+        accepted_token_prefix += sub_sequence[init_state.sub_element_id];
+        const auto& first_same_token = std::lower_bound(
+            sorted_decoded_vocab.begin() + start_pos,
+            sorted_decoded_vocab.begin() + end_pos,
+            std::make_pair(0, accepted_token_prefix),
+            CompareIntStringPair()
+        );
+        start_pos = first_same_token - sorted_decoded_vocab.begin();
+        accepted_token_prefix = (sub_sequence[init_state.sub_element_id] + 1);
+        const auto& last_same_token = std::lower_bound(
+            sorted_decoded_vocab.begin() + start_pos,
+            sorted_decoded_vocab.begin() + end_pos,
+            std::make_pair(0, accepted_token_prefix),
+            CompareIntStringPair()
+        );
+        end_pos = last_same_token - sorted_decoded_vocab.begin();
+        for (int i = 0; i < start_pos; i++) {
+          tmp_rejected_indices_.push_back(i);
+        }
+        for (size_t i = end_pos; i < sorted_decoded_vocab.size(); i++) {
+          tmp_rejected_indices_.push_back(i);
+        }
         break;
       }
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
@@ -373,7 +373,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     }
   }
 
-  for (int i = start_pos; i < end_pos; ++i) {
+  for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
     const auto& token = sorted_decoded_vocab[i].second;
     bool accepted = true;
 
