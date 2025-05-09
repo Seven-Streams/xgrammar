@@ -659,8 +659,14 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
               element.type == RuleExprType::kCharacterClassStar ||
               element.type == RuleExprType::kCharacterClass
           );
-          for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
-            state.sub_element_id = left_utf8_bytes;
+          bool negative = element[0];
+          if (negative) {
+            for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
+              state.sub_element_id = left_utf8_bytes;
+              add_task_adaptive_token_mask(state, rule_id == root_rule_id);
+            }
+          } else {
+            state.sub_element_id = 0;
             add_task_adaptive_token_mask(state, rule_id == root_rule_id);
           }
         }
