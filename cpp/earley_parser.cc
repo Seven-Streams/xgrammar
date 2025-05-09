@@ -121,7 +121,6 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
         Enque(
             ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
         );
-        tmp_states_visited_in_queue_.Insert(state);
         return std::make_pair(true, false);
       }
       return std::make_pair(true, false);
