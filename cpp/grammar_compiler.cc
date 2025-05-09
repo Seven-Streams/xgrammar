@@ -336,35 +336,35 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       }
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClassStar: {
-        if (init_state.sub_element_id == 0) {
-          break;
-        }
-        // Otherwise, it's matching a UTF-8 character. We can optimize the matching process
-        // here.
+        // if (init_state.sub_element_id == 0) {
+        //   break;
+        // }
+        // // Otherwise, it's matching a UTF-8 character. We can optimize the matching process
+        // // here.
 
-        std::string accepted_token_prefix;
-        accepted_token_prefix = 0x80;
-        const auto& first_same_token = std::lower_bound(
-            sorted_decoded_vocab.begin() + start_pos,
-            sorted_decoded_vocab.begin() + end_pos,
-            std::make_pair(0, accepted_token_prefix),
-            CompareIntStringPair()
-        );
-        start_pos = first_same_token - sorted_decoded_vocab.begin();
-        accepted_token_prefix = 0xc0;
-        const auto& last_same_token = std::lower_bound(
-            sorted_decoded_vocab.begin() + start_pos,
-            sorted_decoded_vocab.begin() + end_pos,
-            std::make_pair(0, accepted_token_prefix),
-            CompareIntStringPair()
-        );
-        end_pos = last_same_token - sorted_decoded_vocab.begin();
-        for (int i = 0; i < start_pos; i++) {
-          tmp_rejected_indices_.push_back(i);
-        }
-        for (size_t i = end_pos; i < sorted_decoded_vocab.size(); i++) {
-          tmp_rejected_indices_.push_back(i);
-        }
+        // std::string accepted_token_prefix;
+        // accepted_token_prefix = 0x80;
+        // const auto& first_same_token = std::lower_bound(
+        //     sorted_decoded_vocab.begin() + start_pos,
+        //     sorted_decoded_vocab.begin() + end_pos,
+        //     std::make_pair(0, accepted_token_prefix),
+        //     CompareIntStringPair()
+        // );
+        // start_pos = first_same_token - sorted_decoded_vocab.begin();
+        // accepted_token_prefix = 0xc0;
+        // const auto& last_same_token = std::lower_bound(
+        //     sorted_decoded_vocab.begin() + start_pos,
+        //     sorted_decoded_vocab.begin() + end_pos,
+        //     std::make_pair(0, accepted_token_prefix),
+        //     CompareIntStringPair()
+        // );
+        // end_pos = last_same_token - sorted_decoded_vocab.begin();
+        // for (int i = 0; i < start_pos; i++) {
+        //   tmp_rejected_indices_.push_back(i);
+        // }
+        // for (size_t i = end_pos; i < sorted_decoded_vocab.size(); i++) {
+        //   tmp_rejected_indices_.push_back(i);
+        // }
         break;
       }
       default: {
