@@ -121,7 +121,6 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
         Enque(
             ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
         );
-        tmp_states_visited_in_queue_.Insert(state);
         return std::make_pair(true, false);
       }
       return std::make_pair(true, false);
@@ -198,7 +197,10 @@ bool EarleyParser::Advance(const uint8_t& ch) {
 
   // Scan all the scanable states.
   for (const auto& state : latest_states) {
+    auto start = std::chrono::high_resolution_clock::now();
     Scan(state, ch);
+    auto end = std::chrono::high_resolution_clock::now();
+    scan_time_ += std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
   }
 
   // Check if the character is accepted.
@@ -212,9 +214,15 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
     RuleExpr rule_expr;
+    auto start = std::chrono::high_resolution_clock::now();
     auto [scanable, completable] = Predict(state, &rule_expr);
+    auto end = std::chrono::high_resolution_clock::now();
+    predict_time_ += std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
     if (completable) {
+      auto start = std::chrono::high_resolution_clock::now();
       Complete(state, rule_expr);
+      auto end = std::chrono::high_resolution_clock::now();
+      complete_time_ += std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
     }
     if (scanable) {
       tmp_states_to_be_added_.push_back(state);
