@@ -629,8 +629,10 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
     if (rule_body.type == RuleExprType::kTagDispatch) {
       auto state = ParserState(rule_id, rule.body_expr_id, 0, ParserState::kNoPrevInputPos, 0);
       for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
-        state.element_id = i;
-        add_task_adaptive_token_mask(state, rule_id == root_rule_id);
+        if (!grammar->root_tag_dispatch_fsm->IsEndNode(i)) {
+          state.element_id = i;
+          add_task_adaptive_token_mask(state, rule_id == root_rule_id);
+        }
       }
       continue;
     }
