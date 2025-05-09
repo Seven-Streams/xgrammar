@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <cassert>
 #include <cstddef>
 #include <utility>
 #include <variant>
@@ -383,7 +384,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     }
     const auto& token = sorted_decoded_vocab[i].second;
     if (character_class_mask_on) {
-      if (character_class_mask[token[0]] == false) {
+      if (character_class_mask[static_cast<uint8_t>(token[0])] == false) {
         tmp_rejected_indices_.push_back(i);
         continue;
       }
