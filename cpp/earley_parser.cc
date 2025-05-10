@@ -113,7 +113,6 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
     if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
       Enque(ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
       );
-      return std::make_pair(true, false);
     }
     return std::make_pair(true, false);
   }
@@ -413,7 +412,7 @@ void EarleyParser::AdvanceByteString(
     if (new_state.sub_element_id == sub_rule.size()) {
       new_state.element_id++;
       new_state.sub_element_id = 0;
-      tmp_process_state_queue_.push(new_state);
+      Enque(new_state);
       // Assert: In a sequence, the bytestring can't be skipped. So the state can't be repeated.
     } else {
       tmp_states_to_be_added_.push_back(new_state);
@@ -436,7 +435,7 @@ void EarleyParser::AdvanceCharacterClass(
       // Check if the UTF8 character is completed.
       if (new_state.sub_element_id == 0) {
         new_state.element_id++;
-        tmp_process_state_queue_.push(new_state);
+        Enque(new_state);
         // Assert: In a sequence, the CharacterClass can't be skipped. So the state can't be
         // repeated. the fllowing tmp_process_state_queue_.push(new_state) is for the same reason.
       } else {
@@ -469,7 +468,7 @@ void EarleyParser::AdvanceCharacterClass(
         auto new_state = state;
         new_state.element_id++;
         new_state.sub_element_id = 0;
-        tmp_process_state_queue_.push(new_state);
+        Enque(new_state);
       }
       return;
     }
@@ -478,7 +477,7 @@ void EarleyParser::AdvanceCharacterClass(
     auto new_state = state;
     new_state.element_id++;
     new_state.sub_element_id = 0;
-    tmp_process_state_queue_.push(new_state);
+    Enque(new_state);
   }
 }
 
