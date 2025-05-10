@@ -96,43 +96,26 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
       tmp_accept_stop_token_ = true;
       return std::make_pair(true, false);
     }
+    // A tag has is dispatched.
+    ExpandNextRuleRefElement(state, cur_rule, nullptr);
+    return std::make_pair(false, false);
   } else {
-    // If the current state is the end of the rule, we do not need to predict,
-    // since the rule is already completed.
+    XGRAMMAR_DCHECK(cur_rule.type == RuleExprType::kSequence);
     if (state.element_id == cur_rule.size()) {
+      // The rule is completed.
       return std::make_pair(false, true);
     }
-  }
-  switch (cur_rule.type) {
-    // If the type is kSequence, then it should be a sequence consisting of:
-    // - kByteString
-    // - kCharacterClass
-    // - kCharacterClassStar
-    // - RuleRef
-    // RuleRef and CharacterClassStar need to be predicted,
-    // and the others only need to be completed or scanned.
-    case RuleExprType::kSequence: {
-      const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
-      if (element_expr.type == RuleExprType::kRuleRef) {
-        ExpandNextRuleRefElement(state, cur_rule, &element_expr);
-        return std::make_pair(false, false);
-      }
-      if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
-        Enque(
-            ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
-        );
-        return std::make_pair(true, false);
-      }
+    const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
+    if (element_expr.type == RuleExprType::kRuleRef) {
+      ExpandNextRuleRefElement(state, cur_rule, &element_expr);
+      return std::make_pair(false, false);
+    }
+    if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
+      Enque(ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+      );
       return std::make_pair(true, false);
     }
-    case RuleExprType::kTagDispatch: {
-      // A tag has is dispatched.
-      ExpandNextRuleRefElement(state, cur_rule, nullptr);
-      return std::make_pair(false, false);
-    }
-    default: {
-      return std::make_pair(false, false);
-    }
+    return std::make_pair(true, false);
   }
 }
 
