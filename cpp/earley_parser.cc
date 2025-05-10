@@ -1,6 +1,7 @@
 #include "earley_parser.h"
 
 #include <cassert>
+#include <cctype>
 #include <cstdint>
 #include <unordered_map>
 #include <utility>
@@ -444,20 +445,22 @@ void EarleyParser::AdvanceCharacterClass(
     }
     return;
   }
-
-  auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-  if (!accepted) {
-    return;
-  }
   bool is_negative = static_cast<bool>(sub_sequence[0]);
 
-  // A new UTF8 character is accepted.
-  if (num_bytes > 1) {
-    if (is_negative) {
-      auto new_state = state;
-      new_state.sub_element_id = num_bytes - 1;
-      tmp_states_to_be_added_.push_back(new_state);
+  if (!isascii(ch)) {
+    if (!is_negative) {
+      return;
     }
+    auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+    if (!accepted) {
+      return;
+    }
+
+    // A new UTF8 character is accepted.
+    XGRAMMAR_DCHECK(num_bytes > 1);
+    auto new_state = state;
+    new_state.sub_element_id = num_bytes - 1;
+    tmp_states_to_be_added_.push_back(new_state);
     return;
   }
 
@@ -501,20 +504,20 @@ void EarleyParser::AdvanceCharacterClassStar(
     }
     return;
   }
-
-  auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-  if (!accepted) {
-    return;
-  }
   bool is_negative = static_cast<bool>(sub_sequence[0]);
-
-  // A new UTF8 character is accepted.
-  if (num_bytes > 1) {
-    if (is_negative) {
-      auto new_state = state;
-      new_state.sub_element_id = num_bytes - 1;
-      tmp_states_to_be_added_.push_back(new_state);
+  if (!isascii(ch)) {
+    if (!is_negative) {
+      return;
     }
+    auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+    if (!accepted) {
+      return;
+    }
+    // A new UTF8 character is accepted.
+    XGRAMMAR_DCHECK(num_bytes > 1);
+    auto new_state = state;
+    new_state.sub_element_id = num_bytes - 1;
+    tmp_states_to_be_added_.push_back(new_state);
     return;
   }
 
