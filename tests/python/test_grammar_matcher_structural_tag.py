@@ -259,6 +259,7 @@ def test_structural_tag_mask_gen():
     # Set up token bitmask for validation
     token_bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
 
+    fill_time_start = time.monotonic_ns()
     # Process input character by character
     for i, c in enumerate(input_bytes):
         # 1. Test token bitmask generation
@@ -287,8 +288,10 @@ def test_structural_tag_mask_gen():
     time_start = time.monotonic_ns()
     need_apply = matcher.fill_next_token_bitmask(token_bitmask)
     time_end = time.monotonic_ns()
+    time_fill_end = time.monotonic_ns()
     assert need_apply == (len(input_bytes) not in dont_apply_mask_indices)
     print(f"Time to fill_next_token_bitmask: {(time_end - time_start) / 1e3} us")
+    print(f"Time of all the fill_next_token_bitmask: {(time_fill_end - fill_time_start) / 1e3} us")
     rejected_token_ids = _get_masked_tokens_from_bitmask(token_bitmask, tokenizer_info.vocab_size)
     assert tokenizer.eos_token_id not in rejected_token_ids
 
