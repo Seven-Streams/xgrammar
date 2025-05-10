@@ -381,6 +381,7 @@ def test_mask_generation_format(value: str, format: str):
     matcher = xgr.GrammarMatcher(compiled_grammar)
     token_bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
 
+    fill_time_start = time.monotonic_ns()
     for c in instance.encode("utf-8"):
         time_start = time.monotonic_ns()
         matcher.fill_next_token_bitmask(token_bitmask)
@@ -393,8 +394,9 @@ def test_mask_generation_format(value: str, format: str):
     time_start = time.monotonic_ns()
     matcher.fill_next_token_bitmask(token_bitmask)
     time_end = time.monotonic_ns()
+    fill_time_end = time.monotonic_ns()
     print(f"Time for fill_next_token_bitmask: {(time_end - time_start) / 1e3} us")
-
+    print(f"Time of all the fill_next_token_bitmask: {(fill_time_end - fill_time_start) / 1e3} us")
     assert matcher.accept_token(tokenizer.eos_token_id)
     assert matcher.is_terminated()
 
