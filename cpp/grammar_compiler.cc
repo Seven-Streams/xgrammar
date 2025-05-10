@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <variant>
 
@@ -318,7 +319,15 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
             CompareIntStringPair()
         );
         start_pos = first_same_token - sorted_decoded_vocab.begin();
-        accepted_token_prefix = (sub_sequence[init_state.sub_element_id] + 1);
+        for (int i = init_state.sub_element_id + 1; i < sub_sequence.size(); ++i) {
+          accepted_token_prefix += sub_sequence[i];
+        }
+        uint8_t last_char = sub_sequence[sub_sequence.size() - 1];
+        if (last_char == 0xff) {
+          accepted_token_prefix += char(0x00);
+        } else {
+          accepted_token_prefix[accepted_token_prefix.size() - 1] = last_char + 1;
+        }
         const auto& last_same_token = std::lower_bound(
             sorted_decoded_vocab.begin() + start_pos,
             sorted_decoded_vocab.begin() + end_pos,
