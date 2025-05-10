@@ -340,6 +340,16 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClassStar: {
         if (init_state.sub_element_id == 0) {
+          bool is_negative = sub_sequence[0];
+          if (!is_negative) {
+            const auto& first_not_ascii_token = std::lower_bound(
+                sorted_decoded_vocab.begin() + start_pos,
+                sorted_decoded_vocab.begin() + end_pos,
+                std::make_pair(0, std::string(1, 0x80)),
+                CompareIntStringPair()
+            );
+            end_pos = first_not_ascii_token - sorted_decoded_vocab.begin();
+          }
           break;
         }
         // Otherwise, it's matching a UTF-8 character. We can optimize the matching process
