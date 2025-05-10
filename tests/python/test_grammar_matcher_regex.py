@@ -143,6 +143,7 @@ def test_fill_next_token_bitmask(regex: str, input_str: str):
     input_bytes = input_str.encode("utf-8")
     token_bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
 
+    fill_time_start = time.monotonic_ns()
     for c in input_bytes:
         time_start = time.monotonic_ns()
         assert matcher.fill_next_token_bitmask(token_bitmask)
@@ -155,6 +156,8 @@ def test_fill_next_token_bitmask(regex: str, input_str: str):
         print(f"Time to accept char {chr(c)}: {(time_end - time_start) / 1e3} us")
 
     matcher.fill_next_token_bitmask(token_bitmask)
+    fill_time_end = time.monotonic_ns()
+    print(f"Time of all the fill_next_token_bitmask: {(fill_time_end - fill_time_start) / 1e3} us")
     rejected_token_ids = _get_masked_tokens_from_bitmask(token_bitmask, tokenizer_info.vocab_size)
     assert tokenizer.eos_token_id not in rejected_token_ids
 

@@ -364,6 +364,7 @@ def test_fill_next_token_bitmask(
 
     input_bytes = input_str.encode("utf-8")
 
+    fill_time_start = time.monotonic_ns()
     for i, c in enumerate(input_bytes):
         # 1. fill_next_token_bitmask
         time_start = time.monotonic_ns()
@@ -396,6 +397,8 @@ def test_fill_next_token_bitmask(
 
     # 5. Final correctness verification
     matcher.fill_next_token_bitmask(token_bitmask)
+    fill_time_end = time.monotonic_ns()
+    print(f"Time of all the fill_next_token_bitmask: {(fill_time_end - fill_time_start) / 1e3} us")
     rejected_token_ids = _get_masked_tokens_from_bitmask(token_bitmask, tokenizer_info.vocab_size)
     assert len(rejected_token_ids) == expected_rejected_sizes[-1]
 
