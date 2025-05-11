@@ -525,9 +525,6 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
   }
 
   for (auto ParserState : latest_states) {
-    if (ParserState.sequence_id == ParserState::kUnexpandedRuleStartSequenceId) {
-      continue;
-    }
     auto cur_sequence = grammar_->GetRuleExpr(ParserState.sequence_id);
     XGRAMMAR_DCHECK(!(
         cur_sequence.type == RuleExprType::kRuleRef ||
@@ -536,9 +533,6 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     if (cur_sequence.type == RuleExprType::kTagDispatch) {
       have_tag_dispatch = true;
     } else {
-      if (cur_sequence.size() == ParserState.element_id) {
-        continue;
-      }
       XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
     }
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(ParserState);
@@ -672,14 +666,11 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
         break;
       }
       // The ParserState comes to the end of the grammar
-      if (ParserState.element_id == cur_sequence.size()) {
-        continue;
-      }
-      if (cur_sequence.type == RuleExprType::kChoices ||
-          cur_sequence.type == RuleExprType::kEmptyStr) {
-        continue;
-      }
-      XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
+      XGRAMMAR_DCHECK(ParserState.element_id != cur_sequence.size());
+      XGRAMMAR_DCHECK(
+          cur_sequence.type != RuleExprType::kChoices &&
+          cur_sequence.type != RuleExprType::kEmptyStr
+      );
       const auto& cur_element = grammar_->GetRuleExpr(cur_sequence[ParserState.element_id]);
       if (cur_element.type == RuleExprType::kByteString) {
         XGRAMMAR_DCHECK(ParserState.sub_element_id < cur_element.size());
