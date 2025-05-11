@@ -6,6 +6,7 @@
 #include <xgrammar/compiler.h>
 
 #include <algorithm>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
@@ -302,6 +303,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   // the rule when matching until this character. Store it in a stack for later rollback.
   tmp_can_reach_end_stack_.assign({IsCompleted()});
   tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
+  std::bitset<256> character_class_mask;
+  bool character_class_is_on = false;
   int prev_matched_size = 0;
   int start_pos = 0;
   int end_pos = sorted_decoded_vocab.size();
@@ -341,14 +344,16 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClassStar: {
         if (init_state.sub_element_id == 0) {
           bool is_negative = sub_sequence[0];
-          if (!is_negative) {
-            const auto& first_not_ascii_token = std::lower_bound(
-                sorted_decoded_vocab.begin() + start_pos,
-                sorted_decoded_vocab.begin() + end_pos,
-                std::make_pair(0, std::string(1, 0x80)),
-                CompareIntStringPair()
-            );
-            end_pos = first_not_ascii_token - sorted_decoded_vocab.begin();
+          character_class_is_on = true;
+          for (int i = 1; i < sub_sequence.size(); i += 2) {
+            uint8_t left_char = sub_sequence[i];
+            uint8_t right_char = sub_sequence[i + 1];
+            for (uint8_t c = left_char; c <= right_char; ++c) {
+              character_class_mask[c] = true;
+            }
+          }
+          if (is_negative) {
+            character_class_mask = ~character_class_mask;
           }
           break;
         }
@@ -380,6 +385,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     }
   }
 
+  bool first_accept_token = true;
+
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
     if (i < start_pos || i >= end_pos) {
       tmp_rejected_indices_.push_back(i);
@@ -388,9 +395,17 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     const auto& token = sorted_decoded_vocab[i].second;
     bool accepted = true;
 
+    if (character_class_is_on) {
+      uint8_t first_char = token[0];
+      if (!character_class_mask[first_char]) {
+        accepted = false;
+        tmp_rejected_indices_.push_back(i);
+        continue;
+      }
+    }
     // Many tokens may contain the same prefix, so we will avoid unnecessary matching
     // by finding the longest common prefix with the previous token.
-    if (i != start_pos) {
+    if (!first_accept_token) {
       const auto& prev_token = sorted_decoded_vocab[i - 1].second;
       int lcp_len =
           std::mismatch(token.begin(), token.end(), prev_token.begin(), prev_token.end()).first -
@@ -414,6 +429,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       }
       prev_matched_size = std::min(prev_matched_size, lcp_len);
     }
+
+    first_accept_token = false;
 
     if (accepted) {
       // Accept the rest chars one by one
