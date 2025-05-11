@@ -346,9 +346,9 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
           bool is_negative = sub_sequence[0];
           character_class_is_on = true;
           for (int i = 1; i < sub_sequence.size(); i += 2) {
-            uint8_t left_char = sub_sequence[i];
-            uint8_t right_char = sub_sequence[i + 1];
-            for (uint8_t c = left_char; c <= right_char; ++c) {
+            int left_char = static_cast<uint8_t>(sub_sequence[i]);
+            int right_char = static_cast<uint8_t>(sub_sequence[i + 1]);
+            for (int c = left_char; c <= right_char; ++c) {
               character_class_mask[c] = true;
             }
           }
