@@ -552,6 +552,9 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
     // Examine only the current one ParserState
     rule_id_to_completeable_states_.emplace_back();
+    characters_.push_back(0);
+    current_left_utf8_character_length_.push_back(0);
+    supposed_utf8_character_length_.push_back(0);
     can_accept_stop_token_.push_back(can_accept_stop_token_.back());
     scanable_state_history_.PushBack(&ParserState, 1);
 

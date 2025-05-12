@@ -204,6 +204,15 @@ class EarleyParser {
   /*! The class is used to check if a state has been added into the queue.*/
   RepeatDetector tmp_states_visited_in_queue_;
 
+  /*! \brief The characters have been accepted, used for UTF-8 charcters in character class.*/
+  std::vector<uint8_t> characters_;
+
+  /*! \brief Store the current character needs how many bytes to complete it.*/
+  std::vector<uint8_t> current_left_utf8_character_length_;
+
+  /*! \brief How many bytes are desired in the character.*/
+  std::vector<uint8_t> supposed_utf8_character_length_;
+
   /*!
   \brief Check if the state has been added into the queue.
   \param state The state to check.

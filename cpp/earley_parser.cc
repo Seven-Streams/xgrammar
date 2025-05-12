@@ -28,6 +28,13 @@ void EarleyParser::PopLastStates(int32_t cnt) {
   rule_id_to_completeable_states_.erase(
       rule_id_to_completeable_states_.end() - cnt, rule_id_to_completeable_states_.end()
   );
+  characters_.erase(characters_.end() - cnt, characters_.end());
+  current_left_utf8_character_length_.erase(
+      current_left_utf8_character_length_.end() - cnt, current_left_utf8_character_length_.end()
+  );
+  supposed_utf8_character_length_.erase(
+      supposed_utf8_character_length_.end() - cnt, supposed_utf8_character_length_.end()
+  );
   can_accept_stop_token_.erase(can_accept_stop_token_.end() - cnt, can_accept_stop_token_.end());
   scanable_state_history_.PopBack(cnt);
 }
@@ -176,6 +183,9 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   tmp_states_visited_in_queue_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
+  characters_.push_back(ch);
+  current_left_utf8_character_length_.push_back(0);
+  supposed_utf8_character_length_.push_back(0);
   const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
 
   // Scan all the scanable states.
@@ -185,6 +195,9 @@ bool EarleyParser::Advance(const uint8_t& ch) {
 
   // Check if the character is accepted.
   if (tmp_process_state_queue_.empty() && tmp_states_to_be_added_.empty()) {
+    characters_.pop_back();
+    current_left_utf8_character_length_.pop_back();
+    supposed_utf8_character_length_.pop_back();
     return false;
   }
 
@@ -231,6 +244,9 @@ EarleyParser::EarleyParser(
   // scanable states history.
   if (!need_expand) {
     rule_id_to_completeable_states_.emplace_back();
+    characters_.push_back(0);
+    current_left_utf8_character_length_.push_back(0);
+    supposed_utf8_character_length_.push_back(0);
     can_accept_stop_token_.push_back(false);
     scanable_state_history_.PushBack({init});
   }
@@ -244,6 +260,10 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
   rule_id_to_completeable_states_.emplace_back();
+  characters_.push_back(0);
+  current_left_utf8_character_length_.push_back(0);
+  supposed_utf8_character_length_.push_back(0);
+  can_accept_stop_token_.push_back(false);
   if (state.IsInvalid()) {
     ExpandAndEnqueueUnexpandedState(ParserState{
         grammar_->GetRootRuleId(),
@@ -276,8 +296,11 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
 
 void EarleyParser::Reset() {
   rule_id_to_completeable_states_.clear();
-  scanable_state_history_.PopBack(scanable_state_history_.Size());
+  characters_.clear();
+  current_left_utf8_character_length_.clear();
+  supposed_utf8_character_length_.clear();
   can_accept_stop_token_.clear();
+  scanable_state_history_.PopBack(scanable_state_history_.Size());
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty());
   PushStateAndExpand(ParserState(
       grammar_->GetRootRuleId(),
