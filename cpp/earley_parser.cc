@@ -183,9 +183,25 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   tmp_states_visited_in_queue_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
+
+  // Handle the UTF-8 character.
+  if (current_left_utf8_character_length_.back() == 0) {
+    auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
+    if (!accepted) {
+      return false;
+    }
+    current_left_utf8_character_length_.push_back(num_bytes - 1);
+    supposed_utf8_character_length_.push_back(num_bytes);
+  } else {
+    if ((ch & 0xC0) != 0x80) {
+      return false;
+    }
+    current_left_utf8_character_length_.push_back(current_left_utf8_character_length_.back() - 1);
+    supposed_utf8_character_length_.push_back(supposed_utf8_character_length_.back());
+  }
   characters_.push_back(ch);
-  current_left_utf8_character_length_.push_back(0);
-  supposed_utf8_character_length_.push_back(0);
+  // int input_utf8_character_length =
+  //     supposed_utf8_character_length_.back() - current_left_utf8_character_length_.back();
   const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
 
   // Scan all the scanable states.
@@ -453,18 +469,16 @@ void EarleyParser::AdvanceCharacterClass(
 
   // The state is matching a UTF8 character.
   if (state.sub_element_id > 0) {
-    if ((ch & 0xC0) == 0x80) {
-      auto new_state = state;
-      new_state.sub_element_id--;
-      // Check if the UTF8 character is completed.
-      if (new_state.sub_element_id == 0) {
-        new_state.element_id++;
-        Enque(new_state);
-        // Assert: In a sequence, the CharacterClass can't be skipped. So the state can't be
-        // repeated. the fllowing tmp_process_state_queue_.push(new_state) is for the same reason.
-      } else {
-        tmp_states_to_be_added_.push_back(new_state);
-      }
+    auto new_state = state;
+    new_state.sub_element_id--;
+    // Check if the UTF8 character is completed.
+    if (new_state.sub_element_id == 0) {
+      new_state.element_id++;
+      Enque(new_state);
+      // Assert: In a sequence, the CharacterClass can't be skipped. So the state can't be
+      // repeated. the fllowing tmp_process_state_queue_.push(new_state) is for the same reason.
+    } else {
+      tmp_states_to_be_added_.push_back(new_state);
     }
     return;
   }
@@ -474,15 +488,11 @@ void EarleyParser::AdvanceCharacterClass(
     if (!is_negative) {
       return;
     }
-    auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-    if (!accepted) {
-      return;
-    }
 
     // A new UTF8 character is accepted.
-    XGRAMMAR_DCHECK(num_bytes > 1);
+    XGRAMMAR_DCHECK(supposed_utf8_character_length_.back() > 1);
     auto new_state = state;
-    new_state.sub_element_id = num_bytes - 1;
+    new_state.sub_element_id = supposed_utf8_character_length_.back() - 1;
     tmp_states_to_be_added_.push_back(new_state);
     return;
   }
@@ -515,15 +525,13 @@ void EarleyParser::AdvanceCharacterClassStar(
 
   // The state is matching a UTF8 character.
   if (state.sub_element_id > 0) {
-    if ((ch & 0xC0) == 0x80) {
-      auto new_state = state;
-      new_state.sub_element_id--;
-      // Check if the UTF8 character is completed.
-      if (new_state.sub_element_id == 0) {
-        Enque(new_state);
-      } else {
-        tmp_states_to_be_added_.push_back(new_state);
-      }
+    auto new_state = state;
+    new_state.sub_element_id--;
+    // Check if the UTF8 character is completed.
+    if (new_state.sub_element_id == 0) {
+      Enque(new_state);
+    } else {
+      tmp_states_to_be_added_.push_back(new_state);
     }
     return;
   }
@@ -532,14 +540,10 @@ void EarleyParser::AdvanceCharacterClassStar(
     if (!is_negative) {
       return;
     }
-    auto [accepted, num_bytes, codepoint] = HandleUTF8FirstByte(ch);
-    if (!accepted) {
-      return;
-    }
     // A new UTF8 character is accepted.
-    XGRAMMAR_DCHECK(num_bytes > 1);
+    XGRAMMAR_DCHECK(supposed_utf8_character_length_.back() > 1);
     auto new_state = state;
-    new_state.sub_element_id = num_bytes - 1;
+    new_state.sub_element_id = supposed_utf8_character_length_.back() - 1;
     tmp_states_to_be_added_.push_back(new_state);
     return;
   }

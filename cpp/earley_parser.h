@@ -213,6 +213,12 @@ class EarleyParser {
   /*! \brief How many bytes are desired in the character.*/
   std::vector<uint8_t> supposed_utf8_character_length_;
 
+  /*! \brief The upper bound of the current utf8 character.*/
+  uint32_t current_utf8_character_upper_ = 0;
+
+  /*! \brief The lower bound of the current utf8 character.*/
+  uint32_t current_utf8_character_lower_ = 0;
+
   /*!
   \brief Check if the state has been added into the queue.
   \param state The state to check.
