@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "compiled_grammar_data_structure.h"
 #include "earley_parser.h"
@@ -220,6 +221,18 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       bool is_root_rule
   );
 
+  /*!
+   * \brief Get the token mask for the given ParserState.
+   * \param sorted_decoded_vocab The sorted decoded vocabulary.
+   * \param first_char_mask The first character mask.
+   * \param is_root_rule Whether to consider the parent rule. If false, there will be
+   */
+  void GetTokenMaskWithFirstCharacterCheck(
+      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+      const std::bitset<256>& first_char_mask,
+      bool is_root_rule
+  );
+
  private:
   /*! \brief Check if a token can pass the lookahead assertion. */
   bool IsTokenPassLookaheadAssertion(
@@ -289,119 +302,22 @@ struct CompareIntStringPair {
     return a.second < b.second;
   }
 };
-
-AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
-    size_t vocab_size,
+void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-    const ParserState& init_state,
+    const std::bitset<256>& first_char_mask,
     bool is_root_rule
 ) {
-  tmp_accepted_indices_.clear();
-  tmp_rejected_indices_.clear();
-  tmp_uncertain_indices_.clear();
-  // For every character in the current token, stores whether it is possible to reach the end of
-  // the rule when matching until this character. Store it in a stack for later rollback.
-  tmp_can_reach_end_stack_.assign({IsCompleted()});
-  tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
-  std::bitset<256> character_class_mask;
-  bool character_class_is_on = false;
   int prev_matched_size = 0;
-  int start_pos = 0;
-  int end_pos = sorted_decoded_vocab.size();
-  const auto& sequence = grammar_->GetRuleExpr(init_state.sequence_id);
-  if (sequence.type == Grammar::Impl::RuleExprType::kSequence) {
-    const auto& sub_sequence = grammar_->GetRuleExpr(sequence[init_state.element_id]);
-    switch (sub_sequence.type) {
-      case Grammar::Impl::RuleExprType::kByteString: {
-        std::string accepted_token_prefix;
-        accepted_token_prefix += sub_sequence[init_state.sub_element_id];
-        const auto& first_same_token = std::lower_bound(
-            sorted_decoded_vocab.begin() + start_pos,
-            sorted_decoded_vocab.begin() + end_pos,
-            std::make_pair(0, accepted_token_prefix),
-            CompareIntStringPair()
-        );
-        start_pos = first_same_token - sorted_decoded_vocab.begin();
-        for (int i = init_state.sub_element_id + 1; i < sub_sequence.size(); ++i) {
-          accepted_token_prefix += sub_sequence[i];
-        }
-        uint8_t last_char = sub_sequence[sub_sequence.size() - 1];
-        if (last_char == 0xff) {
-          accepted_token_prefix += char(0x00);
-        } else {
-          accepted_token_prefix[accepted_token_prefix.size() - 1] = last_char + 1;
-        }
-        const auto& last_same_token = std::lower_bound(
-            sorted_decoded_vocab.begin() + start_pos,
-            sorted_decoded_vocab.begin() + end_pos,
-            std::make_pair(0, accepted_token_prefix),
-            CompareIntStringPair()
-        );
-        end_pos = last_same_token - sorted_decoded_vocab.begin();
-        break;
-      }
-      case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
-      case xgrammar::Grammar::Impl::RuleExprType::kCharacterClassStar: {
-        if (init_state.sub_element_id == 0) {
-          bool is_negative = sub_sequence[0];
-          character_class_is_on = true;
-          for (int i = 1; i < sub_sequence.size(); i += 2) {
-            int left_char = static_cast<uint8_t>(sub_sequence[i]);
-            int right_char = static_cast<uint8_t>(sub_sequence[i + 1]);
-            for (int c = left_char; c <= right_char; ++c) {
-              character_class_mask[c] = true;
-            }
-          }
-          if (is_negative) {
-            character_class_mask = ~character_class_mask;
-          }
-          break;
-        }
-        // Otherwise, it's matching a UTF-8 character. We can optimize the matching process
-        // here.
-
-        std::string accepted_token_prefix;
-        accepted_token_prefix = 0x80;
-        const auto& first_same_token = std::lower_bound(
-            sorted_decoded_vocab.begin() + start_pos,
-            sorted_decoded_vocab.begin() + end_pos,
-            std::make_pair(0, accepted_token_prefix),
-            CompareIntStringPair()
-        );
-        start_pos = first_same_token - sorted_decoded_vocab.begin();
-        accepted_token_prefix = 0xc0;
-        const auto& last_same_token = std::lower_bound(
-            sorted_decoded_vocab.begin() + start_pos,
-            sorted_decoded_vocab.begin() + end_pos,
-            std::make_pair(0, accepted_token_prefix),
-            CompareIntStringPair()
-        );
-        end_pos = last_same_token - sorted_decoded_vocab.begin();
-        break;
-      }
-      default: {
-        XGRAMMAR_LOG(FATAL) << "Unsupported rule expr type: " << static_cast<int>(sequence.type);
-      }
-    }
-  }
-
   bool first_accept_token = true;
 
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
-    if (i < start_pos || i >= end_pos) {
-      tmp_rejected_indices_.push_back(i);
-      continue;
-    }
     const auto& token = sorted_decoded_vocab[i].second;
     bool accepted = true;
-
-    if (character_class_is_on) {
-      uint8_t first_char = token[0];
-      if (!character_class_mask[first_char]) {
-        accepted = false;
-        tmp_rejected_indices_.push_back(i);
-        continue;
-      }
+    uint8_t first_char = token[0];
+    if (!first_char_mask[first_char]) {
+      accepted = false;
+      tmp_rejected_indices_.push_back(i);
+      continue;
     }
     // Many tokens may contain the same prefix, so we will avoid unnecessary matching
     // by finding the longest common prefix with the previous token.
@@ -465,6 +381,62 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   }
   // Rollback the last matched part
   PopLastStates(prev_matched_size);
+}
+
+AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
+    size_t vocab_size,
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    const ParserState& init_state,
+    bool is_root_rule
+) {
+  tmp_accepted_indices_.clear();
+  tmp_rejected_indices_.clear();
+  tmp_uncertain_indices_.clear();
+  // For every character in the current token, stores whether it is possible to reach the end of
+  // the rule when matching until this character. Store it in a stack for later rollback.
+  tmp_can_reach_end_stack_.assign({IsCompleted()});
+  tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
+  std::bitset<256> character_class_mask;
+  const auto& sequence = grammar_->GetRuleExpr(init_state.sequence_id);
+  if (sequence.type == Grammar::Impl::RuleExprType::kSequence) {
+    const auto& sub_sequence = grammar_->GetRuleExpr(sequence[init_state.element_id]);
+    switch (sub_sequence.type) {
+      case Grammar::Impl::RuleExprType::kByteString: {
+        character_class_mask[sub_sequence[init_state.sub_element_id]] = true;
+        break;
+      }
+      case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
+      case xgrammar::Grammar::Impl::RuleExprType::kCharacterClassStar: {
+        if (init_state.sub_element_id == 0) {
+          bool is_negative = sub_sequence[0];
+          for (int i = 1; i < sub_sequence.size(); i += 2) {
+            int left_char = static_cast<uint8_t>(sub_sequence[i]);
+            int right_char = static_cast<uint8_t>(sub_sequence[i + 1]);
+            for (int c = left_char; c <= right_char; ++c) {
+              character_class_mask[c] = true;
+            }
+          }
+          if (is_negative) {
+            character_class_mask = ~character_class_mask;
+          }
+          break;
+        }
+        // Otherwise, it's matching a UTF-8 character. We can optimize the matching process
+        // here.
+        for (size_t i = 0x80; i < 0xC0; ++i) {
+          character_class_mask[i] = true;
+        }
+        break;
+      }
+      default: {
+        XGRAMMAR_LOG(FATAL) << "Unsupported rule expr type: " << static_cast<int>(sequence.type);
+      }
+    }
+  } else {
+    XGRAMMAR_DCHECK(sequence.type == Grammar::Impl::RuleExprType::kTagDispatch);
+    character_class_mask.set();
+  }
+  GetTokenMaskWithFirstCharacterCheck(sorted_decoded_vocab, character_class_mask, is_root_rule);
   return AdaptiveTokenMask(
       vocab_size,
       sorted_decoded_vocab,
@@ -697,14 +669,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
               element.type == RuleExprType::kCharacterClassStar ||
               element.type == RuleExprType::kCharacterClass
           );
-          bool negative = element[0];
-          if (negative) {
-            for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
-              state.sub_element_id = left_utf8_bytes;
-              add_task_adaptive_token_mask(state, rule_id == root_rule_id);
-            }
-          } else {
-            state.sub_element_id = 0;
+          for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
+            state.sub_element_id = left_utf8_bytes;
             add_task_adaptive_token_mask(state, rule_id == root_rule_id);
           }
         }
