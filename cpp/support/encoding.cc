@@ -110,6 +110,9 @@ std::tuple<bool, int, TCodepoint> HandleUTF8FirstByte(uint8_t byte) {
     4,  4,  4,  4,  4,  4,  4,  4, -1, -1, -1, -1, -1, -1, -1, -1,
   };
   // clang-format on
+  if ((byte & (1 << 7)) == 0) {
+    return {true, 1, byte};
+  }
   auto num_bytes = kUtf8Bytes[static_cast<uint8_t>(byte)];
   if (num_bytes == -1) {
     return {false, 0, 0};
