@@ -563,6 +563,9 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     }
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
+      if (tmp_accepted_bitset_[cur_token_idx]) {
+        continue;
+      }
       bool accepted = true;
 
       // Step 2.1. Find the longest common prefix with the accepted part of the previous token.
