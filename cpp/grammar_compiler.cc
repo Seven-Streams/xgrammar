@@ -312,7 +312,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
     const auto& token = sorted_decoded_vocab[i].second;
-    if (!first_char_mask[token[0]]) {
+    if (!first_char_mask[static_cast<uint8_t>(token[0])]) {
       tmp_rejected_indices_.push_back(i);
       continue;
     }
