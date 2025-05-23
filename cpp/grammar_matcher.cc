@@ -563,7 +563,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     }
     for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
-      if (tmp_accepted_bitset_[cur_token_idx]) {
+      if (tmp_accepted_bitset_[sorted_decoded_vocab[cur_token_idx].first]) {
         continue;
       }
       bool accepted = true;
