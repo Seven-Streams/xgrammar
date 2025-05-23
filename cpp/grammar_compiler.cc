@@ -312,15 +312,13 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
     const auto& token = sorted_decoded_vocab[i].second;
-    bool accepted = true;
-    uint8_t first_char = token[0];
-    if (!first_char_mask[first_char]) {
-      accepted = false;
+    if (!first_char_mask[token[0]]) {
       tmp_rejected_indices_.push_back(i);
       continue;
     }
     // Many tokens may contain the same prefix, so we will avoid unnecessary matching
     // by finding the longest common prefix with the previous token.
+    bool accepted = true;
     if (!first_accept_token) {
       const auto& prev_token = sorted_decoded_vocab[i - 1].second;
       int lcp_len =
