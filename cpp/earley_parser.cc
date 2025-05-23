@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cctype>
 #include <cstdint>
+#include <ctime>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -372,6 +373,7 @@ void EarleyParser::ExpandNextRuleRefElement(
             state.input_pos,
             0
         });
+        tmp_accept_stop_token_ = true;
         return;
       }
       XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
