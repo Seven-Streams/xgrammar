@@ -558,7 +558,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       XGRAMMAR_LOG(INFO) << "The ParserState is " << ParserState << ", the mask is "
                          << adaptive_token_mask.Print(tokenizer_info_);
     }
-    for (auto cur_token_idx : adaptive_token_mask.uncertain_indices) {
+    for (const auto& cur_token_idx : adaptive_token_mask.uncertain_indices) {
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
       if (tmp_accepted_bitset_[sorted_decoded_vocab[cur_token_idx].first]) {
         continue;
