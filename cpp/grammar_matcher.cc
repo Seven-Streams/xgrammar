@@ -530,11 +530,8 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
         cur_sequence.type == RuleExprType::kRuleRef ||
         cur_sequence.type == RuleExprType::kChoices || cur_sequence.type == RuleExprType::kEmptyStr
     ));
-    if (cur_sequence.type == RuleExprType::kTagDispatch) {
-      have_tag_dispatch = true;
-    } else {
-      XGRAMMAR_DCHECK(cur_sequence.type == RuleExprType::kSequence);
-    }
+    have_tag_dispatch = cur_sequence.type == RuleExprType::kTagDispatch;
+    XGRAMMAR_DCHECK(have_tag_dispatch || cur_sequence.type == RuleExprType::kSequence);
     auto adaptive_token_mask_it = adaptive_token_mask_cache.find(ParserState);
     XGRAMMAR_CHECK(adaptive_token_mask_it != adaptive_token_mask_cache.end()) << ParserState;
     const auto& adaptive_token_mask = adaptive_token_mask_it->second;
