@@ -198,8 +198,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
     auto [scanable, completable] = Predict(state, &rule_expr);
     if (completable) {
       Complete(state, rule_expr);
-    }
-    if (scanable) {
+    } else if (scanable) {  // A completable state can be scanned.
       tmp_states_to_be_added_.push_back(state);
     }
   }
