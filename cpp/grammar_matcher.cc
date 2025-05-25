@@ -498,7 +498,12 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       CheckAndGetBitmaskPtr(*next_token_bitmask, tokenizer_info_.GetVocabSize(), index);
   const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
   const auto& adaptive_token_mask_cache = compiled_grammar_->adaptive_token_mask_cache;
-  const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
+  // We need to have a copy, because scanable_state_history_ will be modified during the
+  // FillNextTokenBitmask process, which can lead to undefined behavior.
+  std::vector<ParserState> latest_states;
+  for (const auto& ParserState : scanable_state_history_[scanable_state_history_.Size() - 1]) {
+    latest_states.push_back(ParserState);
+  }
 
   // We check all the latest states of the earley parser, and check all the masks of the leaf
   // states. The final accepted token set is the union of the accepted token sets of all leaf
