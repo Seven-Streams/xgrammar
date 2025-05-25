@@ -310,7 +310,7 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
     return true;
   }
   XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
-  for (auto sequence_id : cur_rule_body) {
+  for (const auto& sequence_id : cur_rule_body) {
     Enque(ParserState{cur_rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0});
   }
   return true;
@@ -448,6 +448,8 @@ void EarleyParser::AdvanceCharacterClass(
   }
   bool is_negative = static_cast<bool>(sub_sequence[0]);
 
+  // This trick is based on the current structure that character class
+  // can't accept a UTF8 character, unless it has a negation.
   if (!isascii(ch)) {
     if (!is_negative) {
       return;
@@ -506,6 +508,9 @@ void EarleyParser::AdvanceCharacterClassStar(
     return;
   }
   bool is_negative = static_cast<bool>(sub_sequence[0]);
+
+  // This trick is based on the current structure that character class
+  // can't accept a UTF8 character, unless it has a negation.
   if (!isascii(ch)) {
     if (!is_negative) {
       return;
