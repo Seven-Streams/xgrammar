@@ -92,8 +92,8 @@ struct ParserState {
   static ParserState GetInvalidState() { return {-1, -1, -1, -1, -1}; }
 
   bool operator==(const ParserState& other) const {
-    return sequence_id == other.sequence_id && element_id == other.element_id &&
-           sub_element_id == other.sub_element_id;
+    return rule_id == other.rule_id && sequence_id == other.sequence_id &&
+           element_id == other.element_id && sub_element_id == other.sub_element_id;
   }
 
   friend std::ostream& operator<<(std::ostream& os, const ParserState& state) {
@@ -129,8 +129,9 @@ class StateHash {
 class StateEqual {
  public:
   bool operator()(const ParserState& lhs, const ParserState& rhs) const {
-    return lhs.sequence_id == rhs.sequence_id && lhs.element_id == rhs.element_id &&
-           lhs.input_pos == rhs.input_pos && lhs.sub_element_id == rhs.sub_element_id;
+    return lhs.rule_id == rhs.rule_id && lhs.sequence_id == rhs.sequence_id &&
+           lhs.element_id == rhs.element_id && lhs.input_pos == rhs.input_pos &&
+           lhs.sub_element_id == rhs.sub_element_id;
   }
 };
 
