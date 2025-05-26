@@ -102,6 +102,14 @@ struct ParserState {
        << ", sub_element_id=" << state.sub_element_id << ")";
     return os;
   }
+
+  std::string ToString() const {
+    return "ParserState(rule_id=" + std::to_string(rule_id) +
+           ", sequence_id=" + std::to_string(sequence_id) +
+           ", element_id=" + std::to_string(element_id) +
+           ", parent_pos=" + std::to_string(input_pos) +
+           ", sub_element_id=" + std::to_string(sub_element_id) + ")";
+  }
 };
 
 /*

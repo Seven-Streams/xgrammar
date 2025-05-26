@@ -382,6 +382,16 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   XGRAMMAR_CHECK(token_id >= 0 && token_id < tokenizer_info_.GetVocabSize())
       << "Invalid token id " << token_id << " for GrammarMatcher";
 
+  if (debug_print) {
+    std::string states_str;
+    for (const auto& state : scanable_state_history_[scanable_state_history_.Size() - 1]) {
+      states_str += "  " + state.ToString() + "\n";
+    }
+    XGRAMMAR_LOG(INFO) << "Accepting token id " << token_id << ", string: \""
+                       << PrintAsEscapedUTF8(tokenizer_info_.GetDecodedVocab()[token_id])
+                       << "\", current scannable states:\n"
+                       << states_str;
+  }
   // Handle the stop token
   if (std::find(stop_token_ids_.begin(), stop_token_ids_.end(), token_id) !=
       stop_token_ids_.end()) {
@@ -416,7 +426,6 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   }
   token_length_history.push_back(token.size());
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
-    ;
     token_length_history.pop_front();
   }
   return true;
@@ -440,11 +449,6 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
       }
       PopLastStates(accepted_cnt);
       return false;
-    } else {
-      if (debug_print) {
-        XGRAMMAR_LOG(INFO) << "Matching Succeeded after accepting " << accepted_cnt
-                           << " characters";
-      }
     }
     ++accepted_cnt;
   }
@@ -453,7 +457,13 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
     token_length_history.pop_front();
   }
   if (debug_print) {
-    XGRAMMAR_LOG(INFO) << "String Accepted!" << std::endl;
+    std::string states_str;
+    for (const auto& state : scanable_state_history_[scanable_state_history_.Size() - 1]) {
+      states_str += "  " + state.ToString() + "\n";
+    }
+    XGRAMMAR_LOG(INFO) << "String \"" << PrintAsEscapedUTF8(input_str)
+                       << "\" is accepted. Current scannable states:\n"
+                       << states_str;
   }
   return true;
 }
