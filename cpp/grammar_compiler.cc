@@ -295,13 +295,6 @@ bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
   return false;
 }
 
-struct CompareIntStringPair {
-  bool operator()(
-      const std::pair<int32_t, std::string>& a, const std::pair<int32_t, std::string>& b
-  ) const {
-    return a.second < b.second;
-  }
-};
 void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::bitset<256>& first_char_mask,

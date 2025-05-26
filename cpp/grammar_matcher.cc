@@ -350,7 +350,7 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
   scanable_state_history_.PushBack(std::vector<ParserState>());
   rule_id_to_completeable_states_.push_back(std::multimap<int32_t, ParserState>());
   rule_id_to_completeable_states_.back().insert(std::make_pair(-1, ParserState::GetInvalidState()));
-  can_accept_stop_token_.push_back(true);
+  is_completed_.push_back(true);
   token_length_history.push_back(1
   );  // When rolling back a stop token, we need to rollback 1 ParserState
   return true;
@@ -556,7 +556,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
     // Examine only the current one ParserState
     rule_id_to_completeable_states_.emplace_back();
-    can_accept_stop_token_.push_back(can_accept_stop_token_.back());
+    is_completed_.push_back(is_completed_.back());
     scanable_state_history_.PushBack(&ParserState, 1);
 
     const std::string* prev_token = nullptr;

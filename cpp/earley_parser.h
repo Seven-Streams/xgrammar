@@ -3,6 +3,7 @@
  * \file xgrammar/earley_parser.h
  * \brief The header for the definition of the Earley parser.
  */
+
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
 #include <cstdint>
@@ -67,7 +68,7 @@ struct ParserState {
   static constexpr int32_t kNoPrevInputPos = -1;
 
   /*! \brief A sequence_id value of kInvalid means the ParserState is invalid.*/
-  static constexpr int32_t kInvalid = -1;
+  static constexpr int32_t kInvalidSequenceId = -1;
 
   /*! \brief The rule's id.*/
   int32_t rule_id = -1;
@@ -115,7 +116,7 @@ struct ParserState {
 /*
   When getting the mask of the state, we don't need to consider the parent_pos.
  */
-class StateHash {
+class StateHashForCache {
  public:
   size_t operator()(const ParserState& state) const {
     return HashCombine(state.rule_id, state.sequence_id, state.element_id, state.sub_element_id);
@@ -126,7 +127,7 @@ class StateHash {
   When matching the state, we need to consider the parent_pos, since if two states
   don't have the same parent_pos, they are not the same state.
  */
-class StateEqual {
+class StateEqualForParsing {
  public:
   bool operator()(const ParserState& lhs, const ParserState& rhs) const {
     return lhs.rule_id == rhs.rule_id && lhs.sequence_id == rhs.sequence_id &&
@@ -135,7 +136,7 @@ class StateEqual {
   }
 };
 
-class StateHashChecker {
+class StateHashForParsing {
  public:
   size_t operator()(const ParserState& state) const {
     return HashCombine(
@@ -147,11 +148,11 @@ class StateHashChecker {
 /*! \brief This class is used to detect the repeated states.*/
 class RepeatDetector {
  private:
-  int transition_threshold_;
+  const int transition_threshold_;
 
   std::vector<ParserState> visited_vector_;
 
-  std::unordered_set<ParserState, StateHashChecker, StateEqual> visited_set_;
+  std::unordered_set<ParserState, StateHashForParsing, StateEqualForParsing> visited_set_;
 
   int size_ = 0;
 
@@ -187,6 +188,8 @@ class EarleyParser {
    * One state can be in multiple categories, and thus can be stored in multiple places.
    */
  protected:
+  using RuleExpr = Grammar::Impl::RuleExpr;
+
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
 
@@ -194,7 +197,7 @@ class EarleyParser {
   bool tmp_accept_stop_token_ = false;
 
   /*! \brief store when accepting i characters, if the stop token can be accepted.*/
-  std::vector<bool> can_accept_stop_token_;
+  std::vector<bool> is_completed_;
 
   /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. Earley
    * parser needs it to complete.
@@ -237,7 +240,7 @@ class EarleyParser {
    * of the grammar is used to check if the grammar is completed,
    * so it should be added into the next states.
    */
-  void Complete(const ParserState& state, const Grammar::Impl::RuleExpr& rule_expr);
+  void Complete(const ParserState& state, const RuleExpr& rule_expr);
 
   /*!
    * \brief The prediction operation of the Earley parser.
@@ -245,7 +248,7 @@ class EarleyParser {
    * then return true, otherwise return false.
    * \return Second: If the state is completable, then return true, otherwise return false.
    */
-  std::pair<bool, bool> Predict(const ParserState& state, Grammar::Impl::RuleExpr* rule_expr);
+  std::pair<bool, bool> Predict(const ParserState& state, RuleExpr* rule_expr);
 
   /*!
    * \brief Handle the unexpanded rule, used for pushing initial state.
@@ -265,9 +268,7 @@ class EarleyParser {
    * when the rule is a kSequence, and the sub rule is a kRuleRef.
    */
   void ExpandNextRuleRefElement(
-      const ParserState& state,
-      const Grammar::Impl::RuleExpr& rule_expr,
-      const Grammar::Impl::RuleExpr* sub_rule_expr
+      const ParserState& state, const RuleExpr& rule_expr, const RuleExpr* sub_rule_expr
   );
 
   /*!
@@ -278,7 +279,7 @@ class EarleyParser {
    * \return The next state, Invalid state if the character is not accepted.
    */
   void AdvanceCharacterClass(
-      const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& sub_sequence
+      const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence
   );
 
   /*!
@@ -288,9 +289,7 @@ class EarleyParser {
    * \param sub_sequence The sub sequence to be checked.
    * \return The next state, Invalid state if the character is not accepted.
    */
-  void AdvanceByteString(
-      const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& sub_sequence
-  );
+  void AdvanceByteString(const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence);
 
   /*!
    * \brief Advance the parser to the next state, with the sub sequence is kCharacterClassStar.
@@ -300,7 +299,7 @@ class EarleyParser {
    * \return The next state, Invalid state if the character is not accepted.
    */
   void AdvanceCharacterClassStar(
-      const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& sub_sequence
+      const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence
   );
 
   /*!
@@ -311,7 +310,7 @@ class EarleyParser {
    * \return The next state, Invalid state if the character is not accepted.
    */
   void AdvanceTagDispatch(
-      const ParserState& state, const uint8_t& ch, const Grammar::Impl::RuleExpr& cur_sequence
+      const ParserState& state, const uint8_t& ch, const RuleExpr& cur_sequence
   );
 
   /*!
@@ -319,14 +318,20 @@ class EarleyParser {
    * \param state The state to be enqueued.
    * \details The state is enqueued if it is not visited in the queue.
    */
-  void Enque(const ParserState& state) {
+  void Enqueue(const ParserState& state) {
     if (!IsStateVisitedInQueue(state)) {
       tmp_process_state_queue_.push(state);
       tmp_states_visited_in_queue_.Insert(state);
     }
   }
 
-  void EnqueWithoutProcess(const ParserState& state) {
+  /*!
+   * \brief Enqueue the state into the queue without processing it.
+   * \param state The state to be enqueued.
+   * \details If the state can't predict and complete, then
+   * use this function to enqueue.
+   */
+  void EnqueueWithoutProcess(const ParserState& state) {
     if (!IsStateVisitedInQueue(state)) {
       tmp_states_to_be_added_.push_back(state);
       tmp_states_visited_in_queue_.Insert(state);

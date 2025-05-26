@@ -20,7 +20,7 @@ using RuleExprType = Grammar::Impl::RuleExprType;
 
 using RuleExpr = Grammar::Impl::RuleExpr;
 
-bool EarleyParser::IsCompleted() const { return can_accept_stop_token_.back(); }
+bool EarleyParser::IsCompleted() const { return is_completed_.back(); }
 
 void EarleyParser::PopLastStates(int32_t cnt) {
   if (cnt >= static_cast<int32_t>(rule_id_to_completeable_states_.size())) {
@@ -29,7 +29,7 @@ void EarleyParser::PopLastStates(int32_t cnt) {
   rule_id_to_completeable_states_.erase(
       rule_id_to_completeable_states_.end() - cnt, rule_id_to_completeable_states_.end()
   );
-  can_accept_stop_token_.erase(can_accept_stop_token_.end() - cnt, can_accept_stop_token_.end());
+  is_completed_.erase(is_completed_.end() - cnt, is_completed_.end());
   scanable_state_history_.PopBack(cnt);
 }
 
@@ -57,7 +57,7 @@ void EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
             grammar_->GetRuleExpr(parent_expr[parent_state.element_id]).type ==
             RuleExprType::kRuleRef
         );
-        Enque(ParserState{
+        Enqueue(ParserState{
             parent_state.rule_id,
             parent_state.sequence_id,
             parent_state.element_id + 1,
@@ -67,7 +67,7 @@ void EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
         break;
       }
       case RuleExprType::kTagDispatch: {
-        Enque(
+        Enqueue(
             {parent_state.rule_id,
              parent_state.sequence_id,
              grammar_->root_tag_dispatch_fsm->StartNode(),
@@ -113,7 +113,8 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
       return std::make_pair(false, false);
     }
     if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
-      Enque(ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+      Enqueue(
+          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
       );
     }
     return std::make_pair(true, false);
@@ -204,7 +205,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   }
 
   // Check if the grammar is completed, and add the scannable states to the history.
-  can_accept_stop_token_.push_back(tmp_accept_stop_token_);
+  is_completed_.push_back(tmp_accept_stop_token_);
   scanable_state_history_.PushBack(tmp_states_to_be_added_);
   return true;
 }
@@ -231,7 +232,7 @@ EarleyParser::EarleyParser(
   // scanable states history.
   if (!need_expand) {
     rule_id_to_completeable_states_.emplace_back();
-    can_accept_stop_token_.push_back(false);
+    is_completed_.push_back(false);
     scanable_state_history_.PushBack({init});
   }
 
@@ -255,7 +256,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   } else {
     // If the rule can't be expanded, we need to add it to the queue.
     if (!ExpandAndEnqueueUnexpandedState(state)) {
-      Enque(state);
+      Enqueue(state);
     }
   }
   while (!tmp_process_state_queue_.empty()) {
@@ -270,14 +271,14 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
       tmp_states_to_be_added_.push_back(state);
     }
   }
-  can_accept_stop_token_.push_back(tmp_accept_stop_token_);
+  is_completed_.push_back(tmp_accept_stop_token_);
   scanable_state_history_.PushBack(tmp_states_to_be_added_);
 }
 
 void EarleyParser::Reset() {
   rule_id_to_completeable_states_.clear();
   scanable_state_history_.PopBack(scanable_state_history_.Size());
-  can_accept_stop_token_.clear();
+  is_completed_.clear();
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty());
   PushStateAndExpand(ParserState(
       grammar_->GetRootRuleId(),
@@ -300,7 +301,7 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
   // 1. The rule is a tag dispatch rule.
   // 2. The rule is a choice, consisting of multiple sequences.
   if (cur_rule_body.type == RuleExprType::kTagDispatch) {
-    Enque(ParserState{
+    Enqueue(ParserState{
         cur_rule_id,
         cur_rule_body_id,
         grammar_->root_tag_dispatch_fsm->StartNode(),
@@ -311,7 +312,7 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
   }
   XGRAMMAR_DCHECK(cur_rule_body.type == RuleExprType::kChoices);
   for (const auto& sequence_id : cur_rule_body) {
-    Enque(ParserState{cur_rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0});
+    Enqueue(ParserState{cur_rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0});
   }
   return true;
 }
@@ -344,7 +345,7 @@ void EarleyParser::ExpandNextRuleRefElement(
     const auto& range = states_map.equal_range(ref_rule_id);
     const auto in_vec = [&](const ParserState& state_) {
       return std::find_if(range.first, range.second, [&](const auto& s) {
-               return StateEqual()(s.second, state_);
+               return StateEqualForParsing()(s.second, state_);
              }) != range.second;
     };
     for (;
@@ -365,7 +366,7 @@ void EarleyParser::ExpandNextRuleRefElement(
             ref_rule_id
         ) != grammar_->allow_empty_rule_ids.end()) {
       if (rule_expr.type == RuleExprType::kTagDispatch) {
-        EnqueWithoutProcess(ParserState{
+        EnqueueWithoutProcess(ParserState{
             state.rule_id,
             state.sequence_id,
             grammar_->root_tag_dispatch_fsm->StartNode(),
@@ -376,7 +377,8 @@ void EarleyParser::ExpandNextRuleRefElement(
         return;
       }
       XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
-      Enque(ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+      Enqueue(
+          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
       );
     }
     return;
@@ -391,7 +393,8 @@ void EarleyParser::ExpandNextRuleRefElement(
   for (const auto& sequence_id : ref_rule_expr) {
     const auto& sequence = grammar_->GetRuleExpr(sequence_id);
     if (sequence.type == RuleExprType::kEmptyStr) {
-      Enque(ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+      Enqueue(
+          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
       );
       continue;
     }
@@ -414,7 +417,7 @@ void EarleyParser::AdvanceByteString(
     if (new_state.sub_element_id == sub_rule.size()) {
       new_state.element_id++;
       new_state.sub_element_id = 0;
-      Enque(new_state);
+      Enqueue(new_state);
       // Assert: In a sequence, the bytestring can't be skipped. So the state can't be repeated.
     } else {
       tmp_states_to_be_added_.push_back(new_state);
@@ -437,7 +440,7 @@ void EarleyParser::AdvanceCharacterClass(
       // Check if the UTF8 character is completed.
       if (new_state.sub_element_id == 0) {
         new_state.element_id++;
-        Enque(new_state);
+        Enqueue(new_state);
         // Assert: In a sequence, the CharacterClass can't be skipped. So the state can't be
         // repeated. the fllowing tmp_process_state_queue_.push(new_state) is for the same reason.
       } else {
@@ -474,7 +477,7 @@ void EarleyParser::AdvanceCharacterClass(
         auto new_state = state;
         new_state.element_id++;
         new_state.sub_element_id = 0;
-        Enque(new_state);
+        Enqueue(new_state);
       }
       return;
     }
@@ -483,7 +486,7 @@ void EarleyParser::AdvanceCharacterClass(
     auto new_state = state;
     new_state.element_id++;
     new_state.sub_element_id = 0;
-    Enque(new_state);
+    Enqueue(new_state);
   }
 }
 
@@ -500,7 +503,7 @@ void EarleyParser::AdvanceCharacterClassStar(
       new_state.sub_element_id--;
       // Check if the UTF8 character is completed.
       if (new_state.sub_element_id == 0) {
-        Enque(new_state);
+        Enqueue(new_state);
       } else {
         tmp_states_to_be_added_.push_back(new_state);
       }
@@ -531,13 +534,13 @@ void EarleyParser::AdvanceCharacterClassStar(
     if (static_cast<uint8_t>(sub_sequence[i]) <= ch &&
         ch <= static_cast<uint8_t>(sub_sequence[i + 1])) {
       if (!is_negative) {
-        Enque(state);
+        Enqueue(state);
       }
       return;
     }
   }
   if (is_negative) {
-    Enque(state);
+    Enqueue(state);
   }
 }
 
@@ -584,7 +587,7 @@ bool RepeatDetector::IsVisited(const ParserState& state) const {
   return std::find_if(
              visited_vector_.begin(),
              visited_vector_.begin() + size_,
-             [&state](const ParserState& s) { return StateEqual()(state, s); }
+             [&state](const ParserState& s) { return StateEqualForParsing()(state, s); }
          ) != visited_vector_.begin() + size_;
 }
 
