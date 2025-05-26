@@ -9,7 +9,6 @@
 #include <xgrammar/matcher.h>
 
 #include <cstdint>
-#include <map>
 #include <vector>
 
 #include "compiled_grammar_data_structure.h"
@@ -347,12 +346,8 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
   if (!IsCompleted()) {
     return false;
   }
-  scanable_state_history_.PushBack(std::vector<ParserState>());
-  rule_id_to_completeable_states_.push_back(std::multimap<int32_t, ParserState>());
-  rule_id_to_completeable_states_.back().insert(std::make_pair(-1, ParserState::GetInvalidState()));
-  is_completed_.push_back(true);
-  token_length_history.push_back(1
-  );  // When rolling back a stop token, we need to rollback 1 ParserState
+  XGRAMMAR_DCHECK(!stop_token_is_accepted_);
+  stop_token_is_accepted_ = true;
   return true;
 }
 
@@ -363,10 +358,7 @@ bool GrammarMatcher::Impl::IsTerminated() const {
   return IsStopTokenAccepted();
 }
 
-bool GrammarMatcher::Impl::IsStopTokenAccepted() const {
-  return rule_id_to_completeable_states_.back().find(-1) !=
-         rule_id_to_completeable_states_.back().end();
-}
+bool GrammarMatcher::Impl::IsStopTokenAccepted() const { return stop_token_is_accepted_; }
 
 // TODO(yixin): Polish verbose logging
 bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {

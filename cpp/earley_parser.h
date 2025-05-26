@@ -182,7 +182,7 @@ class RepeatDetector {
    */
   void Insert(const ParserState& state);
 
-  /*! \brief Reset the detector.*/
+  /*! \brief Reset the detector. */
   void Clear();
 };
 
@@ -205,10 +205,10 @@ class EarleyParser {
   /*! \brief The grammar to be parsed. */
   Grammar grammar_;
 
-  /*! \brief In this round of advancing, check if the stop token can be accepted.*/
+  /*! \brief In this round of advancing, check if the stop token can be accepted. */
   bool tmp_accept_stop_token_ = false;
 
-  /*! \brief store when accepting i characters, if the stop token can be accepted.*/
+  /*! \brief store when accepting i characters, if the stop token can be accepted. */
   std::vector<bool> is_completed_;
 
   /*!
@@ -229,11 +229,14 @@ class EarleyParser {
    */
   std::vector<ParserState> tmp_states_to_be_added_;
 
-  /*! \brief It's the processing queue of the earley parser.*/
+  /*! \brief It's the processing queue of the earley parser. */
   std::queue<ParserState> tmp_process_state_queue_;
 
-  /*! The class is used to check if a state has been added into the queue.*/
+  /*! \brief The class is used to check if a state has been added into the queue. */
   RepeatDetector tmp_states_visited_in_queue_;
+
+  /*! \brief Check if the stop token is accepted. */
+  bool stop_token_is_accepted_ = false;
 
   /*!
    * \brief Check if the state has been added into the queue.
