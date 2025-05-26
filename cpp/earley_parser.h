@@ -21,7 +21,8 @@
 
 namespace xgrammar {
 
-/*! \brief The state of the Earley parser.
+/*!
+ * \brief The state of the Earley parser.
  * In the implementation, a rule can only be a kchoices or a ktagdispatch.
  * A kchoices rule must be composed of some ksequence rules, or a kemptyrule.
  * In the ksequence, every element in the sequence must be a kbytestring, a
@@ -58,36 +59,39 @@ struct ParserState {
         input_pos(parent_pos),
         sub_element_id(sub_element_id) {}
 
-  /*! \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
+  /*!
+   * \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
    * expanded.
    */
   static constexpr int32_t kUnexpandedRuleStartSequenceId = 128000;
 
-  /*! \brief A parent_id value of kNoParent means this ParserState is the root of the parsing stack.
+  /*!
+   * \brief A parent_id value of kNoParent means this ParserState is the root of the parsing stack.
    */
   static constexpr int32_t kNoPrevInputPos = -1;
 
-  /*! \brief A sequence_id value of kInvalid means the ParserState is invalid.*/
+  /*! \brief A sequence_id value of kInvalid means the ParserState is invalid. */
   static constexpr int32_t kInvalidSequenceId = -1;
 
-  /*! \brief The rule's id.*/
+  /*! \brief The rule's id. */
   int32_t rule_id = -1;
 
   /*! \brief Which choice in this rule is selected. */
   int32_t sequence_id = -1;
 
-  /*! \brief Which element of the choice sequence is to be visited. When the current sequence is
-   * a tag dispatch rule, this element id the currently visited node.
+  /*!
+   * \brief Which element of the choice sequence is to be visited. When the current sequence is
+   * a tag dispatch rule, this element id is the currently visited node.
    */
   int32_t element_id = -1;
 
-  /*! \brief The position of the state, i.e. from which position, the rule starts.*/
+  /*! \brief The position of the state, i.e. from which position, the rule starts. */
   int32_t input_pos = -1;
 
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
 
-  // The element is invalid when sequence_id is -1.
+  /*! \brief The element is invalid when sequence_id is -1. */
   bool IsInvalid() const { return sequence_id == -1; }
 
   static ParserState GetInvalidState() { return {-1, -1, -1, -1, -1}; }
@@ -113,8 +117,8 @@ struct ParserState {
   }
 };
 
-/*
-  When getting the mask of the state, we don't need to consider the parent_pos.
+/*!
+ * \brief When getting the mask of the state, we don't need to consider the parent_pos.
  */
 class StateHashForCache {
  public:
@@ -123,9 +127,9 @@ class StateHashForCache {
   }
 };
 
-/*
-  When matching the state, we need to consider the parent_pos, since if two states
-  don't have the same parent_pos, they are not the same state.
+/*!
+ * \brief When matching the state, we need to consider the parent_pos, since if two states
+ * don't have the same parent_pos, they are not the same state.
  */
 class StateEqualForParsing {
  public:
@@ -145,7 +149,7 @@ class StateHashForParsing {
   }
 };
 
-/*! \brief This class is used to detect the repeated states.*/
+/*! \brief This class is used to detect the repeated states. */
 class RepeatDetector {
  private:
   const int transition_threshold_;
@@ -162,12 +166,14 @@ class RepeatDetector {
     visited_vector_.resize(transition_threshold_);
   }
 
-  /*! \brief Check if the element is visited.
+  /*!
+   * \brief Check if the element is visited.
    * \return True if visited, false otherwise.
    */
   bool IsVisited(const ParserState& state) const;
 
-  /*! \brief Add the state into the visited states.
+  /*!
+   * \brief Add the state into the visited states.
    * \param state The state to be added.
    */
   void Insert(const ParserState& state);
@@ -199,7 +205,8 @@ class EarleyParser {
   /*! \brief store when accepting i characters, if the stop token can be accepted.*/
   std::vector<bool> is_completed_;
 
-  /*! \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. Earley
+  /*!
+   * \brief rule_id_to_completeable_states[i][j] is the i pos j rule_id states. Earley
    * parser needs it to complete.
    */
   std::vector<std::multimap<int32_t, ParserState>> rule_id_to_completeable_states_;
@@ -210,7 +217,8 @@ class EarleyParser {
    */
   CSRArray<ParserState> scanable_state_history_;
 
-  /*! \brief A temperate vector only used in Advance, used to add states in the
+  /*!
+   * \brief A temperate vector only used in Advance, used to add states in the
    * scanable_state_history.
    */
   std::vector<ParserState> tmp_states_to_be_added_;
