@@ -140,6 +140,10 @@ class StateEqualForParsing {
   }
 };
 
+/*!
+ * \brief This class is used to hash the ParserState for parsing.
+ * If two ParserStates don't have the same parent_pos, they are not the same state.
+ */
 class StateHashForParsing {
  public:
   size_t operator()(const ParserState& state) const {
@@ -238,7 +242,9 @@ class EarleyParser {
     return tmp_states_visited_in_queue_.IsVisited(state);
   }
 
-  /*! \brief The scanning operation of the Earley parser. */
+  /*!
+   * \brief The scanning operation of the Earley parser. Put the new states in the queue.
+   */
   void Scan(const ParserState& state, const uint8_t& ch);
 
   /*!

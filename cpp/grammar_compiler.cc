@@ -208,7 +208,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   GrammarMatcherForTokenMaskCache(
       const Grammar& grammar, const ParserState& init_state, const bool& need_expand = true
   )
-      : EarleyParser(grammar, init_state), init_rule_id(init_state.rule_id) {}
+      : EarleyParser(grammar, init_state),
+        init_rule_id(init_state.rule_id),
+        initial_state(init_state) {}
   /*!
    * \brief Get the adaptive token mask for the given ParserState.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
@@ -217,7 +219,6 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   AdaptiveTokenMask GetAdaptiveTokenMask(
       size_t vocab_size,
       const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-      const ParserState& init_state,
       bool is_root_rule
   );
 
@@ -241,6 +242,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 
   // The id of the initial rule.
   int32_t init_rule_id;
+
+  // The initial state of the parser.
+  ParserState initial_state;
 
   // Temporary data for GetAdaptiveTokenMask.
   std::vector<int32_t> tmp_accepted_indices_;
@@ -377,7 +381,6 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     size_t vocab_size,
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-    const ParserState& init_state,
     bool is_root_rule
 ) {
   tmp_accepted_indices_.clear();
@@ -388,17 +391,17 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   tmp_can_reach_end_stack_.assign({IsCompleted()});
   tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
   std::bitset<256> character_class_mask;
-  const auto& sequence = grammar_->GetRuleExpr(init_state.sequence_id);
+  const auto& sequence = grammar_->GetRuleExpr(initial_state.sequence_id);
   if (sequence.type == Grammar::Impl::RuleExprType::kSequence) {
-    const auto& sub_sequence = grammar_->GetRuleExpr(sequence[init_state.element_id]);
+    const auto& sub_sequence = grammar_->GetRuleExpr(sequence[initial_state.element_id]);
     switch (sub_sequence.type) {
       case Grammar::Impl::RuleExprType::kByteString: {
-        character_class_mask[sub_sequence[init_state.sub_element_id]] = true;
+        character_class_mask[sub_sequence[initial_state.sub_element_id]] = true;
         break;
       }
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClassStar: {
-        if (init_state.sub_element_id == 0) {
+        if (initial_state.sub_element_id == 0) {
           bool is_negative = sub_sequence[0];
           for (int i = 1; i < sub_sequence.size(); i += 2) {
             int left_char = static_cast<uint8_t>(sub_sequence[i]);
@@ -600,7 +603,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   auto add_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
     auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state, false);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
-        tokenizer_info_.GetVocabSize(), tokenizer_info_.GetSortedDecodedVocab(), state, is_root_rule
+        tokenizer_info_.GetVocabSize(), tokenizer_info_.GetSortedDecodedVocab(), is_root_rule
     );
     if (max_threads_ > 1) {
       std::lock_guard<std::mutex> lock(adaptive_token_mask_cache_mutex.value());
