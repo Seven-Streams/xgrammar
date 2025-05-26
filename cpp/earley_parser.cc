@@ -25,7 +25,6 @@ bool EarleyParser::IsCompleted() const { return is_completed_.back(); }
 void EarleyParser::PopLastStates(int32_t cnt) {
   if (stop_token_is_accepted_) {
     stop_token_is_accepted_ = false;
-    cnt--;
   }
   if (cnt >= static_cast<int32_t>(rule_id_to_completeable_states_.size())) {
     XGRAMMAR_LOG(FATAL) << "The number of states to be popped is larger than the size of states.";
@@ -279,6 +278,7 @@ void EarleyParser::Reset() {
   rule_id_to_completeable_states_.clear();
   scanable_state_history_.PopBack(scanable_state_history_.Size());
   is_completed_.clear();
+  stop_token_is_accepted_ = false;
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty());
   PushStateAndExpand(ParserState(
       grammar_->GetRootRuleId(),

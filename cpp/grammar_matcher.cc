@@ -347,6 +347,7 @@ bool GrammarMatcher::Impl::AcceptStopToken() {
     return false;
   }
   XGRAMMAR_DCHECK(!stop_token_is_accepted_);
+  token_length_history.push_back(0);
   stop_token_is_accepted_ = true;
   return true;
 }
