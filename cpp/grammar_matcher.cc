@@ -548,9 +548,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     tmp_rejected_indices_delta_.clear();
 
     // Examine only the current one ParserState
-    rule_id_to_completeable_states_.emplace_back();
-    is_completed_.push_back(is_completed_.back());
-    scanable_state_history_.PushBack(&ParserState, 1);
+    PushOneStateToCheck(ParserState);
 
     const std::string* prev_token = nullptr;
     int prev_matched_size = 0;

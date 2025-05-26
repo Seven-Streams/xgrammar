@@ -413,6 +413,17 @@ class EarleyParser {
     }
     return latest_states;
   }
+
+  /*!
+   * \brief Push one state to check if it can accept the token.
+   * \param state The state to be pushed.
+   */
+  void PushOneStateToCheck(const ParserState& state) {
+    rule_id_to_completeable_states_.emplace_back();
+    is_completed_.push_back(is_completed_.back());
+    scanable_state_history_.PushBack(&state, 1);
+    return;
+  }
 };
 
 }  // namespace xgrammar
