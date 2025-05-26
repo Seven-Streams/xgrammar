@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 5.26/fix/earley
 
 jobs:
   pre_check:
