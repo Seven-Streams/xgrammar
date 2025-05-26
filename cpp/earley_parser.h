@@ -195,7 +195,9 @@ class EarleyParser {
    * - Predictable(If it predict a new rule successfully, then it will be stored in
    * rule_id_to_completeable_states).
    * - Completeable(which can perform a completion operation).
-   * One state can be in multiple categories, and thus can be stored in multiple places.
+   * A state will be stored in rule_id_to_completeable_states_ if it can be completed,
+   * and it will be stored in scanable_state_history_ if it can be scanned. Otherwise,
+   * it will be discarded.
    */
  protected:
   using RuleExpr = Grammar::Impl::RuleExpr;
