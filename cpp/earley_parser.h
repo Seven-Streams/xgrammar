@@ -102,6 +102,11 @@ struct ParserState {
        << ", sub_element_id=" << state.sub_element_id << ")";
     return os;
   }
+
+  bool operator<(const ParserState& other) const {
+    return std::tie(rule_id, sequence_id, element_id, sub_element_id) <
+           std::tie(other.rule_id, other.sequence_id, other.element_id, other.sub_element_id);
+  }
 };
 
 /*
