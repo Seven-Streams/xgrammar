@@ -384,7 +384,7 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
 
   if (debug_print) {
     std::string states_str;
-    for (const auto& state : scanable_state_history_[scanable_state_history_.Size() - 1]) {
+    for (const auto& state : GetLatestScanableStates()) {
       states_str += "  " + state.ToString() + "\n";
     }
     XGRAMMAR_LOG(INFO) << "Accepting token id " << token_id << ", string: \""
@@ -458,7 +458,7 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
   }
   if (debug_print) {
     std::string states_str;
-    for (const auto& state : scanable_state_history_[scanable_state_history_.Size() - 1]) {
+    for (const auto& state : GetLatestScanableStates()) {
       states_str += "  " + state.ToString() + "\n";
     }
     XGRAMMAR_LOG(INFO) << "String \"" << PrintAsEscapedUTF8(input_str)
@@ -510,10 +510,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
   const auto& adaptive_token_mask_cache = compiled_grammar_->adaptive_token_mask_cache;
   // We need to have a copy, because scanable_state_history_ will be modified during the
   // FillNextTokenBitmask process, which can lead to undefined behavior.
-  std::vector<ParserState> latest_states;
-  for (const auto& ParserState : scanable_state_history_[scanable_state_history_.Size() - 1]) {
-    latest_states.push_back(ParserState);
-  }
+  auto latest_states = GetLatestScanableStates();
 
   // We check all the latest states of the earley parser, and check all the masks of the leaf
   // states. The final accepted token set is the union of the accepted token sets of all leaf
