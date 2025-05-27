@@ -466,5 +466,30 @@ def test_nullable_grammar():
     print(f"Average time to accept_token: {(accept_token_time) / len(input_bytes) / 1e3} us")
 
 
+def test_predict_complete():
+
+    # Test complex prediction and completion with EBNF grammar.
+    ebnf_grammar_str = """root ::= rule1 [0-9]?
+    rule1 ::= rule2 [0-9]? | rule4 [0-9]?
+    rule2 ::= rule3 [0-9]? | rule2 [0-9]? | rule1 [0-9]?
+    rule3 ::= rule4 [0-9]? | rule5 [0-9]?
+    rule4 ::= rule5 [0-9]? | rule6 [0-9]?
+    rule5 ::= rule6 [0-9]? | rule7 [0-9]? | rule8 [0-9]?
+    rule6 ::= rule7 [0-9]? | rule1 [0-9]?
+    rule7 ::= rule8 [0-9]? | rule9 [0-9]?
+    rule8 ::= rule9 [0-9]? | rule7 [0-9]?
+    rule9 ::= [0-9]?
+    """
+
+    grammar = xgr.Grammar.from_ebnf(ebnf_grammar_str)
+    print(grammar)
+
+    input_str = ""
+    for i in range(10):
+        assert _is_grammar_accept_string(grammar, input_str, print_time=True)
+        input_str += "0"
+    assert _is_grammar_accept_string(grammar, input_str, print_time=True)
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)
