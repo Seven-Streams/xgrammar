@@ -482,13 +482,23 @@ def test_predict_complete():
     """
 
     grammar = xgr.Grammar.from_ebnf(ebnf_grammar_str)
-    print(grammar)
-
     input_str = ""
     for i in range(10):
         assert _is_grammar_accept_string(grammar, input_str, print_time=True)
         input_str += "0"
     assert _is_grammar_accept_string(grammar, input_str, print_time=True)
+
+
+def test_Advance():
+
+    # Test complex Advance and completion with EBNF grammar.
+    ebnf_grammar_str = """root ::= rule1
+    rule1 ::= [a] | [a-b] | [a-c]* | "a" | "aaaaaaaaaaaaaaaaaaa"
+    """
+    grammar = xgr.Grammar.from_ebnf(ebnf_grammar_str)
+    for i in range(10):
+        input_str = "a" * i
+        assert _is_grammar_accept_string(grammar, input_str, print_time=True)
 
 
 if __name__ == "__main__":
