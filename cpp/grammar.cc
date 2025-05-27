@@ -55,10 +55,12 @@ Grammar Grammar::FromStructuralTag(
 const std::string kJSONGrammarString = R"(
 root ::= (
     "{" [ \n\t]* members_and_embrace |
+    "{" [ \n\t]* "}" |
     "[" [ \n\t]* elements_or_embrace
 )
 value_non_str ::= (
     "{" [ \n\t]* members_and_embrace |
+    "{" [ \n\t]* "}" |
     "[" [ \n\t]* elements_or_embrace |
     "0" fraction exponent |
     [1-9] [0-9]* fraction exponent |
@@ -68,7 +70,7 @@ value_non_str ::= (
     "false" |
     "null"
 ) (= [ \n\t,}\]])
-members_and_embrace ::= ("\"" characters_and_colon [ \n\t]* members_suffix | "}") (= [ \n\t,}\]])
+members_and_embrace ::= ("\"" characters_and_colon [ \n\t]* members_suffix) (= [ \n\t,}\]])
 members_suffix ::= (
     value_non_str [ \n\t]* member_suffix_suffix |
     "\"" characters_and_embrace |
@@ -80,6 +82,7 @@ member_suffix_suffix ::= (
 ) (= [ \n\t,}\]])
 elements_or_embrace ::= (
     "{" [ \n\t]* members_and_embrace elements_rest [ \n\t]* "]" |
+    "{" [ \n\t]* "}" elements_rest [ \n\t]* "]" |
     "[" [ \n\t]* elements_or_embrace elements_rest [ \n\t]* "]" |
     "\"" characters_item elements_rest [ \n\t]* "]" |
     "0" fraction exponent elements_rest [ \n\t]* "]" |
@@ -93,6 +96,7 @@ elements_or_embrace ::= (
 )
 elements ::= (
     "{" [ \n\t]* members_and_embrace elements_rest |
+    "{" [ \n\t]* "}" elements_rest |
     "[" [ \n\t]* elements_or_embrace elements_rest |
     "\"" characters_item elements_rest |
     "0" fraction exponent elements_rest |
