@@ -464,7 +464,7 @@ bool GrammarMatcher::Impl::_DebugAcceptString(const std::string& input_str, bool
 std::string GrammarMatcher::Impl::PrintBitmask(
     int32_t* bitmask_data_ptr, const TokenizerInfo& tokenizer_info
 ) {
-  constexpr int kMaxPrintTokens = 300;
+  constexpr int kMaxPrintTokens = 100;
   std::vector<int32_t> accepted_ids;
   std::vector<int32_t> rejected_ids;
   auto bitset =

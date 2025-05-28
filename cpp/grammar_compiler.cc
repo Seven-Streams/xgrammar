@@ -115,7 +115,8 @@ AdaptiveTokenMask::AdaptiveTokenMask(
     for (auto idx : accepted_indices) {
       accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
     }
-  } else if (store_type == StoreType::kAccepted) {
+  } else {
+    XGRAMMAR_DCHECK(store_type == StoreType::kAccepted);
     this->accepted_indices = accepted_indices;
   }
   this->uncertain_indices = uncertain_indices;
@@ -502,13 +503,13 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   // the rule when matching until this character. Store it in a stack for later rollback.
   tmp_can_reach_end_stack_.assign({IsCompleted()});
   tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
-  std::bitset<256> character_class_mask;
+  std::bitset<256> first_character_mask;
   const auto& sequence = grammar_->GetRuleExpr(initial_state.sequence_id);
   if (sequence.type == Grammar::Impl::RuleExprType::kSequence) {
     const auto& sub_sequence = grammar_->GetRuleExpr(sequence[initial_state.element_id]);
     switch (sub_sequence.type) {
       case Grammar::Impl::RuleExprType::kByteString: {
-        character_class_mask[sub_sequence[initial_state.sub_element_id]] = true;
+        first_character_mask[sub_sequence[initial_state.sub_element_id]] = true;
         break;
       }
       case xgrammar::Grammar::Impl::RuleExprType::kCharacterClass:
@@ -519,18 +520,18 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
             int left_char = static_cast<uint8_t>(sub_sequence[i]);
             int right_char = static_cast<uint8_t>(sub_sequence[i + 1]);
             for (int c = left_char; c <= right_char; ++c) {
-              character_class_mask[c] = true;
+              first_character_mask[c] = true;
             }
           }
           if (is_negative) {
-            character_class_mask = ~character_class_mask;
+            first_character_mask = ~first_character_mask;
           }
           break;
         }
         // Otherwise, it's matching a UTF-8 character. We can optimize the matching process
         // here.
         for (size_t i = 0x80; i < 0xC0; ++i) {
-          character_class_mask[i] = true;
+          first_character_mask[i] = true;
         }
         break;
       }
@@ -540,10 +541,10 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     }
   } else {
     XGRAMMAR_DCHECK(sequence.type == Grammar::Impl::RuleExprType::kTagDispatch);
-    character_class_mask.set();
+    first_character_mask.set();
   }
   bool rejected_indices_are_filled =
-      GetTokenMaskWithFirstCharacterCheck(sorted_decoded_vocab, character_class_mask, is_root_rule);
+      GetTokenMaskWithFirstCharacterCheck(sorted_decoded_vocab, first_character_mask, is_root_rule);
   if (rejected_indices_are_filled) {
     return AdaptiveTokenMask(
         vocab_size,
