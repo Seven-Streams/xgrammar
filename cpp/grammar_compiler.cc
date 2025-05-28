@@ -316,6 +316,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 ) {
   // the pair (a, b) means [a, b). Intialize the possible intervals.
   std::vector<std::pair<int32_t, int32_t>> possible_intervals;
+  int matched_size = 0;
   int last_interval_end = -1;
   for (int32_t i = 0; i < 256; i++) {
     if (first_char_mask[i]) {
@@ -326,21 +327,22 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (last_interval_end != -1) {
         int32_t interval_left_end =
             std::lower_bound(
-                sorted_decoded_vocab.begin(),
+                sorted_decoded_vocab.begin() + matched_size,
                 sorted_decoded_vocab.end(),
-                std::make_pair(0, std::string(1, static_cast<uint8_t>(last_interval_end))),
+                std::make_pair(0, std::string(1, static_cast<char>(last_interval_end))),
                 IntStringPairComparator()
             ) -
             sorted_decoded_vocab.begin();
         int32_t interval_right_end = std::lower_bound(
                                          sorted_decoded_vocab.begin() + interval_left_end,
                                          sorted_decoded_vocab.end(),
-                                         std::make_pair(0, std::string(1, static_cast<uint8_t>(i))),
+                                         std::make_pair(0, std::string(1, static_cast<char>(i))),
                                          IntStringPairComparator()
                                      ) -
                                      sorted_decoded_vocab.begin();
         possible_intervals.emplace_back(interval_left_end, interval_right_end);
         last_interval_end = -1;
+        matched_size = interval_right_end;
       }
     }
   }
@@ -349,9 +351,9 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     // If the last interval is not closed, we need to close it.
     int32_t interval_left_end =
         std::lower_bound(
-            sorted_decoded_vocab.begin(),
+            sorted_decoded_vocab.begin() + matched_size,
             sorted_decoded_vocab.end(),
-            std::make_pair(0, std::string(1, static_cast<uint8_t>(last_interval_end))),
+            std::make_pair(0, std::string(1, static_cast<char>(last_interval_end))),
             IntStringPairComparator()
         ) -
         sorted_decoded_vocab.begin();
@@ -426,7 +428,6 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       } else if (can_reach_end && !is_root_rule &&
                  IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) &&
                  prev_matched_size > 0) {
-        ;
         // 1. If the current rule is the root rule (is_root_rule=true), there are no
         // uncertain tokens. Not accepted tokens are just rejected.
         // 2. If a token cannot pass the lookahead assertion, it is rejected.
