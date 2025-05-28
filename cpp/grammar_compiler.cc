@@ -306,7 +306,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 ) {
   int prev_matched_size = 0;
   bool first_accept_token = true;
-
+  const std::string* prev_token = nullptr;
   for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
     const auto& token = sorted_decoded_vocab[i].second;
     if (!first_char_mask[static_cast<uint8_t>(token[0])]) {
@@ -317,9 +317,8 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     // by finding the longest common prefix with the previous token.
     bool accepted = true;
     if (!first_accept_token) {
-      const auto& prev_token = sorted_decoded_vocab[i - 1].second;
       int lcp_len =
-          std::mismatch(token.begin(), token.end(), prev_token.begin(), prev_token.end()).first -
+          std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end()).first -
           token.begin();
       if (lcp_len > prev_matched_size) {
         // Case 1. The common prefix is rejected by the matcher in the last token. Reject
@@ -341,6 +340,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       prev_matched_size = std::min(prev_matched_size, lcp_len);
     }
 
+    prev_token = &token;
     first_accept_token = false;
 
     if (accepted) {
