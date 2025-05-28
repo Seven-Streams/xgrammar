@@ -100,6 +100,27 @@ AdaptiveTokenMask::AdaptiveTokenMask(
   this->uncertain_indices = uncertain_indices;
 }
 
+AdaptiveTokenMask::AdaptiveTokenMask(
+    size_t vocab_size,
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    const std::vector<int32_t>& accepted_indices,
+    const std::vector<int32_t>& uncertain_indices
+) {
+  auto size_acc = accepted_indices.size();
+
+  store_type = size_acc >= USE_BITSET_THRESHOLD ? StoreType::kAcceptedBitset : StoreType::kAccepted;
+
+  if (store_type == StoreType::kAcceptedBitset) {
+    accepted_bitset = DynamicBitset(vocab_size);
+    for (auto idx : accepted_indices) {
+      accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
+    }
+  } else if (store_type == StoreType::kAccepted) {
+    this->accepted_indices = accepted_indices;
+  }
+  this->uncertain_indices = uncertain_indices;
+}
+
 std::string AdaptiveTokenMask::Print(const TokenizerInfo& tokenizer_info) const {
   constexpr int kMaxPrintTokens = 100;
   std::stringstream ss;
@@ -227,8 +248,11 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
    * \param sorted_decoded_vocab The sorted decoded vocabulary.
    * \param first_char_mask The first character mask.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
+   * no uncertain tokens. Useful for the root rule.
+   * \returns True if the rejected indices are filled as usual, False otherwise.
+   * It's used to determine which construction function will be used.
    */
-  void GetTokenMaskWithFirstCharacterCheck(
+  bool GetTokenMaskWithFirstCharacterCheck(
       const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
       const std::bitset<256>& first_char_mask,
       bool is_root_rule
@@ -309,7 +333,7 @@ class IntStringPairComparator {
   }
 };
 
-void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
+bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::bitset<256>& first_char_mask,
     bool is_root_rule
@@ -360,10 +384,17 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     possible_intervals.emplace_back(interval_left_end, sorted_decoded_vocab.size());
   }
 
+  int possible_token_num = 0;
+  for (const auto& interval : possible_intervals) {
+    possible_token_num += interval.second - interval.first;
+  }
+  bool fill_reject_indices =
+      (sorted_decoded_vocab.size() - possible_token_num) < AdaptiveTokenMask::USE_BITSET_THRESHOLD;
+
   XGRAMMAR_DCHECK(possible_intervals.size() > 0)
       << "There should be at least one possible interval for the first character mask.";
 
-  if (possible_intervals[0].first != 0) {
+  if (possible_intervals[0].first != 0 && fill_reject_indices) {
     for (int i = 0; i < possible_intervals[0].first; ++i) {
       tmp_rejected_indices_.push_back(i);
     }
@@ -437,7 +468,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         tmp_rejected_indices_.push_back(i);
       }
     }
-    if (interval_idx != possible_intervals.size() - 1) {
+    if (interval_idx != possible_intervals.size() - 1 && fill_reject_indices) {
       const auto& next_interval = possible_intervals[interval_idx + 1];
       for (int i = interval.second; i < next_interval.first; ++i) {
         tmp_rejected_indices_.push_back(i);
@@ -448,7 +479,8 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   // Rollback the last matched part
   PopLastStates(prev_matched_size);
 
-  if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size())) {
+  if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size()) &&
+      fill_reject_indices) {
     // If the last interval is not closed, we need to reject the rest tokens.
     for (int i = possible_intervals.back().second;
          i < static_cast<int>(sorted_decoded_vocab.size());
@@ -456,6 +488,8 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       tmp_rejected_indices_.push_back(i);
     }
   }
+
+  return fill_reject_indices;
 }
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
@@ -510,14 +544,21 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     XGRAMMAR_DCHECK(sequence.type == Grammar::Impl::RuleExprType::kTagDispatch);
     character_class_mask.set();
   }
-  GetTokenMaskWithFirstCharacterCheck(sorted_decoded_vocab, character_class_mask, is_root_rule);
-  return AdaptiveTokenMask(
-      vocab_size,
-      sorted_decoded_vocab,
-      tmp_accepted_indices_,
-      tmp_rejected_indices_,
-      tmp_uncertain_indices_
-  );
+  bool rejected_indices_are_filled =
+      GetTokenMaskWithFirstCharacterCheck(sorted_decoded_vocab, character_class_mask, is_root_rule);
+  if (rejected_indices_are_filled) {
+    return AdaptiveTokenMask(
+        vocab_size,
+        sorted_decoded_vocab,
+        tmp_accepted_indices_,
+        tmp_rejected_indices_,
+        tmp_uncertain_indices_
+    );
+  } else {
+    return AdaptiveTokenMask(
+        vocab_size, sorted_decoded_vocab, tmp_accepted_indices_, tmp_uncertain_indices_
+    );
+  }
 }
 
 /******************* GrammarCompiler::Impl *******************/
