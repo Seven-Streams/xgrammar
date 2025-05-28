@@ -329,14 +329,14 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
             std::lower_bound(
                 sorted_decoded_vocab.begin() + matched_size,
                 sorted_decoded_vocab.end(),
-                std::make_pair(0, std::string(1, static_cast<char>(last_interval_end))),
+                std::make_pair(0, std::string(1, static_cast<uint8_t>(last_interval_end))),
                 IntStringPairComparator()
             ) -
             sorted_decoded_vocab.begin();
         int32_t interval_right_end = std::lower_bound(
                                          sorted_decoded_vocab.begin() + interval_left_end,
                                          sorted_decoded_vocab.end(),
-                                         std::make_pair(0, std::string(1, static_cast<char>(i))),
+                                         std::make_pair(0, std::string(1, static_cast<uint8_t>(i))),
                                          IntStringPairComparator()
                                      ) -
                                      sorted_decoded_vocab.begin();
@@ -353,7 +353,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         std::lower_bound(
             sorted_decoded_vocab.begin() + matched_size,
             sorted_decoded_vocab.end(),
-            std::make_pair(0, std::string(1, static_cast<char>(last_interval_end))),
+            std::make_pair(0, std::string(1, static_cast<uint8_t>(last_interval_end))),
             IntStringPairComparator()
         ) -
         sorted_decoded_vocab.begin();
@@ -369,20 +369,20 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     }
   }
 
+  int prev_matched_size = 0;
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
-    int prev_matched_size = 0;
     bool first_accept_token = true;
     const auto& interval = possible_intervals[interval_idx];
-
+    const std::string* prev_token = nullptr;
     for (int i = interval.first; i < interval.second; ++i) {
       const auto& token = sorted_decoded_vocab[i].second;
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
       bool accepted = true;
       if (!first_accept_token) {
-        const auto& prev_token = sorted_decoded_vocab[i - 1].second;
         int lcp_len =
-            std::mismatch(token.begin(), token.end(), prev_token.begin(), prev_token.end()).first -
+            std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
+                .first -
             token.begin();
         if (lcp_len > prev_matched_size) {
           // Case 1. The common prefix is rejected by the matcher in the last token. Reject
@@ -405,6 +405,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       first_accept_token = false;
+      prev_token = &token;
 
       if (accepted) {
         // Accept the rest chars one by one
@@ -436,9 +437,6 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         tmp_rejected_indices_.push_back(i);
       }
     }
-    // Rollback the last matched part
-    PopLastStates(prev_matched_size);
-
     if (interval_idx != possible_intervals.size() - 1) {
       const auto& next_interval = possible_intervals[interval_idx + 1];
       for (int i = interval.second; i < next_interval.first; ++i) {
@@ -446,6 +444,9 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
     }
   }
+
+  // Rollback the last matched part
+  PopLastStates(prev_matched_size);
 
   if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size())) {
     // If the last interval is not closed, we need to reject the rest tokens.
