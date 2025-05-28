@@ -299,83 +299,161 @@ bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
   return false;
 }
 
+// Comparator for std::pair<int32_t, std::string> based on the string value.
+class IntStringPairComparator {
+ public:
+  bool operator()(
+      const std::pair<int32_t, std::string>& lhs, const std::pair<int32_t, std::string>& rhs
+  ) const {
+    return lhs.second < rhs.second;
+  }
+};
+
 void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::bitset<256>& first_char_mask,
     bool is_root_rule
 ) {
-  int prev_matched_size = 0;
-  bool first_accept_token = true;
-
-  for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
-    const auto& token = sorted_decoded_vocab[i].second;
-    if (!first_char_mask[static_cast<uint8_t>(token[0])]) {
-      tmp_rejected_indices_.push_back(i);
-      continue;
-    }
-    // Many tokens may contain the same prefix, so we will avoid unnecessary matching
-    // by finding the longest common prefix with the previous token.
-    bool accepted = true;
-    if (!first_accept_token) {
-      const auto& prev_token = sorted_decoded_vocab[i - 1].second;
-      int lcp_len =
-          std::mismatch(token.begin(), token.end(), prev_token.begin(), prev_token.end()).first -
-          token.begin();
-      if (lcp_len > prev_matched_size) {
-        // Case 1. The common prefix is rejected by the matcher in the last token. Reject
-        // directly.
-        accepted = false;
-      } else if (lcp_len < prev_matched_size) {
-        // Case 2. The common prefix is shorter than the previous matched size. Rollback
-        // the non-common part.
-        PopLastStates(prev_matched_size - lcp_len);
-        tmp_can_reach_end_stack_.erase(
-            tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
-            tmp_can_reach_end_stack_.end()
-        );
-        tmp_can_reach_end_prefix_or_stack_.erase(
-            tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
-            tmp_can_reach_end_prefix_or_stack_.end()
-        );
+  // the pair (a, b) means [a, b). Intialize the possible intervals.
+  std::vector<std::pair<int32_t, int32_t>> possible_intervals;
+  int last_interval_end = -1;
+  for (int32_t i = 0; i < 256; i++) {
+    if (first_char_mask[i]) {
+      if (last_interval_end == -1) {
+        last_interval_end = i;
       }
-      prev_matched_size = std::min(prev_matched_size, lcp_len);
-    }
-
-    first_accept_token = false;
-
-    if (accepted) {
-      // Accept the rest chars one by one
-      for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
-        if (!Advance(token[j])) {
-          accepted = false;
-          break;
-        }
-        tmp_can_reach_end_stack_.push_back(IsCompleted());
-        tmp_can_reach_end_prefix_or_stack_.push_back(
-            tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
-        );
-        prev_matched_size = j + 1;
-      }
-    }
-
-    bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
-
-    if (accepted) {
-      tmp_accepted_indices_.push_back(i);
-    } else if (can_reach_end && !is_root_rule &&
-               IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) &&
-               prev_matched_size > 0) {
-      ;
-      // 1. If the current rule is the root rule (is_root_rule=true), there are no
-      // uncertain tokens. Not accepted tokens are just rejected.
-      // 2. If a token cannot pass the lookahead assertion, it is rejected.
-      tmp_uncertain_indices_.push_back(i);
     } else {
+      if (last_interval_end != -1) {
+        int32_t interval_left_end =
+            std::lower_bound(
+                sorted_decoded_vocab.begin(),
+                sorted_decoded_vocab.end(),
+                std::make_pair(0, std::string(1, static_cast<uint8_t>(last_interval_end))),
+                IntStringPairComparator()
+            ) -
+            sorted_decoded_vocab.begin();
+        int32_t interval_right_end = std::lower_bound(
+                                         sorted_decoded_vocab.begin() + interval_left_end,
+                                         sorted_decoded_vocab.end(),
+                                         std::make_pair(0, std::string(1, static_cast<uint8_t>(i))),
+                                         IntStringPairComparator()
+                                     ) -
+                                     sorted_decoded_vocab.begin();
+        possible_intervals.emplace_back(interval_left_end, interval_right_end);
+        last_interval_end = -1;
+      }
+    }
+  }
+
+  if (last_interval_end != -1) {
+    // If the last interval is not closed, we need to close it.
+    int32_t interval_left_end =
+        std::lower_bound(
+            sorted_decoded_vocab.begin(),
+            sorted_decoded_vocab.end(),
+            std::make_pair(0, std::string(1, static_cast<uint8_t>(last_interval_end))),
+            IntStringPairComparator()
+        ) -
+        sorted_decoded_vocab.begin();
+    possible_intervals.emplace_back(interval_left_end, sorted_decoded_vocab.size());
+  }
+
+  XGRAMMAR_DCHECK(possible_intervals.size() > 0)
+      << "There should be at least one possible interval for the first character mask.";
+
+  if (possible_intervals[0].first != 0) {
+    for (int i = 0; i < possible_intervals[0].first; ++i) {
       tmp_rejected_indices_.push_back(i);
     }
   }
-  // Rollback the last matched part
-  PopLastStates(prev_matched_size);
+
+  for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
+    int prev_matched_size = 0;
+    bool first_accept_token = true;
+    const auto& interval = possible_intervals[interval_idx];
+
+    for (int i = interval.first; i < interval.second; ++i) {
+      const auto& token = sorted_decoded_vocab[i].second;
+      // Many tokens may contain the same prefix, so we will avoid unnecessary matching
+      // by finding the longest common prefix with the previous token.
+      bool accepted = true;
+      if (!first_accept_token) {
+        const auto& prev_token = sorted_decoded_vocab[i - 1].second;
+        int lcp_len =
+            std::mismatch(token.begin(), token.end(), prev_token.begin(), prev_token.end()).first -
+            token.begin();
+        if (lcp_len > prev_matched_size) {
+          // Case 1. The common prefix is rejected by the matcher in the last token. Reject
+          // directly.
+          accepted = false;
+        } else if (lcp_len < prev_matched_size) {
+          // Case 2. The common prefix is shorter than the previous matched size. Rollback
+          // the non-common part.
+          PopLastStates(prev_matched_size - lcp_len);
+          tmp_can_reach_end_stack_.erase(
+              tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
+              tmp_can_reach_end_stack_.end()
+          );
+          tmp_can_reach_end_prefix_or_stack_.erase(
+              tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
+              tmp_can_reach_end_prefix_or_stack_.end()
+          );
+        }
+        prev_matched_size = std::min(prev_matched_size, lcp_len);
+      }
+
+      first_accept_token = false;
+
+      if (accepted) {
+        // Accept the rest chars one by one
+        for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
+          if (!Advance(token[j])) {
+            accepted = false;
+            break;
+          }
+          tmp_can_reach_end_stack_.push_back(IsCompleted());
+          tmp_can_reach_end_prefix_or_stack_.push_back(
+              tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
+          );
+          prev_matched_size = j + 1;
+        }
+      }
+
+      bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+
+      if (accepted) {
+        tmp_accepted_indices_.push_back(i);
+      } else if (can_reach_end && !is_root_rule &&
+                 IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) &&
+                 prev_matched_size > 0) {
+        ;
+        // 1. If the current rule is the root rule (is_root_rule=true), there are no
+        // uncertain tokens. Not accepted tokens are just rejected.
+        // 2. If a token cannot pass the lookahead assertion, it is rejected.
+        tmp_uncertain_indices_.push_back(i);
+      } else {
+        tmp_rejected_indices_.push_back(i);
+      }
+    }
+    // Rollback the last matched part
+    PopLastStates(prev_matched_size);
+
+    if (interval_idx != possible_intervals.size() - 1) {
+      const auto& next_interval = possible_intervals[interval_idx + 1];
+      for (int i = interval.second; i < next_interval.first; ++i) {
+        tmp_rejected_indices_.push_back(i);
+      }
+    }
+  }
+
+  if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size())) {
+    // If the last interval is not closed, we need to reject the rest tokens.
+    for (int i = possible_intervals.back().second;
+         i < static_cast<int>(sorted_decoded_vocab.size());
+         ++i) {
+      tmp_rejected_indices_.push_back(i);
+    }
+  }
 }
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
