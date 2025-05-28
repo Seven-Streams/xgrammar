@@ -401,16 +401,15 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   }
 
   int prev_matched_size = 0;
+  const std::string* prev_token = nullptr;
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
-    bool first_accept_token = true;
     const auto& interval = possible_intervals[interval_idx];
-    const std::string* prev_token = nullptr;
     for (int i = interval.first; i < interval.second; ++i) {
       const auto& token = sorted_decoded_vocab[i].second;
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
       bool accepted = true;
-      if (!first_accept_token) {
+      if (prev_token != nullptr) {
         int lcp_len =
             std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
                 .first -
@@ -435,7 +434,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         prev_matched_size = std::min(prev_matched_size, lcp_len);
       }
 
-      first_accept_token = false;
       prev_token = &token;
 
       if (accepted) {
