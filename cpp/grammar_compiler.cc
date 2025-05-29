@@ -375,15 +375,11 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         }
         break;
       }
-      case Grammar::Impl::RuleExprType::kCharacterClassStar: {
+      default: {
         // The first character mask is the same as the first character mask of the
         // lookahead assertion.
         first_char_mask_with_lookahead.set();
         break;
-      }
-      default: {
-        XGRAMMAR_LOG(FATAL
-        ) << "The lookahead assertion must be a byte string or a character class.";
       }
     }
   }
