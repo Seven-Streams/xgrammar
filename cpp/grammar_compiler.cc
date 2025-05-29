@@ -262,7 +262,10 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
  private:
   /*! \brief Check if a token can pass the lookahead assertion. */
   bool IsTokenPassLookaheadAssertion(
-      const std::string& token, const std::vector<bool>& can_reach_end_stack
+      const std::string& token,
+      const std::vector<bool>& can_reach_end_stack,
+      const int32_t lookahead_assertion_id,
+      const std::bitset<256>& first_char_mask
   );
 
   // The id of the initial rule.
@@ -280,9 +283,11 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 };
 
 bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
-    const std::string& token, const std::vector<bool>& can_reach_end_stack
+    const std::string& token,
+    const std::vector<bool>& can_reach_end_stack,
+    const int32_t lookahead_assertion_id,
+    const std::bitset<256>& first_char_mask
 ) {
-  auto lookahead_assertion_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
   if (lookahead_assertion_id == -1) {
     return true;
   }
@@ -294,7 +299,7 @@ bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
   // Find all positions that can come to and end. Then check if the suffix from that position
   // can be accepted by the lookahead assertion.
   for (int i = static_cast<int>(can_reach_end_stack.size()) - 1; i >= 0; --i) {
-    if (!can_reach_end_stack[i]) {
+    if (!can_reach_end_stack[i] || !first_char_mask[static_cast<uint8_t>(token[i])]) {
       continue;
     }
     int last_accept_pos = i - 1;
@@ -341,6 +346,47 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 ) {
   // the pair (a, b) means [a, b). Intialize the possible intervals.
   std::vector<std::pair<int32_t, int32_t>> possible_intervals;
+  int32_t look_ahead_assertion_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
+  std::bitset<256> first_char_mask_with_lookahead;
+  if (look_ahead_assertion_id == -1) {
+    first_char_mask_with_lookahead.set();
+  } else {
+    const auto& assert_expr = grammar_->GetRuleExpr(look_ahead_assertion_id);
+    XGRAMMAR_DCHECK(assert_expr.type == Grammar::Impl::RuleExprType::kSequence)
+        << "The lookahead assertion must be a sequence.";
+    XGRAMMAR_DCHECK(assert_expr.size() > 0);
+    const auto& first_element = grammar_->GetRuleExpr(assert_expr[0]);
+    switch (first_element.type) {
+      case Grammar::Impl::RuleExprType::kByteString: {
+        first_char_mask_with_lookahead[static_cast<uint8_t>(first_element[0])] = true;
+        break;
+      }
+      case Grammar::Impl::RuleExprType::kCharacterClass: {
+        bool is_negative = first_element[0];
+        for (int i = 1; i < first_element.size(); i += 2) {
+          int left_char = static_cast<uint8_t>(first_element[i]);
+          int right_char = static_cast<uint8_t>(first_element[i + 1]);
+          for (int c = left_char; c <= right_char; ++c) {
+            first_char_mask_with_lookahead[c] = true;
+          }
+        }
+        if (is_negative) {
+          first_char_mask_with_lookahead = ~first_char_mask_with_lookahead;
+        }
+        break;
+      }
+      case Grammar::Impl::RuleExprType::kCharacterClassStar: {
+        // The first character mask is the same as the first character mask of the
+        // lookahead assertion.
+        first_char_mask_with_lookahead.set();
+        break;
+      }
+      default: {
+        XGRAMMAR_LOG(FATAL
+        ) << "The lookahead assertion must be a byte string or a character class.";
+      }
+    }
+  }
   int matched_size = 0;
   int last_interval_end = -1;
   for (int32_t i = 0; i < 256; i++) {
@@ -457,7 +503,12 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
       } else if (can_reach_end && !is_root_rule &&
-                 IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) &&
+                 IsTokenPassLookaheadAssertion(
+                     token,
+                     tmp_can_reach_end_stack_,
+                     look_ahead_assertion_id,
+                     first_char_mask_with_lookahead
+                 ) &&
                  prev_matched_size > 0) {
         // 1. If the current rule is the root rule (is_root_rule=true), there are no
         // uncertain tokens. Not accepted tokens are just rejected.
