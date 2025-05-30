@@ -165,7 +165,7 @@ class RepeatDetector {
   int size_ = 0;
 
  public:
-  RepeatDetector(const int& transition_threshold = 50)
+  RepeatDetector(const int transition_threshold = 50)
       : transition_threshold_(transition_threshold), size_(0) {
     visited_vector_.resize(transition_threshold_);
   }
@@ -250,7 +250,7 @@ class EarleyParser {
   /*!
    * \brief The scanning operation of the Earley parser. Put the new states in the queue.
    */
-  void Scan(const ParserState& state, const uint8_t& ch);
+  void Scan(const ParserState& state, const uint8_t ch);
 
   /*!
    * \brief The completion operation of the Earley parser.
@@ -298,7 +298,7 @@ class EarleyParser {
    * \return The next state, Invalid state if the character is not accepted.
    */
   void AdvanceCharacterClass(
-      const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence
+      const ParserState& state, const uint8_t ch, const RuleExpr& sub_sequence
   );
 
   /*!
@@ -308,7 +308,7 @@ class EarleyParser {
    * \param sub_sequence The sub sequence to be checked.
    * \return The next state, Invalid state if the character is not accepted.
    */
-  void AdvanceByteString(const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence);
+  void AdvanceByteString(const ParserState& state, const uint8_t ch, const RuleExpr& sub_sequence);
 
   /*!
    * \brief Advance the parser to the next state, with the sub sequence is kCharacterClassStar.
@@ -318,7 +318,7 @@ class EarleyParser {
    * \return The next state, Invalid state if the character is not accepted.
    */
   void AdvanceCharacterClassStar(
-      const ParserState& state, const uint8_t& ch, const RuleExpr& sub_sequence
+      const ParserState& state, const uint8_t ch, const RuleExpr& sub_sequence
   );
 
   /*!
@@ -328,9 +328,7 @@ class EarleyParser {
    * \param cur_sequence The sequence of the current state.
    * \return The next state, Invalid state if the character is not accepted.
    */
-  void AdvanceTagDispatch(
-      const ParserState& state, const uint8_t& ch, const RuleExpr& cur_sequence
-  );
+  void AdvanceTagDispatch(const ParserState& state, const uint8_t ch, const RuleExpr& cur_sequence);
 
   /*!
    * \brief Enqueue the state into the queue.
@@ -364,7 +362,7 @@ class EarleyParser {
    * \param initial_state The initial state to be pushed into the parser.
    */
   EarleyParser(
-      const Grammar& grammar, const ParserState& initial_state, const bool& need_expand = true
+      const Grammar& grammar, const ParserState& initial_state, const bool need_expand = true
   );
 
   /*!
@@ -373,7 +371,7 @@ class EarleyParser {
    * \return True if the character is accepted, false otherwise.
    * \note If the character isn't accepted, then the states won't be changed.
    */
-  bool Advance(const uint8_t& ch);
+  bool Advance(const uint8_t ch);
 
   /*!
    * \brief Remove the newly added states.
