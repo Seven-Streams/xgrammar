@@ -65,6 +65,7 @@ void EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
           parent_state.input_pos,
           0
       });
+      continue;
     }
     XGRAMMAR_DCHECK(parent_expr.type == RuleExprType::kTagDispatch);
     Enqueue(
