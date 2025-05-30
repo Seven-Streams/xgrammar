@@ -16,6 +16,7 @@
 #include "compiled_grammar_data_structure.h"
 #include "earley_parser.h"
 #include "fsm.h"
+#include "fsm_builder.h"
 #include "grammar_data_structure.h"
 #include "grammar_functor.h"
 #include "support/logging.h"
@@ -670,12 +671,9 @@ void GrammarCompiler::Impl::BuildTagDispatchFSM(
   }
 
   std::vector<int32_t> end_nodes;
-  FSMWithStartEnd trie = BuildTrie(tags, &end_nodes);
-  CompactFSMWithStartEnd compacted_fsm;
-  compacted_fsm.fsm = trie.fsm.ToCompact();
-  compacted_fsm.ends = trie.ends;
-  compacted_fsm.start = trie.start;
-  grammar->root_tag_dispatch_fsm = compacted_fsm;
+  TrieFSMBuilder builder;
+  FSMWithStartEnd trie = builder.Build(tags, &end_nodes);
+  grammar->root_tag_dispatch_fsm = trie.ToCompact();
   for (int i = 0; i < static_cast<int>(end_nodes.size()); ++i) {
     grammar->tag_dispatch_end_node_to_rule_id[end_nodes[i]] = rule_ids[i];
   }
@@ -750,8 +748,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
 
     if (rule_body.type == RuleExprType::kTagDispatch) {
       auto state = ParserState(rule_id, rule.body_expr_id, 0, ParserState::kNoPrevInputPos, 0);
-      for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumNodes(); ++i) {
-        if (!grammar->root_tag_dispatch_fsm->IsEndNode(i)) {
+      for (int i = 0; i < grammar->root_tag_dispatch_fsm->NumStates(); ++i) {
+        if (!grammar->root_tag_dispatch_fsm->IsEndState(i)) {
           state.element_id = i;
           add_task_adaptive_token_mask(state, rule_id == root_rule_id);
         }
