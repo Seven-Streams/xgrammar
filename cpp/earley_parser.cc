@@ -47,43 +47,34 @@ void EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.input_pos];
-  auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
-  for (; parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
+  for (auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
+       parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
     const auto& parent_expr = grammar_->GetRuleExpr(parent_state.sequence_id);
-    switch (parent_expr.type) {
+    if (parent_expr.type == RuleExprType::kSequence) {
       // These two types can predict other new rules. We need to
       // to move to the next element.
-      case RuleExprType::kSequence: {
-        XGRAMMAR_DCHECK(
-            grammar_->GetRuleExpr(parent_expr[parent_state.element_id]).type ==
-            RuleExprType::kRuleRef
-        );
-        Enqueue(ParserState{
-            parent_state.rule_id,
-            parent_state.sequence_id,
-            parent_state.element_id + 1,
-            parent_state.input_pos,
-            0
-        });
-        break;
-      }
-      case RuleExprType::kTagDispatch: {
-        Enqueue(
-            {parent_state.rule_id,
-             parent_state.sequence_id,
-             grammar_->root_tag_dispatch_fsm->GetStart(),
-             parent_state.input_pos,
-             0}
-        );
-        break;
-      }
-      default: {
-        XGRAMMAR_LOG(FATAL
-        ) << "The parent state is not a sequence or a tag dispatch, which is not supported.";
-      }
+      XGRAMMAR_DCHECK(
+          grammar_->GetRuleExpr(parent_expr[parent_state.element_id]).type == RuleExprType::kRuleRef
+      );
+      Enqueue(ParserState{
+          parent_state.rule_id,
+          parent_state.sequence_id,
+          parent_state.element_id + 1,
+          parent_state.input_pos,
+          0
+      });
+      return;
     }
+    XGRAMMAR_DCHECK(parent_expr.type == RuleExprType::kTagDispatch);
+    Enqueue(
+        {parent_state.rule_id,
+         parent_state.sequence_id,
+         grammar_->root_tag_dispatch_fsm->GetStart(),
+         parent_state.input_pos,
+         0}
+    );
   }
 }
 
@@ -100,24 +91,22 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
     // A tag has is dispatched.
     ExpandNextRuleRefElement(state, rule_expr, nullptr);
     return std::make_pair(false, false);
-  } else {
-    XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
-    if (state.element_id == rule_expr.size()) {
-      // The rule is completed.
-      return std::make_pair(false, true);
-    }
-    const auto& element_expr = grammar_->GetRuleExpr(rule_expr[state.element_id]);
-    if (element_expr.type == RuleExprType::kRuleRef) {
-      ExpandNextRuleRefElement(state, rule_expr, &element_expr);
-      return std::make_pair(false, false);
-    }
-    if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
-      Enqueue(
-          ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
-      );
-    }
-    return std::make_pair(true, false);
   }
+  XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
+  if (state.element_id == rule_expr.size()) {
+    // The rule is completed.
+    return std::make_pair(false, true);
+  }
+  const auto& element_expr = grammar_->GetRuleExpr(rule_expr[state.element_id]);
+  if (element_expr.type == RuleExprType::kRuleRef) {
+    ExpandNextRuleRefElement(state, rule_expr, &element_expr);
+    return std::make_pair(false, false);
+  }
+  if (element_expr.type == RuleExprType::kCharacterClassStar && state.sub_element_id == 0) {
+    Enqueue(ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.input_pos, 0}
+    );
+  }
+  return std::make_pair(true, false);
 }
 
 void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
@@ -125,37 +114,30 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t& ch) {
   XGRAMMAR_DCHECK(
       state.element_id != cur_rule.size() || cur_rule.type == RuleExprType::kTagDispatch
   );
-  switch (cur_rule.type) {
-    case (RuleExprType::kSequence): {
-      const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
-      // The element is a rule reference, we do not need to scan it.
-      switch (element_expr.type) {
-        case (RuleExprType::kByteString): {
-          AdvanceByteString(state, ch, element_expr);
-          break;
-        }
-        case (RuleExprType::kCharacterClass): {
-          AdvanceCharacterClass(state, ch, element_expr);
-          break;
-        }
-        case (RuleExprType::kCharacterClassStar): {
-          AdvanceCharacterClassStar(state, ch, element_expr);
-          break;
-        }
-        default: {
-          XGRAMMAR_LOG(FATAL) << "The element type is not supported! The type is: "
-                              << int(element_expr.type);
-        }
+  if (cur_rule.type == RuleExprType::kSequence) {
+    const auto& element_expr = grammar_->GetRuleExpr(cur_rule[state.element_id]);
+    // The element is a rule reference, we do not need to scan it.
+    switch (element_expr.type) {
+      case (RuleExprType::kByteString): {
+        AdvanceByteString(state, ch, element_expr);
+        break;
       }
-      break;
+      case (RuleExprType::kCharacterClass): {
+        AdvanceCharacterClass(state, ch, element_expr);
+        break;
+      }
+      case (RuleExprType::kCharacterClassStar): {
+        AdvanceCharacterClassStar(state, ch, element_expr);
+        break;
+      }
+      default: {
+        XGRAMMAR_LOG(FATAL) << "The element type is not supported! The type is: "
+                            << int(element_expr.type);
+      }
     }
-    case (RuleExprType::kTagDispatch): {
-      AdvanceTagDispatch(state, ch, cur_rule);
-      break;
-    }
-    default: {
-      XGRAMMAR_LOG(FATAL) << "The rule type is not supported! The type is: " << int(cur_rule.type);
-    }
+  } else {
+    XGRAMMAR_DCHECK(cur_rule.type == RuleExprType::kTagDispatch);
+    AdvanceTagDispatch(state, ch, cur_rule);
   }
 }
 

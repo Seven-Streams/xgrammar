@@ -27,6 +27,7 @@
 #include "xgrammar/grammar.h"
 
 namespace std {
+
 /*! \brief Define the hash function for StructuralTagItem. */
 template <>
 struct hash<xgrammar::StructuralTagItem> {
@@ -42,6 +43,7 @@ struct hash<xgrammar::StructuralTagItem> {
 }  // namespace std
 
 namespace xgrammar {
+
 /******************* MemorySize *******************/
 
 std::size_t MemorySize(const Grammar::Impl& impl) {
