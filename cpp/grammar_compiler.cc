@@ -335,13 +335,11 @@ class IntStringPairComparator {
   }
 };
 
-bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
+void GetPossibleTokenIntervals(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::bitset<256>& first_char_mask,
-    bool is_root_rule
+    std::vector<std::pair<int32_t, int32_t>>& possible_intervals
 ) {
-  // the pair (a, b) means [a, b). Intialize the possible intervals.
-  std::vector<std::pair<int32_t, int32_t>> possible_intervals;
   int matched_size = 0;
   int last_interval_end = -1;
   for (int32_t i = 0; i < 256; i++) {
@@ -385,7 +383,18 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         sorted_decoded_vocab.begin();
     possible_intervals.emplace_back(interval_left_end, sorted_decoded_vocab.size());
   }
+}
 
+bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    const std::bitset<256>& first_char_mask,
+    bool is_root_rule
+) {
+  // the pair (a, b) means [a, b). Intialize the possible intervals.
+  std::vector<std::pair<int32_t, int32_t>> possible_intervals;
+  GetPossibleTokenIntervals(sorted_decoded_vocab, first_char_mask, possible_intervals);
+
+  // Check if the type of the mask can be krejected.
   int possible_token_num = 0;
   for (const auto& interval : possible_intervals) {
     possible_token_num += interval.second - interval.first;
@@ -401,7 +410,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       tmp_rejected_indices_.push_back(i);
     }
   }
-
   int prev_matched_size = 0;
   const std::string* prev_token = nullptr;
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
