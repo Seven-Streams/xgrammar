@@ -73,7 +73,7 @@ void EarleyParser::Complete(const ParserState& state, const RuleExpr& rule_expr)
         Enqueue(
             {parent_state.rule_id,
              parent_state.sequence_id,
-             grammar_->root_tag_dispatch_fsm->StartNode(),
+             grammar_->root_tag_dispatch_fsm->GetStart(),
              parent_state.input_pos,
              0}
         );
@@ -93,7 +93,7 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
   //  If the current state is the end of the rule, we do not need to predict.
   if (rule_expr.type == RuleExprType::kTagDispatch) {
     // The rule can be scanned, but can't be completed.
-    if (!grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id)) {
+    if (!grammar_->root_tag_dispatch_fsm->IsEndState(state.element_id)) {
       tmp_accept_stop_token_ = true;
       return std::make_pair(true, false);
     }
@@ -177,7 +177,7 @@ bool EarleyParser::Advance(const uint8_t& ch) {
   tmp_states_visited_in_queue_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
-  const auto& latest_states = scanable_state_history_[scanable_state_history_.Size() - 1];
+  const auto& latest_states = scanable_state_history_[scanable_state_history_.size() - 1];
 
   // Scan all the scanable states.
   for (const auto& state : latest_states) {
@@ -276,7 +276,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
 
 void EarleyParser::Reset() {
   rule_id_to_completeable_states_.clear();
-  scanable_state_history_.PopBack(scanable_state_history_.Size());
+  scanable_state_history_.PopBack(scanable_state_history_.size());
   is_completed_.clear();
   stop_token_is_accepted_ = false;
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty());
@@ -304,7 +304,7 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
     Enqueue(ParserState{
         cur_rule_id,
         cur_rule_body_id,
-        grammar_->root_tag_dispatch_fsm->StartNode(),
+        grammar_->root_tag_dispatch_fsm->GetStart(),
         ParserState::kNoPrevInputPos,
         0
     });
@@ -323,7 +323,7 @@ void EarleyParser::ExpandNextRuleRefElement(
   // Get the reference rule id.
   int ref_rule_id;
   if (rule_expr.type == RuleExprType::kTagDispatch) {
-    XGRAMMAR_DCHECK(grammar_->root_tag_dispatch_fsm->IsEndNode(state.element_id));
+    XGRAMMAR_DCHECK(grammar_->root_tag_dispatch_fsm->IsEndState(state.element_id));
     ref_rule_id = grammar_->tag_dispatch_end_node_to_rule_id[state.element_id];
   } else {
     XGRAMMAR_DCHECK(rule_expr.type == RuleExprType::kSequence);
@@ -369,7 +369,7 @@ void EarleyParser::ExpandNextRuleRefElement(
         EnqueueWithoutProcess(ParserState{
             state.rule_id,
             state.sequence_id,
-            grammar_->root_tag_dispatch_fsm->StartNode(),
+            grammar_->root_tag_dispatch_fsm->GetStart(),
             state.input_pos,
             0
         });
@@ -547,20 +547,22 @@ void EarleyParser::AdvanceCharacterClassStar(
 void EarleyParser::AdvanceTagDispatch(
     const ParserState& state, const uint8_t& ch, const RuleExpr& cur_sequence
 ) {
-  const auto& root_tag_dispatch_fsm = grammar_->root_tag_dispatch_fsm;
-  XGRAMMAR_DCHECK(root_tag_dispatch_fsm)
-      << "The grammar does not have a root tag dispatch rule; it is not built.";
-  const auto& start_node = root_tag_dispatch_fsm->StartNode();
-  const auto& next_node = root_tag_dispatch_fsm->Transition(state.element_id, ch);
+  auto root_tag_dispatch_fsm_optional = grammar_->root_tag_dispatch_fsm;
+  if (!root_tag_dispatch_fsm_optional) {
+    XGRAMMAR_LOG(FATAL) << "The grammar does not have a root tag dispatch rule; it is not built.";
+    XGRAMMAR_UNREACHABLE();
+  }
+  auto root_tag_dispatch_fsm = root_tag_dispatch_fsm_optional.value();
+  auto start_node = root_tag_dispatch_fsm.GetStart();
+  auto next_node = root_tag_dispatch_fsm->GetNextState(state.element_id, ch);
   auto new_state = state;
-  if (next_node == CompactFSMWithStartEnd::NO_TRANSITION) {
+  if (next_node == CompactFSM::kNoNextState) {
     // Case 1. The new char cannot continue to be accepted by the tag dispatch fsm.
     // We try to accept the new char from the start node. If accepted, we go to the target
     // node. If it still cannot be accepted, we stay at the start node.
-    auto new_next_node = root_tag_dispatch_fsm->Transition(start_node, ch);
-    new_state.element_id =
-        new_next_node == CompactFSMWithStartEnd::NO_TRANSITION ? start_node : new_next_node;
-    if (root_tag_dispatch_fsm->IsEndNode(new_state.element_id)) {
+    auto new_next_node = root_tag_dispatch_fsm->GetNextState(start_node, ch);
+    new_state.element_id = new_next_node == CompactFSM::kNoNextState ? start_node : new_next_node;
+    if (root_tag_dispatch_fsm.IsEndState(new_state.element_id)) {
       tmp_process_state_queue_.push(new_state);
     } else {
       tmp_accept_stop_token_ = true;
@@ -570,7 +572,7 @@ void EarleyParser::AdvanceTagDispatch(
     // Case 2. The new char can continue to be accepted by the tag dispatch fsm.
     // We need to update the element id to the next node.
     new_state.element_id = next_node;
-    if (root_tag_dispatch_fsm->IsEndNode(next_node)) {
+    if (root_tag_dispatch_fsm.IsEndState(next_node)) {
       tmp_process_state_queue_.push(new_state);
     } else {
       tmp_accept_stop_token_ = true;

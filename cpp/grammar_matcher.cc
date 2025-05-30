@@ -647,7 +647,7 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
   bool can_find_next_char = true;
 
   while (can_find_next_char) {
-    const auto& states = scanable_state_history_[scanable_state_history_.Size() - 1];
+    const auto& states = scanable_state_history_[scanable_state_history_.size() - 1];
 
     // 1. Check that for every leaf ParserState, the next possible char is unique and the same
     // -1 means not found yet; 0~255 means the next char

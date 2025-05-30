@@ -408,7 +408,7 @@ class EarleyParser {
    */
   std::vector<ParserState> GetLatestScanableStates() const {
     std::vector<ParserState> latest_states;
-    for (const auto& state : scanable_state_history_[scanable_state_history_.Size() - 1]) {
+    for (const auto& state : scanable_state_history_[scanable_state_history_.size() - 1]) {
       latest_states.push_back(state);
     }
     return latest_states;
