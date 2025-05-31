@@ -11,7 +11,11 @@ import torch
 from transformers import AutoTokenizer
 
 import xgrammar as xgr
-from xgrammar.testing import _get_masked_tokens_from_bitmask, _is_grammar_accept_string
+from xgrammar.testing import (
+    _get_masked_tokens_from_bitmask,
+    _get_matcher_from_grammar_and_tokenizer_info,
+    _is_grammar_accept_string,
+)
 
 
 def test_simple():
@@ -450,6 +454,19 @@ def test_character_class_star_utf8():
     ebnf_grammar_str = """root ::= [^0-9]*"""
     test_string = "worldせかい世界"
     assert _is_grammar_accept_string(ebnf_grammar_str, test_string)
+
+
+def test_not_neighbour_character_class():
+    raw_grammar = "root ::= [a-cx-z]*"
+    tokenizer_path = "meta-llama/Llama-2-7b-chat-hf"
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True, trust_remote_code=True)
+    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer)
+    grammar = xgr.Grammar.from_ebnf(raw_grammar)
+    matcher = _get_matcher_from_grammar_and_tokenizer_info(grammar, tokenizer_info)
+    token_bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
+    matcher.fill_next_token_bitmask(token_bitmask)
+    rejected_token_ids = _get_masked_tokens_from_bitmask(token_bitmask, tokenizer_info.vocab_size)
+    assert len(rejected_token_ids) == 31933
 
 
 if __name__ == "__main__":
