@@ -391,14 +391,20 @@ def test_implicit_left_recursion_schema():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     config = AutoConfig.from_pretrained(model_name)
 
-    ebnf_grammar = """
-    root ::= ([/\\w \\.-]*)*
-    """
+    json_schema = {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "pattern": "^(https?://)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([/\\w \\.-]*)*/?",
+            }
+        },
+    }
     tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=config.vocab_size)
     grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-    time_start = time.monotonic_ns()
-    _ = grammar_compiler.compile_grammar(ebnf_grammar)
-    time_end = time.monotonic_ns()
+    _ = grammar_compiler.compile_json_schema(schema=dumps(json_schema))
+    print(_.grammar)
 
 
 if __name__ == "__main__":
