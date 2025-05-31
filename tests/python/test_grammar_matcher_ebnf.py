@@ -456,6 +456,7 @@ def test_character_class_star_utf8():
     assert _is_grammar_accept_string(ebnf_grammar_str, test_string)
 
 
+@pytest.mark.hf_token_required
 def test_not_neighbour_character_class():
     raw_grammar = "root ::= [a-cx-z]*"
     tokenizer_path = "meta-llama/Llama-2-7b-chat-hf"
