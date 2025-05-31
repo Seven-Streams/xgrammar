@@ -447,7 +447,7 @@ def test_advance():
 
 
 def test_character_class_star_utf8():
-    ebnf_grammar_str = """root ::= [^0-9]+"""
+    ebnf_grammar_str = """root ::= [^0-9]*"""
     test_string = "worldせかい世界"
     assert _is_grammar_accept_string(ebnf_grammar_str, test_string)
 
