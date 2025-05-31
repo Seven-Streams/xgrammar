@@ -291,5 +291,16 @@ def test_structural_tag_mask_gen():
     assert tokenizer.eos_token_id not in rejected_token_ids
 
 
+def test_empty_rule_structural_tag():
+    test_grammar_str = """root ::= TagDispatch(("tag1", rule1), ("tag2", rule2))
+    rule1 ::= [0-9]*
+    rule2 ::= [a-z]+
+    """
+    assert _is_grammar_accept_string(test_grammar_str, "tag11123")
+    assert _is_grammar_accept_string(test_grammar_str, "tag2abcde")
+    assert _is_grammar_accept_string(test_grammar_str, "tag1")
+    assert _is_grammar_accept_string(test_grammar_str, "tag1tag2a")
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

@@ -414,7 +414,6 @@ def test_nullable_grammar():
 
 
 def test_predict_complete():
-
     # Test complex prediction and completion with EBNF grammar.
     ebnf_grammar_str = """root ::= rule1 [0-9]?
     rule1 ::= rule2 [0-9]? | rule4 [0-9]?
@@ -431,13 +430,12 @@ def test_predict_complete():
     grammar = xgr.Grammar.from_ebnf(ebnf_grammar_str)
     input_str = ""
     for i in range(10):
-        assert _is_grammar_accept_string(grammar, input_str, print_time=True)
+        assert _is_grammar_accept_string(grammar, input_str)
         input_str += "0"
-    assert _is_grammar_accept_string(grammar, input_str, print_time=True)
+    assert _is_grammar_accept_string(grammar, input_str)
 
 
-def test_Advance():
-
+def test_advance():
     # Test complex Advance and completion with EBNF grammar.
     ebnf_grammar_str = """root ::= rule1
     rule1 ::= [a] | [a-b] | [a-c]* | "a" | "aaaaaaaaaaaaaaaaaaa"
@@ -445,7 +443,13 @@ def test_Advance():
     grammar = xgr.Grammar.from_ebnf(ebnf_grammar_str)
     for i in range(10):
         input_str = "a" * i
-        assert _is_grammar_accept_string(grammar, input_str, print_time=True)
+        assert _is_grammar_accept_string(grammar, input_str)
+
+
+def test_character_class_star_utf8():
+    ebnf_grammar_str = """root ::= [^0-9]+"""
+    test_string = "worldせかい世界"
+    assert _is_grammar_accept_string(ebnf_grammar_str, test_string)
 
 
 if __name__ == "__main__":
