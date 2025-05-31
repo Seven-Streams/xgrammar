@@ -302,5 +302,15 @@ def test_empty_rule_structural_tag():
     assert _is_grammar_accept_string(test_grammar_str, "tag1tag2a")
 
 
+def test_structural_tag_matching_after_failing():
+    test_grammar_str = """root ::= TagDispatch(("tag1", rule1), ("b", rule2))
+    rule1 ::= [0-9]+
+    rule2 ::= [a-z]+
+    """
+    assert not _is_grammar_accept_string(test_grammar_str, "tag1abcde")
+    assert _is_grammar_accept_string(test_grammar_str, "tag12abcde123")
+    assert _is_grammar_accept_string(test_grammar_str, "tabaaa")
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)
