@@ -201,7 +201,6 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
   rule_id_to_completeable_states_.emplace_back();
-  XGRAMMAR_DCHECK(!state.IsInvalid());
   // If the rule can't be expanded, we need to add it to the queue.
   if (!ExpandAndEnqueueUnexpandedState(state)) {
     Enqueue(state);
