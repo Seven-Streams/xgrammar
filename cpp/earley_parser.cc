@@ -348,7 +348,7 @@ void EarleyParser::ExpandNextRuleRefElement(
             ref_rule_id
         ) != grammar_->allow_empty_rule_ids.end()) {
       if (rule_expr.type == RuleExprType::kTagDispatch) {
-        EnqueueWithoutProcess(ParserState{
+        Enqueue(ParserState{
             state.rule_id,
             state.sequence_id,
             grammar_->root_tag_dispatch_fsm->GetStart(),
