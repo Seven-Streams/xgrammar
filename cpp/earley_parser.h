@@ -361,9 +361,7 @@ class EarleyParser {
    * \param grammar The grammar to be parsed.
    * \param initial_state The initial state to be pushed into the parser.
    */
-  EarleyParser(
-      const Grammar& grammar, const ParserState& initial_state, const bool need_expand = true
-  );
+  EarleyParser(const Grammar& grammar, const ParserState& initial_state);
 
   /*!
    * \brief From the current states, advance to the next state.

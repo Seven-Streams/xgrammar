@@ -191,34 +191,9 @@ bool EarleyParser::Advance(const uint8_t ch) {
   return true;
 }
 
-EarleyParser::EarleyParser(
-    const Grammar& grammar, const ParserState& init_state, const bool need_expand
-)
+EarleyParser::EarleyParser(const Grammar& grammar, const ParserState& init_state)
     : grammar_(grammar) {
-  // Check if the initial state is valid. If invalid, then we choose the root state as default.
-  ParserState init = init_state;
-  if (init_state.IsInvalid()) {
-    init = ParserState(
-        grammar_->GetRootRuleId(),
-        ParserState::kUnexpandedRuleStartSequenceId,
-        0,
-        ParserState::kNoPrevInputPos,
-        0
-    );
-  } else {
-    init = init_state;
-  }
-
-  // If there is no need to expand the initial state, we only need to add it to the
-  // scanable states history.
-  if (!need_expand) {
-    rule_id_to_completeable_states_.emplace_back();
-    is_completed_.push_back(false);
-    scanable_state_history_.PushBack({init});
-  }
-
-  // Otherwise, we expand the initial state, and process the queue.
-  PushStateAndExpand(init);
+  PushStateAndExpand(init_state);
 }
 
 void EarleyParser::PushStateAndExpand(const ParserState& state) {
@@ -226,19 +201,10 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_accept_stop_token_ = false;
   tmp_states_to_be_added_.clear();
   rule_id_to_completeable_states_.emplace_back();
-  if (state.IsInvalid()) {
-    ExpandAndEnqueueUnexpandedState(ParserState{
-        grammar_->GetRootRuleId(),
-        ParserState::kUnexpandedRuleStartSequenceId,
-        0,
-        ParserState::kNoPrevInputPos,
-        0
-    });
-  } else {
-    // If the rule can't be expanded, we need to add it to the queue.
-    if (!ExpandAndEnqueueUnexpandedState(state)) {
-      Enqueue(state);
-    }
+  XGRAMMAR_DCHECK(!state.IsInvalid());
+  // If the rule can't be expanded, we need to add it to the queue.
+  if (!ExpandAndEnqueueUnexpandedState(state)) {
+    Enqueue(state);
   }
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();

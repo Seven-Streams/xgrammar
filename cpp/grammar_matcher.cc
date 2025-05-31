@@ -259,7 +259,16 @@ class GrammarMatcher::Impl : public EarleyParser {
       bool terminate_without_stop_token = false,
       int max_rollback_tokens = 0
   )
-      : EarleyParser(compiled_grammar->grammar, ParserState::GetInvalidState()),
+      : EarleyParser(
+            compiled_grammar->grammar,
+            ParserState(
+                compiled_grammar->grammar->GetRootRuleId(),
+                ParserState::kUnexpandedRuleStartSequenceId,
+                0,
+                ParserState::kNoPrevInputPos,
+                0
+            )
+        ),
         compiled_grammar_(compiled_grammar),
         tokenizer_info_(compiled_grammar->tokenizer_info),
         stop_token_ids_(override_stop_tokens.value_or(tokenizer_info_.GetStopTokenIds())),
