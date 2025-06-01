@@ -422,25 +422,25 @@ TEST(XGrammarFSMTest, BuildTrieTest) {
   int state = fsm.GetStart();
   EXPECT_EQ(state, 0);
 
-  // // Test "hello"
-  // state = fsm.GetStart();
-  // EXPECT_EQ(fsm.Transition(state, 'h'), 1);
-  // EXPECT_EQ(fsm.Transition(1, 'e'), 2);
-  // EXPECT_EQ(fsm.Transition(2, 'l'), 3);
-  // EXPECT_EQ(fsm.Transition(3, 'l'), 4);
-  // EXPECT_EQ(fsm.Transition(4, 'o'), 5);
-  // EXPECT_TRUE(fsm.IsEndState(5));
+  // Test "hello"
+  state = fsm.GetStart();
+  EXPECT_EQ(fsm->GetNextState(state, 'h'), 1);
+  EXPECT_EQ(fsm->GetNextState(1, 'e'), 2);
+  EXPECT_EQ(fsm->GetNextState(2, 'l'), 3);
+  EXPECT_EQ(fsm->GetNextState(3, 'l'), 4);
+  EXPECT_EQ(fsm->GetNextState(4, 'o'), 5);
+  EXPECT_TRUE(fsm.IsEndState(5));
 
-  // // Test "hil"
-  // state = fsm.StartNode();
-  // EXPECT_EQ(fsm.Transition(state, 'h'), 1);
-  // EXPECT_EQ(fsm.Transition(1, 'i'), 6);
-  // EXPECT_EQ(fsm.Transition(6, 'l'), 13);
-  // EXPECT_FALSE(fsm.IsEndState(13));
+  // Test "hil"
+  state = fsm.GetStart();
+  EXPECT_EQ(fsm->GetNextState(state, 'h'), 1);
+  EXPECT_EQ(fsm->GetNextState(1, 'i'), 6);
+  EXPECT_EQ(fsm->GetNextState(6, 'l'), 13);
+  EXPECT_FALSE(fsm.IsEndState(13));
 
-  // // Test walk failure
-  // state = fsm.StartNode();
-  // EXPECT_EQ(fsm.Transition(state, 'g'), 15);
-  // EXPECT_EQ(fsm.Transition(15, 'o'), 16);
-  // EXPECT_EQ(fsm.Transition(16, 'e'), -1);
+  // Test walk failure
+  state = fsm.GetStart();
+  EXPECT_EQ(fsm->GetNextState(state, 'g'), 15);
+  EXPECT_EQ(fsm->GetNextState(15, 'o'), 16);
+  EXPECT_EQ(fsm->GetNextState(16, 'e'), -1);
 }
