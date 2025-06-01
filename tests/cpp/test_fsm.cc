@@ -455,3 +455,41 @@ TEST(XGrammarFSMTest, BuildTrieTest) {
   EXPECT_EQ(fsm->GetNextState(15, 'o'), 16);
   EXPECT_EQ(fsm->GetNextState(16, 'e'), -1);
 }
+
+TEST(XGrammarFSMTest, ComprehensiveTest) {
+  RegexFSMBuilder builder;
+  std::cout << "--------- Comprehensive Test Starts! -----------" << std::endl;
+
+  std::string email_pattern = R"((\w+)(\.\w+)*@(\w+)(\.\w+)+)";
+  auto fsm_wse = builder.Build(email_pattern).Unwrap();
+  std::string valid_emails[5] = {
+      "asnjdaj_19032910@google.com.test",
+      "12393089340190@a.b.c.d.f.e.org.test",
+      "as____________as@abc.me.test",
+      "ooooohhhhh@123456.test",
+      "ajidoa@a.test"
+  };
+  for (const auto& email : valid_emails) {
+    EXPECT_TRUE(fsm_wse.AcceptString(email)) << "Failed for email: " << email;
+  }
+
+  std::string invalid_emails[5] = {
+      "@google.test", "hello@", "hello@.test", "+++asd@b.test", "hello"
+  };
+  for (const auto& email : invalid_emails) {
+    EXPECT_FALSE(fsm_wse.AcceptString(email)) << "Failed for email: " << email;
+  }
+
+  std::string time_pattern = R"((\d{1,2}):(\d{2})(:(\d{2}))?)";
+  fsm_wse = builder.Build(time_pattern).Unwrap();
+  std::string valid_times[5] = {"1:34", "23:59", "00:00", "01:02:03", "23:59:59"};
+  for (const auto& time : valid_times) {
+    EXPECT_TRUE(fsm_wse.AcceptString(time)) << "Failed for time: " << time;
+  }
+  std::string invalid_times[9] = {
+      "19", "12:6", "12:34:", "12:34:5", "12:34:567", "12:123", "12:", ":34:23", "::"
+  };
+  for (const auto& time : invalid_times) {
+    EXPECT_FALSE(fsm_wse.AcceptString(time)) << "Failed for time: " << time;
+  }
+}
