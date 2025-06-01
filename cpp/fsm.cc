@@ -5,6 +5,7 @@
 #include "fsm.h"
 
 #include <algorithm>
+#include <bitset>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -695,6 +696,9 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
     for (const auto& edge : edges) {
       if (edge.IsRuleRef()) {
         rules_lhs.insert(edge.GetRefRuleId());
+      } else if (edge.IsCharRange()) {
+        interval_ends.insert(edge.min);
+        interval_ends.insert(edge.max + 1);
       }
     }
   }
@@ -704,20 +708,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
         if (rules_lhs.find(edge.GetRefRuleId()) != rules_lhs.end()) {
           rules.insert(edge.GetRefRuleId());
         }
-      }
-    }
-  }
-  for (const auto& edges : lhs_dfa->GetEdges()) {
-    for (const auto& edge : edges) {
-      if (edge.IsCharRange()) {
-        interval_ends.insert(edge.min);
-        interval_ends.insert(edge.max + 1);
-      }
-    }
-  }
-  for (const auto& edges : rhs_dfa->GetEdges()) {
-    for (const auto& edge : edges) {
-      if (edge.IsCharRange()) {
+      } else if (edge.IsCharRange()) {
         interval_ends.insert(edge.min);
         interval_ends.insert(edge.max + 1);
       }
@@ -729,6 +720,8 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
       intervals.emplace_back(*it, *next_it - 1);
     }
   }
+
+  // Initialize the result FSM.
   FSM result_fsm(0);
   FSMWithStartEnd result(result_fsm, 0, {}, true);
   std::unordered_map<std::pair<int, int>, int> state_map;
@@ -821,59 +814,29 @@ bool FSMWithStartEnd::IsDFA() {
   if (is_dfa_) {
     return true;
   }
-
-  std::set<int> interval_ends;
-  std::unordered_set<int> rules;
+  std::bitset<256> character_transitions;
+  std::unordered_set<int> rule_transitions;
   for (const auto& edges : fsm_->GetEdges()) {
+    character_transitions.reset();
+    rule_transitions.clear();
     for (const auto& edge : edges) {
       if (edge.IsEpsilon()) {
-        return false;
+        return false;  // Epsilon transitions are not allowed in DFA.
       }
       if (edge.IsCharRange()) {
-        interval_ends.insert(edge.min);
-        interval_ends.insert(edge.max + 1);
+        for (int i = edge.min; i <= edge.max; ++i) {
+          if (character_transitions[i]) {
+            return false;  // Duplicate character transition.
+          }
+          character_transitions.set(i);
+        }
         continue;
       }
       if (edge.IsRuleRef()) {
-        rules.insert(edge.GetRefRuleId());
-        continue;
-      }
-    }
-  }
-  using Interval = std::pair<int, int>;
-  std::unordered_set<Interval> intervals;
-  for (auto it = interval_ends.begin(); it != interval_ends.end(); ++it) {
-    auto next_it = std::next(it);
-    if (next_it != interval_ends.end()) {
-      intervals.emplace(*it, *next_it - 1);
-    }
-  }
-  for (const auto& edges : fsm_->GetEdges()) {
-    for (const auto& rule : rules) {
-      bool find = false;
-      for (const auto& edge : edges) {
-        if (edge.IsRuleRef()) {
-          if (edge.GetRefRuleId() == rule) {
-            if (find) {
-              return false;
-            }
-            find = true;
-          }
+        if (rule_transitions.find(edge.GetRefRuleId()) != rule_transitions.end()) {
+          return false;  // Duplicate rule transition.
         }
-      }
-    }
-    for (const auto& interval : intervals) {
-      bool find = false;
-      for (const auto& edge : edges) {
-        if (edge.IsCharRange()) {
-          if (edge.min > interval.first || edge.max < interval.second) {
-            continue;
-          }
-          if (find) {
-            return false;
-          }
-          find = true;
-        }
+        rule_transitions.insert(edge.GetRefRuleId());
       }
     }
   }
