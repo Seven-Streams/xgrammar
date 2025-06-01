@@ -691,14 +691,14 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
   std::set<int> interval_ends;
   std::vector<std::pair<int, int>> intervals;
   // This part is to build the equivalent alphabet.
-  for (const auto& edges : lhs->GetEdges()) {
+  for (const auto& edges : lhs_dfa->GetEdges()) {
     for (const auto& edge : edges) {
       if (edge.IsRuleRef()) {
         rules_lhs.insert(edge.GetRefRuleId());
       }
     }
   }
-  for (const auto& edges : rhs->GetEdges()) {
+  for (const auto& edges : rhs_dfa->GetEdges()) {
     for (const auto& edge : edges) {
       if (edge.IsRuleRef()) {
         if (rules_lhs.find(edge.GetRefRuleId()) != rules_lhs.end()) {
@@ -734,9 +734,9 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
   std::unordered_map<std::pair<int, int>, int> state_map;
   std::unordered_set<std::pair<int, int>> visited;
   std::queue<std::pair<int, int>> queue;
-  queue.push({lhs.GetStart(), rhs.GetStart()});
+  queue.push({lhs_dfa.GetStart(), rhs_dfa.GetStart()});
   result->AddState();
-  state_map[{lhs.GetStart(), rhs.GetStart()}] = 0;
+  state_map[{lhs_dfa.GetStart(), rhs_dfa.GetStart()}] = 0;
   while (!queue.empty()) {
     if (int(state_map.size()) > num_of_states_limited) {
       return Result<FSMWithStartEnd>::Err(
@@ -810,7 +810,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
     }
   }
   for (const auto& state : visited) {
-    if (lhs.IsEndState(state.first) && rhs.IsEndState(state.second)) {
+    if (lhs_dfa.IsEndState(state.first) && rhs_dfa.IsEndState(state.second)) {
       result.AddEndState(state_map[state]);
     }
   }
@@ -1293,7 +1293,7 @@ FSMWithStartEnd FSMWithStartEnd::MinimizeDFA() const {
 }
 
 FSMWithStartEnd FSMWithStartEnd::ToDFA() const {
-  FSMWithStartEnd dfa(0, start_, {}, true);
+  FSMWithStartEnd dfa(0, 0, {}, true);
   std::vector<std::unordered_set<int>> closures;
   std::unordered_set<int> rules;
   for (const auto& edges : fsm_->GetEdges()) {

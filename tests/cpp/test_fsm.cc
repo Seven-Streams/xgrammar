@@ -265,6 +265,17 @@ TEST(XGrammarFSMTest, FunctionTest) {
   fsm_wse = fsm_wse.SimplifyEpsilon();
   EXPECT_TRUE(fsm_wse.AcceptString(test_str));
   EXPECT_EQ(fsm_wse->NumStates(), 2);
+  std::cout << "--------- Function Test10 -----------" << std::endl;
+  const auto fsm_left = builder.Build("[c-f]+").Unwrap();
+  const auto fsm_right = builder.Build("[d-h]*").Unwrap();
+  std::cout << fsm_left << std::endl;
+  std::cout << fsm_right << std::endl;
+  fsm_wse = FSMWithStartEnd::Intersect(fsm_left, fsm_right).Unwrap();
+  std::cout << fsm_wse << std::endl;
+  EXPECT_TRUE(fsm_wse.AcceptString("de"));
+  EXPECT_TRUE(fsm_wse.AcceptString("def"));
+  EXPECT_FALSE(fsm_wse.AcceptString(""));
+  EXPECT_FALSE(fsm_wse.AcceptString("cd"));
   std::cout << "--------- Function Test Passed! -----------" << std::endl;
 }
 
