@@ -343,16 +343,16 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       }
     }
 
-    bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+    // bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
 
     if (accepted) {
       tmp_accepted_indices_.push_back(i);
-    } else if (can_reach_end && !is_root_rule &&
-               IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
-      // 1. If the current rule is the root rule (is_root_rule=true), there are no
-      // uncertain tokens. Not accepted tokens are just rejected.
-      // 2. If a token cannot pass the lookahead assertion, it is rejected.
-      tmp_uncertain_indices_.push_back(i);
+      // } else if (can_reach_end && !is_root_rule &&
+      //            IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
+      //   // 1. If the current rule is the root rule (is_root_rule=true), there are no
+      //   // uncertain tokens. Not accepted tokens are just rejected.
+      //   // 2. If a token cannot pass the lookahead assertion, it is rejected.
+      //   tmp_uncertain_indices_.push_back(i);
     } else {
       tmp_rejected_indices_.push_back(i);
     }
