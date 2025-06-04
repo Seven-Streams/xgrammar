@@ -419,7 +419,7 @@ def test_nullable_grammar():
 
 def test_predict_complete():
     # Test complex prediction and completion with EBNF grammar.
-    ebnf_grammar_str = """root ::= rule1 [0-9]?
+    mixed_grammar_str = """root ::= rule1 [0-9]?
     rule1 ::= rule2 [0-9]? | rule4 [0-9]?
     rule2 ::= rule3 [0-9]? | rule2 [0-9]? | rule1 [0-9]?
     rule3 ::= rule4 [0-9]? | rule5 [0-9]?
@@ -431,12 +431,35 @@ def test_predict_complete():
     rule9 ::= [0-9]?
     """
 
-    grammar = xgr.Grammar.from_ebnf(ebnf_grammar_str)
+    grammar = xgr.Grammar.from_ebnf(mixed_grammar_str)
     input_str = ""
     for i in range(10):
         assert _is_grammar_accept_string(grammar, input_str)
         input_str += "0"
     assert _is_grammar_accept_string(grammar, input_str)
+
+    # Test right recursion
+    right_recursion_grammar = "root ::= [a-z] root | [a-z]"
+
+    accept_strings = ["a", "ab", "abc", "abcd", "abcde"]
+    reject_strings = ["", "1", "a1", "ab1", "abc1"]
+    for accept_string in accept_strings:
+        assert _is_grammar_accept_string(right_recursion_grammar, accept_string)
+    for reject_string in reject_strings:
+        assert not _is_grammar_accept_string(right_recursion_grammar, reject_string)
+
+    # Test the mixture of right recursion and other rules
+    mixed_grammar_str = """root ::= rule1
+    rule1 ::= "{" rule2 | ""
+    rule2 ::= root "}"
+    """
+    test_strings = {"", "{}", "{{}}", "{{{}}}", "{{{{}}}}", "{{{{{}}}}}"}
+    rejected_strings = {"{", "{}{}", "{{{{}", "{{}}}", "{{{{{}}}}}}"}
+
+    for test_string in test_strings:
+        assert _is_grammar_accept_string(mixed_grammar_str, test_string)
+    for rejected_string in rejected_strings:
+        assert not _is_grammar_accept_string(mixed_grammar_str, rejected_string)
 
 
 def test_advance():
