@@ -412,12 +412,39 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       tmp_rejected_indices_.push_back(i);
     }
   }
+
+  bool is_self_recursion = false;
+  if (initial_state.element_id == 0) {
+    const auto& sequence = grammar_->GetRuleExpr(initial_state.sequence_id);
+    if (sequence.size() == 2) {
+      const auto& end_element = grammar_->GetRuleExpr(sequence[1]);
+      if (end_element.type == Grammar::Impl::RuleExprType::kRuleRef &&
+          end_element[0] == initial_state.rule_id) {
+        is_self_recursion = true;
+      }
+    }
+  }
+
   int prev_matched_size = 0;
   const std::string* prev_token = nullptr;
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
     const auto& interval = possible_intervals[interval_idx];
     for (int i = interval.first; i < interval.second; ++i) {
       const auto& token = sorted_decoded_vocab[i].second;
+      // This optimization is useful for simple self-recursive rules, like string content.
+      if (is_self_recursion) {
+        bool all_accepted = true;
+        for (char ch : token) {
+          if (!first_char_mask[static_cast<uint8_t>(ch)]) {
+            all_accepted = false;
+            break;
+          }
+        }
+        if (all_accepted) {
+          tmp_accepted_indices_.push_back(i);
+          continue;
+        }
+      }
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
       bool accepted = true;
