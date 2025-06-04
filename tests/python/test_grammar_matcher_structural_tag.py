@@ -113,27 +113,27 @@ rule2 ::= "dg"
         accepted_indices = list(set(range(tokenizer_info.vocab_size)) - set(rejected_indices))
         accepted_tokens = [tokens[id] for id in accepted_indices]
         if i < len(input_str):
-            assert matcher._debug_accept_string(c)
+            assert matcher.accept_string(c)
         assert accepted_tokens == expected_accepted_tokens[i]
 
 
 expected_grammar_test_structural_tag = r"""root ::= TagDispatch(("<function=f", trigger_rule_0), ("<function=g", trigger_rule_1))
 trigger_rule_0 ::= (("1>" root_1 "</function>") | ("2>" root_2 "</function>"))
 basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9])) (=(basic_string_sub))
-basic_string_sub ::= (("\"") | ([^\"\\\r\n] basic_string_sub) | ("\\" basic_escape basic_string_sub)) (=([ \n\t]* [,}\]:]))
+basic_string_sub ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub) | ("\\" basic_escape basic_string_sub)) (=([ \n\t]* [,}\]:]))
 basic_integer ::= (("0") | (basic_integer_1 [1-9] [0-9]*)) (=([ \n\t]* "}"))
 basic_string ::= (("\"" basic_string_sub)) (=([ \n\t]* "," [ \n\t]* "\"arg2\"" [ \n\t]* ":" [ \n\t]* basic_integer [ \n\t]* "}"))
 root_1 ::= (("{" [ \n\t]* "\"arg1\"" [ \n\t]* ":" [ \n\t]* basic_string [ \n\t]* "," [ \n\t]* "\"arg2\"" [ \n\t]* ":" [ \n\t]* basic_integer [ \n\t]* "}"))
 basic_integer_1 ::= ("" | ("-")) (=([1-9] [0-9]*))
 basic_escape_1 ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9])) (=(basic_string_sub_1))
-basic_string_sub_1 ::= (("\"") | ([^\"\\\r\n] basic_string_sub_1) | ("\\" basic_escape_1 basic_string_sub_1)) (=([ \n\t]* [,}\]:]))
+basic_string_sub_1 ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub_1) | ("\\" basic_escape_1 basic_string_sub_1)) (=([ \n\t]* [,}\]:]))
 basic_integer_2 ::= (("0") | (basic_integer_1_1 [1-9] [0-9]*)) (=([ \n\t]* "}"))
 basic_string_1 ::= (("\"" basic_string_sub_1)) (=([ \n\t]* "," [ \n\t]* "\"arg2\"" [ \n\t]* ":" [ \n\t]* basic_integer_2 [ \n\t]* "}"))
 root_2 ::= (("{" [ \n\t]* "\"arg1\"" [ \n\t]* ":" [ \n\t]* basic_string_1 [ \n\t]* "," [ \n\t]* "\"arg2\"" [ \n\t]* ":" [ \n\t]* basic_integer_2 [ \n\t]* "}"))
 basic_integer_1_1 ::= ("" | ("-")) (=([1-9] [0-9]*))
 trigger_rule_1 ::= ((">" root_3 "</function>"))
 basic_escape_2 ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9])) (=(basic_string_sub_2))
-basic_string_sub_2 ::= (("\"") | ([^\"\\\r\n] basic_string_sub_2) | ("\\" basic_escape_2 basic_string_sub_2)) (=([ \n\t]* [,}\]:]))
+basic_string_sub_2 ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub_2) | ("\\" basic_escape_2 basic_string_sub_2)) (=([ \n\t]* [,}\]:]))
 basic_number ::= ((basic_number_7 basic_number_3 basic_number_6)) (=([ \n\t]* "," [ \n\t]* "\"arg4\"" [ \n\t]* ":" [ \n\t]* root_prop_1 [ \n\t]* "}"))
 basic_string_2 ::= (("\"" basic_string_sub_2))
 root_prop_1 ::= (("[" [ \n\t]* basic_string_2 root_prop_1_1 [ \n\t]* "]") | ("[" [ \n\t]* "]")) (=([ \n\t]* "}"))
@@ -277,7 +277,7 @@ def test_structural_tag_mask_gen():
         # 3. Test character acceptance
         print("Accepting char:", bytes([c]))
         time_start = time.monotonic_ns()
-        assert matcher._debug_accept_string(bytes([c]))
+        assert matcher.accept_string(bytes([c]))
         time_end = time.monotonic_ns()
         print(f"Time to accept_token: {(time_end - time_start) / 1e3} us")
 
