@@ -432,7 +432,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         // If the current element is a character class, and the next element is a rule ref to
         // itself, and the rule only has 2 elements, then it's almost self-recursive.
       } else if (current_element_expr.type == RuleExprType::kCharacterClass &&
-                 current_element_expr.size() == 2 && initial_state.element_id == 0) {
+                 sequence_expr.size() == 2 && initial_state.element_id == 0) {
         const auto& end_element_expr = grammar_->GetRuleExpr(sequence_expr[1]);
         if (end_element_expr.type == RuleExprType::kRuleRef &&
             end_element_expr[0] == initial_state.rule_id) {
