@@ -416,7 +416,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   bool is_self_recursion = false;
   if (initial_state.element_id == 0) {
     const auto& sequence = grammar_->GetRuleExpr(initial_state.sequence_id);
-    if (sequence.size() == 2) {
+    if (sequence.size() == 2 && sequence.type == Grammar::Impl::RuleExprType::kSequence) {
       const auto& end_element = grammar_->GetRuleExpr(sequence[1]);
       if (end_element.type == Grammar::Impl::RuleExprType::kRuleRef &&
           end_element[0] == initial_state.rule_id) {
