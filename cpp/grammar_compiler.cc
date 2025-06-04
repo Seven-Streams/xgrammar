@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
@@ -414,11 +415,13 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   }
 
   bool is_self_recursion = false;
-  if (initial_state.element_id == 0) {
+  if (initial_state.element_id == 0 && initial_state.sub_element_id == 0) {
     const auto& sequence = grammar_->GetRuleExpr(initial_state.sequence_id);
     if (sequence.size() == 2 && sequence.type == Grammar::Impl::RuleExprType::kSequence) {
+      const auto& start_element = grammar_->GetRuleExpr(sequence[0]);
       const auto& end_element = grammar_->GetRuleExpr(sequence[1]);
-      if (end_element.type == Grammar::Impl::RuleExprType::kRuleRef &&
+      if (start_element.type != Grammar::Impl::RuleExprType::kByteString &&
+          end_element.type == Grammar::Impl::RuleExprType::kRuleRef &&
           end_element[0] == initial_state.rule_id) {
         is_self_recursion = true;
       }
@@ -435,7 +438,9 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (is_self_recursion) {
         bool all_accepted = true;
         for (char ch : token) {
-          if (!first_char_mask[static_cast<uint8_t>(ch)]) {
+          // If the first character is not the ascii character or can't be accepted by the
+          // first character mask, we need to check them in the parser.
+          if (isascii(ch) == 0 || !first_char_mask[static_cast<uint8_t>(ch)]) {
             all_accepted = false;
             break;
           }
