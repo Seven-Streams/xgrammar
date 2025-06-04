@@ -393,6 +393,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::bitset<256>& first_char_mask,
     bool is_root_rule
 ) {
+  using RuleExprType = Grammar::Impl::RuleExprType;
   // the pair (a, b) means [a, b). Intialize the possible intervals.
   std::vector<std::pair<int32_t, int32_t>> possible_intervals;
   GetPossibleTokenIntervals(sorted_decoded_vocab, first_char_mask, possible_intervals);
@@ -415,15 +416,26 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   }
 
   bool is_self_recursion = false;
-  if (initial_state.element_id == 0 && initial_state.sub_element_id == 0) {
-    const auto& sequence = grammar_->GetRuleExpr(initial_state.sequence_id);
-    if (sequence.size() == 2 && sequence.type == Grammar::Impl::RuleExprType::kSequence) {
-      const auto& start_element = grammar_->GetRuleExpr(sequence[0]);
-      const auto& end_element = grammar_->GetRuleExpr(sequence[1]);
-      if (start_element.type != Grammar::Impl::RuleExprType::kByteString &&
-          end_element.type == Grammar::Impl::RuleExprType::kRuleRef &&
-          end_element[0] == initial_state.rule_id) {
+
+  // Check if the initial state is self-recursive.
+  if (initial_state.sub_element_id == 0) {
+    const auto& sequence_expr = grammar_->GetRuleExpr(initial_state.sequence_id);
+    // A self-recursive rule must be a sequence.
+    if (sequence_expr.type == RuleExprType::kSequence) {
+      const auto& current_element_expr =
+          grammar_->GetRuleExpr(sequence_expr[initial_state.element_id]);
+      // If the current element is a character class star, then it's self-recursive without doubt.
+      if (current_element_expr.type == RuleExprType::kCharacterClassStar) {
         is_self_recursion = true;
+        // If the current element is a character class, and the next element is a rule ref to
+        // itself, and the rule only has 2 elements, then it's almost self-recursive.
+      } else if (current_element_expr.type == RuleExprType::kCharacterClass &&
+                 current_element_expr.size() == 2 && initial_state.element_id == 0) {
+        const auto& end_element_expr = grammar_->GetRuleExpr(sequence_expr[1]);
+        if (end_element_expr.type == RuleExprType::kRuleRef &&
+            end_element_expr[0] == initial_state.rule_id) {
+          is_self_recursion = true;
+        }
       }
     }
   }
