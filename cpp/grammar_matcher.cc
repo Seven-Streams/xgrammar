@@ -288,7 +288,7 @@ class GrammarMatcher::Impl : public EarleyParser {
 
   const std::vector<int>& GetStopTokenIds() const { return stop_token_ids_; }
 
-  std::string _DebugPrintInternalState() const { return PrintStackState(); }
+  std::string _DebugPrintInternalState() const { return PrintStates(); }
 
  private:
   using StoreType = AdaptiveTokenMask::StoreType;
@@ -424,7 +424,6 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   if (static_cast<int>(token_length_history.size()) > max_rollback_tokens_) {
     token_length_history.pop_front();
   }
-
 
   if (debug_print) {
     XGRAMMAR_LOG(INFO) << "Token #" << token_id << "<"

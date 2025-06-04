@@ -409,6 +409,15 @@ class EarleyParser {
     scanable_state_history_.PushBack(&state, 1);
     return;
   }
+
+  std::string PrintStates() const {
+    std::string result;
+    result += "There are " + std::to_string(scanable_state_history_.size()) + " scanable states:\n";
+    for (const auto& state : scanable_state_history_[scanable_state_history_.size() - 1]) {
+      result += state.ToString() + "\n";
+    }
+    return result;
+  }
 };
 
 }  // namespace xgrammar
