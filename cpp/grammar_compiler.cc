@@ -418,9 +418,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   bool is_self_recursion = false;
 
   // Check if the initial state is self-recursive.
-  // If the first character mask can accept more than 40 different
-  // characters, the optimization is likely to be useful.
-  if (initial_state.sub_element_id == 0 && first_char_mask.count() >= 40) {
+  if (initial_state.sub_element_id == 0) {
     const auto& sequence_expr = grammar_->GetRuleExpr(initial_state.sequence_id);
     // A self-recursive rule must be a sequence.
     if (sequence_expr.type == RuleExprType::kSequence) {
