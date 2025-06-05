@@ -53,6 +53,26 @@ Grammar Grammar::FromStructuralTag(
 
 // Optimized json grammar for the speed of the grammar matcher
 const std::string kJSONGrammarString = R"(
+characters_and_colon ::= (
+    "\"" [ \n\t]* ":" |
+    [^"\\\x00-\x1F] characters_and_colon |
+    "\\" escape characters_and_colon
+) (=[ \n\t]* [\"{[0-9tfn-])
+characters_and_comma ::= (
+    "\"" [ \n\t]* "," |
+    [^"\\\x00-\x1F] characters_and_comma |
+    "\\" escape characters_and_comma
+) (=[ \n\t]* "\"")
+characters_and_embrace ::= (
+    "\"" [ \n\t]* "}" |
+    [^"\\\x00-\x1F] characters_and_embrace |
+    "\\" escape characters_and_embrace
+) (=[ \n\t]* [},])
+characters_item ::= (
+    "\"" |
+    [^"\\\x00-\x1F] characters_item |
+    "\\" escape characters_item
+) (= [ \n\t]* [,\]])
 root ::= (
     "{" [ \n\t]* members_and_embrace |
     "[" [ \n\t]* elements_or_embrace
@@ -107,26 +127,6 @@ elements_rest ::= (
     "" |
     [ \n\t]* "," [ \n\t]* elements
 )
-characters_and_colon ::= (
-    "\"" [ \n\t]* ":" |
-    [^"\\\x00-\x1F] characters_and_colon |
-    "\\" escape characters_and_colon
-) (=[ \n\t]* [\"{[0-9tfn-])
-characters_and_comma ::= (
-    "\"" [ \n\t]* "," |
-    [^"\\\x00-\x1F] characters_and_comma |
-    "\\" escape characters_and_comma
-) (=[ \n\t]* "\"")
-characters_and_embrace ::= (
-    "\"" [ \n\t]* "}" |
-    [^"\\\x00-\x1F] characters_and_embrace |
-    "\\" escape characters_and_embrace
-) (=[ \n\t]* [},])
-characters_item ::= (
-    "\"" |
-    [^"\\\x00-\x1F] characters_item |
-    "\\" escape characters_item
-) (= [ \n\t]* [,\]])
 escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
 fraction ::= "" | "." [0-9] [0-9]*
 exponent ::= "" |  "e" sign [0-9] [0-9]* | "E" sign [0-9] [0-9]*
