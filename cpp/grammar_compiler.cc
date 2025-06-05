@@ -97,7 +97,7 @@ AdaptiveTokenMask::AdaptiveTokenMask(
         accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
       }
     } else {
-      accepted_bitset.All();
+      accepted_bitset.Set();
       for (auto idx : rejected_indices) {
         accepted_bitset.Set(sorted_decoded_vocab[idx].first, false);
       }
