@@ -20,6 +20,7 @@
 #include "fsm_builder.h"
 #include "grammar_data_structure.h"
 #include "grammar_functor.h"
+#include "support/dynamic_bitset.h"
 #include "support/logging.h"
 #include "support/thread_pool.h"
 #include "support/thread_safe_cache.h"
@@ -80,7 +81,8 @@ AdaptiveTokenMask::AdaptiveTokenMask(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::vector<int32_t>& accepted_indices,
     const std::vector<int32_t>& rejected_indices,
-    const std::vector<int32_t>& uncertain_indices
+    const std::vector<int32_t>& uncertain_indices,
+    const DynamicBitset& accepted_indice_bitset
 ) {
   auto size_acc = accepted_indices.size();
   auto size_rej = rejected_indices.size();
@@ -91,10 +93,7 @@ AdaptiveTokenMask::AdaptiveTokenMask(
                                      : StoreType::kRejected;
 
   if (store_type == StoreType::kAcceptedBitset) {
-    accepted_bitset = DynamicBitset(vocab_size);
-    for (auto idx : accepted_indices) {
-      accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
-    }
+    accepted_bitset = accepted_indice_bitset;
   } else if (store_type == StoreType::kAccepted) {
     this->accepted_indices = accepted_indices;
   } else {
@@ -108,17 +107,15 @@ AdaptiveTokenMask::AdaptiveTokenMask(
     size_t vocab_size,
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::vector<int32_t>& accepted_indices,
-    const std::vector<int32_t>& uncertain_indices
+    const std::vector<int32_t>& uncertain_indices,
+    const DynamicBitset& accepted_indice_bitset
 ) {
   auto size_acc = accepted_indices.size();
 
   store_type = size_acc >= USE_BITSET_THRESHOLD ? StoreType::kAcceptedBitset : StoreType::kAccepted;
 
   if (store_type == StoreType::kAcceptedBitset) {
-    accepted_bitset = DynamicBitset(vocab_size);
-    for (auto idx : accepted_indices) {
-      accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
-    }
+    accepted_bitset = accepted_indice_bitset;
   } else {
     XGRAMMAR_DCHECK(store_type == StoreType::kAccepted);
     this->accepted_indices = accepted_indices;
@@ -279,6 +276,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   std::vector<int32_t> tmp_accepted_indices_;
   std::vector<int32_t> tmp_rejected_indices_;
   std::vector<int32_t> tmp_uncertain_indices_;
+  DynamicBitset tmp_accepted_bitset_;
   std::vector<bool> tmp_can_reach_end_stack_;
   std::vector<bool> tmp_can_reach_end_prefix_or_stack_;
 };
@@ -459,6 +457,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           }
         }
         if (all_accepted) {
+          tmp_accepted_bitset_.Set(i);
           tmp_accepted_indices_.push_back(i);
           continue;
         }
@@ -511,6 +510,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
 
       if (accepted) {
+        tmp_accepted_bitset_.Set(i);
         tmp_accepted_indices_.push_back(i);
       } else if (can_reach_end && !is_root_rule &&
                  IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) &&
@@ -555,6 +555,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
+  tmp_accepted_bitset_ = DynamicBitset(vocab_size);
   // For every character in the current token, stores whether it is possible to reach the end of
   // the rule when matching until this character. Store it in a stack for later rollback.
   tmp_can_reach_end_stack_.assign({IsCompleted()});
@@ -607,11 +608,16 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
         sorted_decoded_vocab,
         tmp_accepted_indices_,
         tmp_rejected_indices_,
-        tmp_uncertain_indices_
+        tmp_uncertain_indices_,
+        tmp_accepted_bitset_
     );
   } else {
     return AdaptiveTokenMask(
-        vocab_size, sorted_decoded_vocab, tmp_accepted_indices_, tmp_uncertain_indices_
+        vocab_size,
+        sorted_decoded_vocab,
+        tmp_accepted_indices_,
+        tmp_uncertain_indices_,
+        tmp_accepted_bitset_
     );
   }
 }
