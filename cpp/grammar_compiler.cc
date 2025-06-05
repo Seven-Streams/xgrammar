@@ -453,7 +453,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         for (char ch : token) {
           // If the first character is not the ascii character or can't be accepted by the
           // first character mask, we need to check them in the parser.
-          if (isascii(ch) == 0 || !first_char_mask[static_cast<uint8_t>(ch)]) {
+          if (((ch & 0x80) != 0) || !first_char_mask[static_cast<uint8_t>(ch)]) {
             all_accepted = false;
             break;
           }

@@ -435,7 +435,7 @@ void EarleyParser::AdvanceCharacterClass(
 
   // This trick is based on the current structure that character class
   // can't accept a UTF8 character, unless it has a negation.
-  if (!isascii(ch)) {
+  if ((ch & 0x80) != 0) {
     if (!is_negative) {
       return;
     }
@@ -496,7 +496,7 @@ void EarleyParser::AdvanceCharacterClassStar(
 
   // This trick is based on the current structure that character class
   // can't accept a UTF8 character, unless it has a negation.
-  if (!isascii(ch)) {
+  if ((ch & 0x80) != 0) {
     if (!is_negative) {
       return;
     }
