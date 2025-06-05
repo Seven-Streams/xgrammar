@@ -448,7 +448,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     for (int i = interval.first; i < interval.second; ++i) {
       const auto& token = sorted_decoded_vocab[i].second;
       // This optimization is useful for simple self-recursive rules, like string content.
-      if (is_self_recursion) {
+      if (is_self_recursion && isascii(token[0]) != 0) {
         bool all_accepted = true;
         for (size_t j = 1; j < token.size(); ++j) {
           const auto& ch = token[j];
