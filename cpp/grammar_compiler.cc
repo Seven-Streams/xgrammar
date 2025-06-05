@@ -92,8 +92,18 @@ AdaptiveTokenMask::AdaptiveTokenMask(
 
   if (store_type == StoreType::kAcceptedBitset) {
     accepted_bitset = DynamicBitset(vocab_size);
-    for (auto idx : accepted_indices) {
-      accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
+    if (size_acc < (vocab_size / 2)) {
+      for (auto idx : accepted_indices) {
+        accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
+      }
+    } else {
+      accepted_bitset.All();
+      for (auto idx : rejected_indices) {
+        accepted_bitset.Set(sorted_decoded_vocab[idx].first, false);
+      }
+      for (auto idx : uncertain_indices) {
+        accepted_bitset.Set(sorted_decoded_vocab[idx].first, false);
+      }
     }
   } else if (store_type == StoreType::kAccepted) {
     this->accepted_indices = accepted_indices;
