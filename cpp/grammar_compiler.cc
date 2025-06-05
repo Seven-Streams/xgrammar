@@ -418,7 +418,8 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   bool is_self_recursion = false;
 
   // Check if the initial state is self-recursive.
-  if (initial_state.sub_element_id == 0) {
+  if (initial_state.sub_element_id == 0 &&
+      possible_token_num > static_cast<int>(sorted_decoded_vocab.size() / 4)) {
     const auto& sequence_expr = grammar_->GetRuleExpr(initial_state.sequence_id);
     // A self-recursive rule must be a sequence.
     if (sequence_expr.type == RuleExprType::kSequence) {
