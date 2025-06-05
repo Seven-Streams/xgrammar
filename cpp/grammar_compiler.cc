@@ -450,7 +450,8 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       // This optimization is useful for simple self-recursive rules, like string content.
       if (is_self_recursion) {
         bool all_accepted = true;
-        for (char ch : token) {
+        for (size_t j = 1; j < token.size(); ++j) {
+          const auto& ch = token[j];
           // If the first character is not the ascii character or can't be accepted by the
           // first character mask, we need to check them in the parser.
           if (isascii(ch) == 0 || !first_char_mask[static_cast<uint8_t>(ch)]) {
