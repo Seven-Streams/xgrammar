@@ -109,24 +109,21 @@ elements_rest ::= (
 )
 characters_and_colon ::= (
     "\"" [ \n\t]* ":" |
-    [^"\\\x00-\x1F] characters_and_colon |
-    "\\" escape characters_and_colon
+    string_context "\"" [ \n\t]* ":"
 ) (=[ \n\t]* [\"{[0-9tfn-])
 characters_and_comma ::= (
     "\"" [ \n\t]* "," |
-    [^"\\\x00-\x1F] characters_and_comma |
-    "\\" escape characters_and_comma
+    string_context "\"" [ \n\t]* ","
 ) (=[ \n\t]* "\"")
 characters_and_embrace ::= (
     "\"" [ \n\t]* "}" |
-    [^"\\\x00-\x1F] characters_and_embrace |
-    "\\" escape characters_and_embrace
+    string_context "\"" [ \n\t]* "}"
 ) (=[ \n\t]* [},])
 characters_item ::= (
     "\"" |
-    [^"\\\x00-\x1F] characters_item |
-    "\\" escape characters_item
+    string_context "\""
 ) (= [ \n\t]* [,\]])
+string_context ::= ([^\"\\\0-\x1f] string_context) | ("\\" escape string_context) | ([^\"\\\0-\x1f]) | ("\\" escape) (=("\""))
 escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
 fraction ::= "" | "." [0-9] [0-9]*
 exponent ::= "" |  "e" sign [0-9] [0-9]* | "E" sign [0-9] [0-9]*
