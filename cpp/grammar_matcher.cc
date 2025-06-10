@@ -509,6 +509,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
   int32_t* bitmask_data_ptr =
       CheckAndGetBitmaskPtr(*next_token_bitmask, tokenizer_info_.GetVocabSize(), index);
   const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
+  const auto& subtree_range = tokenizer_info_.GetTrieSubtreeNodesRange();
   const auto& adaptive_token_mask_cache = compiled_grammar_->adaptive_token_mask_cache;
   // We need to have a copy, because scanable_state_history_ will be modified during the
   // FillNextTokenBitmask process, which can lead to undefined behavior.
@@ -565,7 +566,11 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       XGRAMMAR_LOG(INFO) << "The ParserState is " << ParserState << ", the mask is "
                          << adaptive_token_mask.Print(tokenizer_info_);
     }
+    int last_rejected_uncertain_range = 0;
     for (const auto& cur_token_idx : adaptive_token_mask.uncertain_indices) {
+      if (cur_token_idx < last_rejected_uncertain_range) {
+        continue;
+      }
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
       if (tmp_accepted_bitset_[sorted_decoded_vocab[cur_token_idx].first]) {
         continue;
@@ -581,6 +586,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
                           .first -
                       cur_token.begin();
         if (lcp_len > prev_matched_size) {
+          last_rejected_uncertain_range = subtree_range[cur_token_idx];
           accepted = false;
         } else if (lcp_len < prev_matched_size) {
           PopLastStates(prev_matched_size - lcp_len);
@@ -592,6 +598,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       if (accepted) {
         for (int j = prev_matched_size; j < static_cast<int>(cur_token.size()); ++j) {
           if (!Advance(cur_token[j])) {
+            last_rejected_uncertain_range = subtree_range[cur_token_idx];
             accepted = false;
             break;
           }
