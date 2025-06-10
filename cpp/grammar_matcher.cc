@@ -9,6 +9,7 @@
 #include <xgrammar/matcher.h>
 
 #include <cstdint>
+#include <stack>
 #include <vector>
 
 #include "compiled_grammar_data_structure.h"
@@ -560,7 +561,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
     // Examine only the current one ParserState
     PushOneStateToCheck(ParserState);
 
-    const std::string* prev_token = nullptr;
+    std::stack<std::pair<int32_t, int32_t>> trie_stack;
     int prev_matched_size = 0;
     if (debug_print) {
       XGRAMMAR_LOG(INFO) << "The ParserState is " << ParserState << ", the mask is "
@@ -579,20 +580,22 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
       // Step 2.1. Find the longest common prefix with the accepted part of the previous token.
       // We can reuse the previous matched size to avoid unnecessary matching.
-      if (prev_token) {
-        int lcp_len = std::mismatch(
-                          cur_token.begin(), cur_token.end(), prev_token->begin(), prev_token->end()
-                      )
-                          .first -
-                      cur_token.begin();
-        if (lcp_len > prev_matched_size) {
-          last_rejected_uncertain_range = subtree_range[cur_token_idx];
-          accepted = false;
-        } else if (lcp_len < prev_matched_size) {
-          PopLastStates(prev_matched_size - lcp_len);
-        }
-        prev_matched_size = std::min(prev_matched_size, lcp_len);
+      int lcp_len = 0;
+      while ((!trie_stack.empty()) && (trie_stack.top().first <= cur_token_idx)) {
+        trie_stack.pop();
       }
+      if (trie_stack.empty()) {
+        lcp_len = 0;
+      } else {
+        lcp_len = sorted_decoded_vocab[trie_stack.top().second].second.size();
+      }
+      if (lcp_len > prev_matched_size) {
+        last_rejected_uncertain_range = subtree_range[cur_token_idx];
+        accepted = false;
+      } else if (lcp_len < prev_matched_size) {
+        PopLastStates(prev_matched_size - lcp_len);
+      }
+      prev_matched_size = std::min(prev_matched_size, lcp_len);
 
       // Step 2.2. Find if the current token is accepted or rejected.
       if (accepted) {
@@ -617,8 +620,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
           tmp_rejected_indices_delta_.push_back(cur_token_idx);
         }
       }
-
-      prev_token = &cur_token;
+      trie_stack.push(std::make_pair(cur_token_idx, sorted_decoded_vocab[cur_token_idx].first));
     }
 
     PopLastStates(prev_matched_size + 1);

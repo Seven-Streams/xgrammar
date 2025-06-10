@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <stack>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -446,10 +447,12 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   int prev_matched_size = 0;
   int last_rejected_range = 0;
-  const std::string* prev_token = nullptr;
+  std::stack<std::pair<int32_t, int32_t>> trie_stack;
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
     const auto& interval = possible_intervals[interval_idx];
     for (int i = interval.first; i < interval.second; ++i) {
+      // Check if the current token is in the rejected range, i.e. be a part of the
+      // subtree of the pesudo-trie.
       if (i < last_rejected_range) {
         if (fill_reject_indices) {
           tmp_rejected_indices_.push_back(i);
@@ -460,8 +463,10 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         }
         continue;
       }
+
       const auto& token = sorted_decoded_vocab[i].second;
       // This optimization is useful for simple self-recursive rules, like string content.
+      // i.e. perform a first-class dfs on the certain rule.
       if (is_self_recursion) {
         bool all_accepted = true;
         for (char ch : token) {
@@ -480,32 +485,35 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
       bool accepted = true;
-      if (prev_token != nullptr) {
-        int lcp_len =
-            std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
-                .first -
-            token.begin();
-        if (lcp_len > prev_matched_size) {
-          // Case 1. The common prefix is rejected by the matcher in the last token. Reject
-          // directly.
-          accepted = false;
-        } else if (lcp_len < prev_matched_size) {
-          // Case 2. The common prefix is shorter than the previous matched size. Rollback
-          // the non-common part.
-          PopLastStates(prev_matched_size - lcp_len);
-          tmp_can_reach_end_stack_.erase(
-              tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
-              tmp_can_reach_end_stack_.end()
-          );
-          tmp_can_reach_end_prefix_or_stack_.erase(
-              tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
-              tmp_can_reach_end_prefix_or_stack_.end()
-          );
-        }
-        prev_matched_size = std::min(prev_matched_size, lcp_len);
+      int lcp_len = 0;
+      while ((!trie_stack.empty()) && (trie_stack.top().first <= i)) {
+        trie_stack.pop();
       }
+      if (trie_stack.empty()) {
+        lcp_len = 0;
+      } else {
+        lcp_len = sorted_decoded_vocab[trie_stack.top().second].second.size();
+      }
+      if (lcp_len > prev_matched_size) {
+        // Case 1. The common prefix is rejected by the matcher in the last token. Reject
+        // directly.
+        accepted = false;
+      } else if (lcp_len < prev_matched_size) {
+        // Case 2. The common prefix is shorter than the previous matched size. Rollback
+        // the non-common part.
+        PopLastStates(prev_matched_size - lcp_len);
+        tmp_can_reach_end_stack_.erase(
+            tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
+            tmp_can_reach_end_stack_.end()
+        );
+        tmp_can_reach_end_prefix_or_stack_.erase(
+            tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
+            tmp_can_reach_end_prefix_or_stack_.end()
+        );
+      }
+      prev_matched_size = std::min(prev_matched_size, lcp_len);
 
-      prev_token = &token;
+      trie_stack.push(std::make_pair(subtree_nodes_range[i], i));
 
       if (accepted) {
         // Accept the rest chars one by one
