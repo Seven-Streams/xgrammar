@@ -573,9 +573,6 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
 
     tmp_rejected_indices_delta_.clear();
 
-    // Examine only the current one ParserState
-    PushOneStateToCheck(state);
-
     const std::string* prev_token = nullptr;
     int prev_matched_size = 0;
     if (debug_print) {
@@ -645,7 +642,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       prev_token = &cur_token;
     }
 
-    PopLastStates(prev_matched_size + 1);
+    PopLastStates(prev_matched_size);
     // Step 3. Update the accepted_indices or rejected_indices
     if (adaptive_token_mask.store_type == StoreType::kRejected) {
       // rejected_indices = Intersect(
