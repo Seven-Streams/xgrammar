@@ -62,6 +62,8 @@ jobs:
           echo "set(XGRAMMAR_BUILD_CXX_TESTS ON)" >> cmake/config.cmake
           python -m pip install --upgrade pip
           pip install -v ".[test]"
+          pip install tiktoken
+          pip install sentencepiece
 
       - name: Run C++ tests
         run: |
