@@ -33,6 +33,7 @@ test = [
   "protobuf",
   "huggingface-hub[cli]",
   "tiktoken",
+  "sentencepiece",
   # transformers==4.50.0 has error on MacOS.
   # https://github.com/huggingface/transformers/issues/36906
   "transformers<4.50.0; platform_system == 'Darwin'",
