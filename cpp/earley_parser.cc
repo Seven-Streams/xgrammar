@@ -117,6 +117,7 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
             state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0
         });
       }
+      return std::make_pair(true, false);
     }
     case GrammarExprType::kRepeat: {
       const int32_t& min_repeat_count = element_expr[1];
