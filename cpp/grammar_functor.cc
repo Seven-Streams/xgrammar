@@ -496,6 +496,8 @@ class UsedRulesAnalyzer : public GrammarVisitor<std::vector<int32_t>> {
 
   void VisitRuleRef(const GrammarExpr& grammar_expr) { visit_queue_.push(grammar_expr[0]); }
 
+  void VisitRepeat(const GrammarExpr& grammar_expr) { visit_queue_.push(grammar_expr[0]); }
+
  private:
   std::queue<int32_t> visit_queue_;
 };
@@ -539,6 +541,12 @@ class DeadCodeEliminatorImpl : public GrammarMutator {
     XGRAMMAR_DCHECK(rule_id_map_.count(grammar_expr[0]) > 0);
     auto new_rule_id = rule_id_map_[grammar_expr[0]];
     return builder_->AddRuleRef(new_rule_id);
+  }
+
+  int32_t VisitRepeat(const GrammarExpr& grammar_expr) final {
+    XGRAMMAR_DCHECK(rule_id_map_.count(grammar_expr[0]) > 0);
+    auto new_rule_id = rule_id_map_[grammar_expr[0]];
+    return builder_->AddRepeat(new_rule_id, grammar_expr[1], grammar_expr[2]);
   }
 
  private:
@@ -693,6 +701,12 @@ class SubGrammarAdderImpl : public GrammarMutator {
     return builder_->AddRuleRef(new_rule_ids_names[grammar_expr[0]].first);
   }
 
+  int32_t VisitRepeat(const GrammarExpr& grammar_expr) final {
+    return builder_->AddRepeat(
+        new_rule_ids_names[grammar_expr[0]].first, grammar_expr[1], grammar_expr[2]
+    );
+  }
+
   std::vector<std::pair<int32_t, std::string>> new_rule_ids_names;
 };
 
@@ -800,6 +814,10 @@ class RuleRefGraphFinder : public GrammarVisitor<std::vector<std::vector<int32_t
 
  private:
   void VisitRuleRef(const GrammarExpr& grammar_expr) {
+    rule_visit_graph_[grammar_expr[0]].push_back(cur_rule_id_);
+  }
+
+  void VisitRepeat(const GrammarExpr& grammar_expr) {
     rule_visit_graph_[grammar_expr[0]].push_back(cur_rule_id_);
   }
 

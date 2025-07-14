@@ -216,7 +216,6 @@ bool EarleyParser::Advance(const uint8_t ch) {
   const auto& latest_states = scanable_state_history_[scanable_state_history_.size() - 1];
   // Scan all the scanable states.
   for (const auto& state : latest_states) {
-    XGRAMMAR_LOG(INFO) << state;
     Scan(state, ch);
   }
 
