@@ -764,13 +764,15 @@ int32_t EBNFParser::HandleRepetitionRange(int32_t grammar_expr_id, int64_t lower
     upper = 0x7FFFFFFF;  // Use a large number to represent unbounded
   }
   const auto& grammar_expr = builder_.GetGrammarExpr(grammar_expr_id);
-  if (grammar_expr.type != GrammarExprType::kRuleRef) {
+  if (grammar_expr.type == GrammarExprType::kRuleRef) {
+    grammar_expr_id = builder_.AddRule(
+        "xgrammar_repetation_context", builder_.GetRule(grammar_expr[0]).body_expr_id
+    );
+  } else {
     grammar_expr_id = builder_.AddRule(
         builder_.GetNewRuleName("xgrammar_repetation_context"),
         builder_.AddChoices({builder_.AddSequence({grammar_expr_id})})
     );
-  } else {
-    grammar_expr_id = grammar_expr[0];
   }
   int repetition_expr_id = builder_.AddRepeat(grammar_expr_id, lower, upper);
   return repetition_expr_id;

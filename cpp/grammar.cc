@@ -11,6 +11,7 @@
 #include "json_schema_converter.h"
 #include "regex_converter.h"
 #include "structural_tag.h"
+#include "support/logging.h"
 
 namespace xgrammar {
 
@@ -18,6 +19,7 @@ std::string Grammar::ToString() const { return GrammarPrinter(*this).ToString();
 
 Grammar Grammar::FromEBNF(const std::string& ebnf_string, const std::string& root_rule_name) {
   auto grammar = ParseEBNF(ebnf_string, root_rule_name);
+  XGRAMMAR_LOG(INFO) << "Parsed EBNF: " << grammar.ToString() << std::endl;
   grammar = GrammarNormalizer().Apply(grammar);
   return grammar;
 }
