@@ -106,16 +106,32 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
     return std::make_pair(false, true);
   }
   const auto& element_expr = grammar_->GetGrammarExpr(grammar_expr[state.element_id]);
-  if (element_expr.type == GrammarExprType::kRuleRef) {
-    ExpandNextRuleRefElement(state, grammar_expr, &element_expr);
-    return std::make_pair(false, false);
+  switch (element_expr.type) {
+    case GrammarExprType::kRuleRef: {
+      ExpandNextRuleRefElement(state, grammar_expr, &element_expr);
+      return std::make_pair(false, false);
+    }
+    case GrammarExprType::kCharacterClassStar: {
+      if (state.sub_element_id == 0) {
+        Enqueue(ParserState{
+            state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0
+        });
+      }
+    }
+    case GrammarExprType::kRepeat: {
+      const int32_t& min_repeat_count = element_expr[1];
+      const int32_t& max_repeat_count = element_expr[2];
+      // If the current repeat count is less than the max repeat count,
+      // we can expand the next rule reference element.
+      if (state.repeat_count < max_repeat_count) {
+        ExpandNextRuleRefElement(state, grammar_expr, &element_expr);
+      }
+      return std::make_pair(false, state.repeat_count >= min_repeat_count);
+    }
+    default: {
+      return std::make_pair(true, false);
+    }
   }
-  if (element_expr.type == GrammarExprType::kCharacterClassStar && state.sub_element_id == 0) {
-    Enqueue(
-        ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0}
-    );
-  }
-  return std::make_pair(true, false);
 }
 
 void EarleyParser::Scan(const ParserState& state, const uint8_t ch) {
