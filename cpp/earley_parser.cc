@@ -92,7 +92,6 @@ void EarleyParser::Complete(const ParserState& state, const GrammarExpr& grammar
             parent_state.rule_start_pos,
             0
         });
-        new_state.repeat_count = 0;
       }
       // If the repeat count is less than the max repeat count, we can continue to
       // visit the repeat state for another round.
