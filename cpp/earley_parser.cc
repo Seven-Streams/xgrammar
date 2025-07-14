@@ -55,18 +55,50 @@ void EarleyParser::Complete(const ParserState& state, const GrammarExpr& grammar
     const auto& parent_state = parent_state_iter->second;
     const auto& parent_expr = grammar_->GetGrammarExpr(parent_state.sequence_id);
     if (parent_state.rule_id == -1 || !grammar_->per_rule_fsms[parent_state.rule_id].has_value()) {
+      const auto& element_expr = grammar_->GetGrammarExpr(parent_expr[parent_state.element_id]);
       // The new rule is not referenced by a fsm.
       XGRAMMAR_DCHECK(
-          grammar_->GetGrammarExpr(parent_expr[parent_state.element_id]).type ==
-          GrammarExprType::kRuleRef
+          element_expr.type == GrammarExprType::kRuleRef ||
+          element_expr.type == GrammarExprType::kRepeat
       );
-      Enqueue(ParserState{
-          parent_state.rule_id,
-          parent_state.sequence_id,
-          parent_state.element_id + 1,
-          parent_state.rule_start_pos,
-          0
-      });
+      if (element_expr.type == GrammarExprType::kRuleRef) {
+        Enqueue(ParserState{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            parent_state.element_id + 1,
+            parent_state.rule_start_pos,
+            0
+        });
+        continue;
+      }
+      XGRAMMAR_DCHECK(element_expr.type == GrammarExprType::kRepeat);
+      if (state.rule_start_pos ==
+          static_cast<int32_t>(rule_id_to_completeable_states_.size() - 1)) {
+        // It means that the subrule of the repeat is empty. This is not allowed.
+        continue;
+      }
+      // The parent state is a repeat, we need to increase the repeat count.
+      auto new_state = parent_state;
+      const int32_t& min_repeat_count = element_expr[1];
+      const int32_t& max_repeat_count = element_expr[2];
+      new_state.repeat_count++;
+      // The repeat rule can be completed, and we advance the state. Don't forget to
+      // reset the repeat count.
+      if (new_state.repeat_count >= min_repeat_count) {
+        Enqueue(ParserState{
+            parent_state.rule_id,
+            parent_state.sequence_id,
+            parent_state.element_id + 1,
+            parent_state.rule_start_pos,
+            0
+        });
+        new_state.repeat_count = 0;
+      }
+      // If the repeat count is less than the max repeat count, we can continue to
+      // visit the repeat state for another round.
+      if (new_state.repeat_count < max_repeat_count) {
+        Enqueue(new_state);
+      }
       continue;
     }
     // If the rule is referenced by a fsm, we need to advance the fsm.
@@ -124,9 +156,8 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
       const int32_t& max_repeat_count = element_expr[2];
       // If the current repeat count is less than the max repeat count,
       // we can expand the next rule reference element.
-      if (state.repeat_count < max_repeat_count) {
-        ExpandNextRuleRefElement(state, grammar_expr, &element_expr);
-      }
+      XGRAMMAR_DCHECK(state.repeat_count <= max_repeat_count);
+      ExpandNextRuleRefElement(state, grammar_expr, &element_expr);
       return std::make_pair(false, state.repeat_count >= min_repeat_count);
     }
     default: {
