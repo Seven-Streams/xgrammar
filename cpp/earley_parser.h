@@ -51,13 +51,15 @@ struct ParserState {
       const int32_t& sequence_id,
       const int32_t& element_id,
       const int32_t& rule_start_pos,
-      const int32_t& sub_element_id
+      const int32_t& sub_element_id,
+      const int32_t& repeat_count = 0
   )
       : rule_id(rule_id),
         sequence_id(sequence_id),
         element_id(element_id),
         rule_start_pos(rule_start_pos),
-        sub_element_id(sub_element_id) {}
+        sub_element_id(sub_element_id),
+        repeat_count(repeat_count) {}
 
   /*!
    * \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
@@ -90,6 +92,9 @@ struct ParserState {
 
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
+
+  /*! \brief The number of times the element is repeated. It will be used in kRepeat.*/
+  int32_t repeat_count = 0;
 
   /*! \brief The element is invalid when sequence_id is -1. */
   bool IsInvalid() const { return sequence_id == -1; }
@@ -131,7 +136,8 @@ XGRAMMAR_MEMBER_ARRAY(
     &ParserState::sequence_id,
     &ParserState::element_id,
     &ParserState::rule_start_pos,
-    &ParserState::sub_element_id
+    &ParserState::sub_element_id,
+    &ParserState::repeat_count
 );
 
 /*!
