@@ -338,13 +338,17 @@ void EarleyParser::ExpandNextRuleRefElement(
     }
   } else {
     XGRAMMAR_DCHECK(grammar_expr.type == GrammarExprType::kSequence);
-    XGRAMMAR_DCHECK(sub_grammar_expr->type == GrammarExprType::kRuleRef);
+    XGRAMMAR_DCHECK(
+        sub_grammar_expr->type == GrammarExprType::kRuleRef ||
+        sub_grammar_expr->type == GrammarExprType::kRepeat
+    );
     ref_rule_ids.push_back((*sub_grammar_expr)[0]);
   }
   for (const auto& ref_rule_id : ref_rule_ids) {
     {  // Add the reference rule to map.
       if ((state.element_id != grammar_expr.size() - 1) ||
-          state.rule_start_pos == ParserState::kNoPrevInputPos) {
+          state.rule_start_pos == ParserState::kNoPrevInputPos ||
+          sub_grammar_expr->type == GrammarExprType::kRepeat) {
         // It's not the right recursion, or it's the root rule.
         auto& states_map = rule_id_to_completeable_states_.back();
         states_map.insert({ref_rule_id, state});
@@ -389,9 +393,11 @@ void EarleyParser::ExpandNextRuleRefElement(
             continue;
           }
           XGRAMMAR_DCHECK(grammar_expr.type == GrammarExprType::kSequence);
-          Enqueue(ParserState{
-              state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0
-          });
+          if (sub_grammar_expr->type == GrammarExprType::kRuleRef) {
+            Enqueue(ParserState{
+                state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0
+            });
+          }
         }
         continue;
       }
@@ -404,7 +410,10 @@ void EarleyParser::ExpandNextRuleRefElement(
       XGRAMMAR_DCHECK(ref_grammar_expr.type == GrammarExprType::kChoices);
       for (const auto& sequence_id : ref_grammar_expr) {
         const auto& sequence = grammar_->GetGrammarExpr(sequence_id);
-        if (sequence.type == GrammarExprType::kEmptyStr) {
+        // Although the sequence is empty, if it's a repeat, we'll never enqueue the next state.
+        // Since we will expand the repeat times at the very beginning.
+        if (sequence.type == GrammarExprType::kEmptyStr &&
+            sub_grammar_expr->type != GrammarExprType::kRepeat) {
           Enqueue(ParserState{
               state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0
           });
