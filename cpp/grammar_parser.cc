@@ -13,6 +13,7 @@
 #include "grammar_data_structure.h"
 #include "support/encoding.h"
 #include "support/logging.h"
+#include "xgrammar/grammar.h"
 
 namespace xgrammar {
 
@@ -758,57 +759,12 @@ int32_t EBNFParser::HandleQuestionQuantifier(int32_t grammar_expr_id) {
 }
 
 int32_t EBNFParser::HandleRepetitionRange(int32_t grammar_expr_id, int64_t lower, int64_t upper) {
-  // Construct expr expr ... expr (l times)
-  std::vector<int32_t> elements;
-  for (int64_t i = 0; i < lower; ++i) {
-    elements.push_back(grammar_expr_id);
-  }
-
-  // Case 1: {l}:
-  // expr expr ... expr (l times)
-  if (upper == lower) {
-    return builder_.AddSequence(elements);
-  }
-
-  // Case 2: {l,}:
-  // expr expr ... expr (l times) rest
-  // rest ::= "" | expr rest
   if (upper == -1) {
-    auto new_rule_name = builder_.GetNewRuleName(cur_rule_name_);
-    auto new_rule_id = builder_.AddEmptyRule(new_rule_name);
-    auto ref_to_new_rule = builder_.AddRuleRef(new_rule_id);
-    auto new_grammar_expr_id = builder_.AddChoices(
-        {builder_.AddEmptyStr(), builder_.AddSequence({grammar_expr_id, ref_to_new_rule})}
-    );
-    builder_.UpdateRuleBody(new_rule_id, new_grammar_expr_id);
-    elements.push_back(builder_.AddRuleRef(new_rule_id));
-    return builder_.AddSequence(elements);
+    // The repeation is unbounded, e.g. {2,}
+    upper = 0x7FFFFFFF;  // Use a large number to represent unbounded
   }
-
-  // Case 3: {l, r} (r - l >= 1)
-  // expr expr ... expr (l times) rest1
-  // rest1 ::= "" | expr rest2
-  // rest2 ::= "" | expr rest3
-  // ...
-  // rest(r - l) ::= "" | expr
-  std::vector<int32_t> rest_rule_ids;
-
-  for (int64_t i = 0; i < upper - lower; ++i) {
-    auto new_rule_name = builder_.GetNewRuleName(cur_rule_name_);
-    rest_rule_ids.push_back(builder_.AddEmptyRule(new_rule_name));
-  }
-  for (int64_t i = 0; i < upper - lower - 1; ++i) {
-    auto ref_to_next_rule = builder_.AddRuleRef(rest_rule_ids[i + 1]);
-    auto new_grammar_expr_id = builder_.AddChoices(
-        {builder_.AddEmptyStr(), builder_.AddSequence({grammar_expr_id, ref_to_next_rule})}
-    );
-    builder_.UpdateRuleBody(rest_rule_ids[i], new_grammar_expr_id);
-  }
-  auto last_grammar_expr_id = builder_.AddChoices({builder_.AddEmptyStr(), grammar_expr_id});
-  builder_.UpdateRuleBody(rest_rule_ids.back(), last_grammar_expr_id);
-
-  elements.push_back(builder_.AddRuleRef(rest_rule_ids[0]));
-  return builder_.AddSequence(elements);
+  int repetition_rule_id = builder_.AddRepeat(grammar_expr_id, lower, upper);
+  return builder_.AddSequence({repetition_rule_id});
 }
 
 int32_t EBNFParser::ParseElementWithQuantifier() {

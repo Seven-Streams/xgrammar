@@ -42,6 +42,8 @@ std::string GrammarPrinter::PrintGrammarExpr(const GrammarExpr& grammar_expr) {
       return PrintChoices(grammar_expr);
     case GrammarExprType::kTagDispatch:
       return PrintTagDispatch(grammar_expr);
+    case GrammarExprType::kRepeat:
+      return PrintRepeat(grammar_expr);
     default:
       XGRAMMAR_LOG(FATAL) << "Unexpected GrammarExpr type: " << static_cast<int>(grammar_expr.type);
   }
@@ -128,6 +130,17 @@ std::string GrammarPrinter::PrintTagDispatch(const GrammarExpr& grammar_expr) {
     }
   }
   result += ")";
+  return result;
+}
+
+std::string GrammarPrinter::PrintRepeat(const GrammarExpr& grammar_expr) {
+  int32_t lower_bound = grammar_expr[1];
+  int32_t upper_bound = grammar_expr[2];
+  std::string result = grammar_->GetRule(grammar_expr[0]).name + " {";
+  result += std::to_string(lower_bound);
+  result += ", ";
+  result += std::to_string(upper_bound);
+  result += "}";
   return result;
 }
 

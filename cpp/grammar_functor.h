@@ -154,6 +154,8 @@ class GrammarFunctor {
         return VisitRuleRef(grammar_expr);
       case GrammarExprType::kTagDispatch:
         return VisitTagDispatch(grammar_expr);
+      case GrammarExprType::kRepeat:
+        return VisitRepeat(grammar_expr);
       default:
         XGRAMMAR_LOG(FATAL) << "Unexpected sequence type: " << static_cast<int>(grammar_expr.type);
         XGRAMMAR_UNREACHABLE();
@@ -234,6 +236,9 @@ class GrammarFunctor {
 
   /*! \brief Visit a rule reference GrammarExpr. */
   virtual T VisitRuleRef(const GrammarExpr& grammar_expr) { return VisitElement(grammar_expr); }
+
+  /*! \brief Visit a repeat GrammarExpr. */
+  virtual T VisitRepeat(const GrammarExpr& grammar_expr) { return VisitElement(grammar_expr); }
 
   /*! \brief The grammar to visit or mutate. */
   Grammar base_grammar_{NullObj{}};

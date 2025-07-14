@@ -214,9 +214,9 @@ bool EarleyParser::Advance(const uint8_t ch) {
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
   const auto& latest_states = scanable_state_history_[scanable_state_history_.size() - 1];
-
   // Scan all the scanable states.
   for (const auto& state : latest_states) {
+    XGRAMMAR_LOG(INFO) << state;
     Scan(state, ch);
   }
 

@@ -157,6 +157,7 @@ class StructureNormalizerSub : public GrammarMutator {
       case GrammarExprType::kCharacterClass:
       case GrammarExprType::kCharacterClassStar:
       case GrammarExprType::kRuleRef:
+      case GrammarExprType::kRepeat:
         return builder_->AddChoices({builder_->AddSequence({builder_->AddGrammarExpr(grammar_expr)})
         });
       case GrammarExprType::kTagDispatch:
@@ -190,6 +191,7 @@ class StructureNormalizerSub : public GrammarMutator {
         case GrammarExprType::kCharacterClass:
         case GrammarExprType::kCharacterClassStar:
         case GrammarExprType::kRuleRef:
+        case GrammarExprType::kRepeat:
           VisitElementInChoices(choice_expr, &new_choice_ids);
           break;
         case GrammarExprType::kTagDispatch: {
@@ -268,6 +270,7 @@ class StructureNormalizerSub : public GrammarMutator {
         case GrammarExprType::kCharacterClass:
         case GrammarExprType::kCharacterClassStar:
         case GrammarExprType::kRuleRef:
+        case GrammarExprType::kRepeat:
           VisitElementInSequence(element_expr, &new_sequence_ids);
           break;
         case GrammarExprType::kTagDispatch: {

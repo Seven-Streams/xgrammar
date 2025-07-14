@@ -111,13 +111,15 @@ struct ParserState {
     if (sequence_id != other.sequence_id) return sequence_id < other.sequence_id;
     if (element_id != other.element_id) return element_id < other.element_id;
     if (rule_start_pos != other.rule_start_pos) return rule_start_pos < other.rule_start_pos;
-    return sub_element_id < other.sub_element_id;
+    if (sub_element_id != other.sub_element_id) return sub_element_id < other.sub_element_id;
+    return repeat_count < other.repeat_count;
   }
 
   friend std::ostream& operator<<(std::ostream& os, const ParserState& state) {
     os << "ParserState(rule_id=" << state.rule_id << ", sequence_id=" << state.sequence_id
        << ", element_id=" << state.element_id << ", rule_start_pos=" << state.rule_start_pos
-       << ", sub_element_id=" << state.sub_element_id << ")";
+       << ", sub_element_id=" << state.sub_element_id << ", repeat_count=" << state.repeat_count
+       << ")";
     return os;
   }
 
@@ -175,7 +177,8 @@ class StateHashForParsing {
         state.sequence_id,
         state.element_id,
         state.rule_start_pos,
-        state.sub_element_id
+        state.sub_element_id,
+        state.repeat_count
     );
   }
 };
