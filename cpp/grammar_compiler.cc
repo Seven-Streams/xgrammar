@@ -838,7 +838,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
       for (int element_id = 0; element_id < sequence.size(); ++element_id) {
         state.element_id = element_id;
         auto element = grammar->GetGrammarExpr(sequence[element_id]);
-        if (element.type == GrammarExprType::kRuleRef) {
+        if (element.type == GrammarExprType::kRuleRef || element.type == GrammarExprType::kRepeat) {
           continue;
         }
         if (element.type == GrammarExprType::kByteString) {
