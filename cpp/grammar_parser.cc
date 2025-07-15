@@ -759,7 +759,9 @@ int32_t EBNFParser::HandleQuestionQuantifier(int32_t grammar_expr_id) {
   return builder_.AddRuleRef(new_rule_id);
 }
 
-int32_t EBNFParser::HandleRepetitionRange(int32_t grammar_expr_id, int64_t lower, int64_t upper) {
+int32_t EBNFParser::HandleRepetitionRange(
+    const int32_t grammar_expr_id, int64_t lower, int64_t upper
+) {
   if (upper == -1) {
     // The repeation is unbounded, e.g. {2,}
     upper = 0x7FFFFFFF;  // Use a large number to represent unbounded
@@ -767,10 +769,9 @@ int32_t EBNFParser::HandleRepetitionRange(int32_t grammar_expr_id, int64_t lower
   const auto& grammar_expr = builder_.GetGrammarExpr(grammar_expr_id);
   const auto repeat_name = builder_.GetNewRuleName(cur_rule_name_) + "_xgrammar_repetition_context";
   // Consider the different cases.
-
+  int can_be_skipped = upper - lower;
   // Case 1: upper <= 4. In this case, we can expand the repetition into a sequence of ruleref.
   if (upper <= 4) {
-    int can_be_skipped = upper - lower;
     std::vector<int32_t> elements;
     // Add expr? first. Because they are rule references, so they can have lookahead assertions.
     for (int i = 0; i < can_be_skipped; i++) {
@@ -797,17 +798,59 @@ int32_t EBNFParser::HandleRepetitionRange(int32_t grammar_expr_id, int64_t lower
   }
 
   // Case 2: upper > 4.
+  // Case 2.1: upper - lower >= 4. It's the easier case.
+  XGRAMMAR_DCHECK(upper >= 4);
+  int new_rule_id;
+  if (can_be_skipped >= 4) {
+    std::vector<int32_t> elements;
+
+    // Add the first large repetition.
+    if (grammar_expr.type == GrammarExprType::kRuleRef) {
+      new_rule_id = builder_.AddRule(
+          builder_.GetNewRuleName(repeat_name), builder_.GetRule(grammar_expr[0]).body_expr_id
+      );
+    } else {
+      new_rule_id = builder_.AddRule(
+          builder_.GetNewRuleName(repeat_name),
+          builder_.AddChoices({builder_.AddSequence({grammar_expr_id})})
+      );
+    }
+    elements.push_back(builder_.AddRepeat(new_rule_id, lower, upper - 4));
+
+    // Add the last 4 repetitions.
+    for (int i = 0; i < 4; i++) {
+      auto new_rule_name = builder_.GetNewRuleName(repeat_name);
+      auto new_grammar_expr_id =
+          builder_.AddChoices({builder_.AddEmptyStr(), builder_.AddSequence({grammar_expr_id})});
+      auto new_rule_id = builder_.AddRule(new_rule_name, new_grammar_expr_id);
+      elements.push_back(builder_.AddRuleRef(new_rule_id));
+    }
+
+    // Add lookahead assertions for the repetitions.
+    std::vector<int> lookahead_elements = elements;
+    for (int i = 0; i < 4; i++) {
+      lookahead_elements.erase(lookahead_elements.begin());
+      int look_ahead_expr_id = builder_.AddSequence(lookahead_elements);
+      XGRAMMAR_DCHECK(
+          builder_.GetGrammarExpr(elements[i]).type == GrammarExprType::kRuleRef ||
+          builder_.GetGrammarExpr(elements[i]).type == GrammarExprType::kRepeat
+      );
+      int ref_rule_id = builder_.GetGrammarExpr(elements[i])[0];
+      builder_.UpdateLookaheadAssertion(ref_rule_id, look_ahead_expr_id);
+    }
+    return builder_.AddSequence(elements);
+  }
   if (grammar_expr.type == GrammarExprType::kRuleRef) {
-    grammar_expr_id = builder_.AddRule(
+    new_rule_id = builder_.AddRule(
         builder_.GetNewRuleName(repeat_name), builder_.GetRule(grammar_expr[0]).body_expr_id
     );
   } else {
-    grammar_expr_id = builder_.AddRule(
+    new_rule_id = builder_.AddRule(
         builder_.GetNewRuleName(repeat_name),
         builder_.AddChoices({builder_.AddSequence({grammar_expr_id})})
     );
   }
-  return builder_.AddRepeat(grammar_expr_id, lower, upper);
+  return builder_.AddRepeat(new_rule_id, lower, upper);
 }
 
 int32_t EBNFParser::ParseElementWithQuantifier() {
