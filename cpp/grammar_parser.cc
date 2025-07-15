@@ -8,6 +8,7 @@
 #include <picojson.h>
 
 #include <variant>
+#include <vector>
 
 #include "grammar_builder.h"
 #include "grammar_data_structure.h"
@@ -764,18 +765,49 @@ int32_t EBNFParser::HandleRepetitionRange(int32_t grammar_expr_id, int64_t lower
     upper = 0x7FFFFFFF;  // Use a large number to represent unbounded
   }
   const auto& grammar_expr = builder_.GetGrammarExpr(grammar_expr_id);
+  const auto repeat_name = builder_.GetNewRuleName(cur_rule_name_) + "_xgrammar_repetition_context";
+  // Consider the different cases.
+
+  // Case 1: upper <= 4. In this case, we can expand the repetition into a sequence of ruleref.
+  if (upper <= 4) {
+    int can_be_skipped = upper - lower;
+    std::vector<int32_t> elements;
+    // Add expr? first. Because they are rule references, so they can have lookahead assertions.
+    for (int i = 0; i < can_be_skipped; i++) {
+      auto new_rule_name = builder_.GetNewRuleName(repeat_name);
+      auto new_grammar_expr_id =
+          builder_.AddChoices({builder_.AddEmptyStr(), builder_.AddSequence({grammar_expr_id})});
+      auto new_rule_id = builder_.AddRule(new_rule_name, new_grammar_expr_id);
+      elements.push_back(builder_.AddRuleRef(new_rule_id));
+    }
+    // Add exprs.
+    for (int i = 0; i < lower; i++) {
+      elements.push_back(grammar_expr_id);
+    }
+    // Add lookaheads.
+    std::vector<int> lookahead_elements = elements;
+    for (int i = 0; i < can_be_skipped; i++) {
+      lookahead_elements.erase(lookahead_elements.begin());
+      int look_ahead_expr_id = builder_.AddSequence(lookahead_elements);
+      XGRAMMAR_DCHECK(builder_.GetGrammarExpr(elements[i]).type == GrammarExprType::kRuleRef);
+      int ref_rule_id = builder_.GetGrammarExpr(elements[i])[0];
+      builder_.UpdateLookaheadAssertion(ref_rule_id, look_ahead_expr_id);
+    }
+    return builder_.AddSequence(elements);
+  }
+
+  // Case 2: upper > 4.
   if (grammar_expr.type == GrammarExprType::kRuleRef) {
     grammar_expr_id = builder_.AddRule(
-        "xgrammar_repetation_context", builder_.GetRule(grammar_expr[0]).body_expr_id
+        builder_.GetNewRuleName(repeat_name), builder_.GetRule(grammar_expr[0]).body_expr_id
     );
   } else {
     grammar_expr_id = builder_.AddRule(
-        builder_.GetNewRuleName("xgrammar_repetation_context"),
+        builder_.GetNewRuleName(repeat_name),
         builder_.AddChoices({builder_.AddSequence({grammar_expr_id})})
     );
   }
-  int repetition_expr_id = builder_.AddRepeat(grammar_expr_id, lower, upper);
-  return repetition_expr_id;
+  return builder_.AddRepeat(grammar_expr_id, lower, upper);
 }
 
 int32_t EBNFParser::ParseElementWithQuantifier() {

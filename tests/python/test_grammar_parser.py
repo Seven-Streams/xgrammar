@@ -163,6 +163,7 @@ root_2 ::= ("" | "a")
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
     after = str(grammar)
+    print(f"After:\n{after}")
     assert after == expected
 
 
