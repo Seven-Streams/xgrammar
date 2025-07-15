@@ -368,10 +368,14 @@ class GrammarFSMBuilder {
  public:
   static void Apply(Grammar* grammar);
 };
-
 class SubGrammarAdder {
  public:
   static int32_t Apply(GrammarBuilder* builder, const Grammar& sub_grammar);
+};
+
+class RepetitionNormalizer {
+ public:
+  static void Apply(Grammar* grammar);
 };
 
 }  // namespace xgrammar

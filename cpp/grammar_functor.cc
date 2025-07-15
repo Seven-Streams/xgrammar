@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "fsm_builder.h"
+#include "grammar_builder.h"
 #include "grammar_data_structure.h"
 #include "support/encoding.h"
 #include "support/logging.h"
@@ -136,6 +137,7 @@ class StructureNormalizerSub : public GrammarMutator {
       case GrammarExprType::kCharacterClass:
       case GrammarExprType::kCharacterClassStar:
       case GrammarExprType::kRuleRef:
+      case GrammarExprType::kRepeat:
         return builder_->AddSequence({builder_->AddGrammarExpr(assertion_expr)});
       default:
         XGRAMMAR_LOG(FATAL) << "Unexpected lookahead assertion type: "
@@ -894,7 +896,9 @@ class AllowEmptyRuleAnalyzerImpl : public GrammarVisitor<std::vector<int32_t>> {
       auto element_expr = base_grammar_->GetGrammarExpr(i);
       return (element_expr.type == GrammarExprType::kRuleRef &&
               empty_rule_id_set.count(element_expr[0])) ||
-             element_expr.type == GrammarExprType::kCharacterClassStar;
+             element_expr.type == GrammarExprType::kCharacterClassStar ||
+             (element_expr.type == GrammarExprType::kRepeat &&
+              (empty_rule_id_set.count(element_expr[0]) || element_expr[1] == 0));
     });
   }
 
@@ -1045,6 +1049,27 @@ class GrammarFSMBuilderImpl {
   }
 };
 
+class RepetitionNormalizerImpl {
+ public:
+  void Apply(Grammar* grammar) {
+    for (int i = 0; i < (*grammar)->NumGrammarExprs(); ++i) {
+      auto expr = (*grammar)->GetGrammarExpr(i);
+      if (expr.type != Grammar::Impl::GrammarExprType::kRepeat) {
+        continue;
+      }
+      int repeat_rule_id = expr[0];
+      if (std::binary_search(
+              (*grammar)->allow_empty_rule_ids.begin(),
+              (*grammar)->allow_empty_rule_ids.end(),
+              repeat_rule_id
+          )) {
+        // The repeated rule can be empty, so we need to normalize it.
+        expr.SetData(1, 0);  // Set min repeat to 0
+      }
+    }
+  }
+};
+
 /*************************** Forward grammar functors to their impl ***************************/
 
 Grammar GrammarNormalizer::Apply(const Grammar& grammar) {
@@ -1093,5 +1118,7 @@ int32_t SubGrammarAdder::Apply(GrammarBuilder* builder, const Grammar& sub_gramm
 }
 
 void GrammarFSMBuilder::Apply(Grammar* grammar) { GrammarFSMBuilderImpl().Apply(grammar); }
+
+void RepetitionNormalizer::Apply(Grammar* grammar) { RepetitionNormalizerImpl().Apply(grammar); }
 
 }  // namespace xgrammar

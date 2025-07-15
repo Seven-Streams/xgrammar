@@ -140,6 +140,7 @@ class Grammar::Impl {
     }
     const int32_t* begin() const { return data; }
     const int32_t* end() const { return data + data_len; }
+    void SetData(int index, int value) { const_cast<int32_t*>(data)[index] = value; }
   };
 
   /*! \brief Get the number of grammar_exprs. */

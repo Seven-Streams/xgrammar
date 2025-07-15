@@ -5,6 +5,7 @@
 
 #include "earley_parser.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cctype>
 #include <cstdint>
@@ -409,11 +410,11 @@ void EarleyParser::ExpandNextRuleRefElement(
 
       // Check if the reference rule is already visited.
       if (IsStateVisitedInQueue({ref_rule_id, -1, -1, -1, -1})) {
-        if (std::find(
+        if (std::binary_search(
                 grammar_->allow_empty_rule_ids.begin(),
                 grammar_->allow_empty_rule_ids.end(),
                 ref_rule_id
-            ) != grammar_->allow_empty_rule_ids.end()) {
+            )) {
           if (state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value()) {
             const auto& current_fsm = grammar_->per_rule_fsms[state.rule_id].value();
             for (const auto& edge : current_fsm->GetEdges(state.element_id)) {
