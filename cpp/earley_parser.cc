@@ -157,7 +157,12 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
       // we can expand the next rule reference element.
       XGRAMMAR_DCHECK(state.repeat_count <= max_repeat_count);
       ExpandNextRuleRefElement(state, grammar_expr, &element_expr);
-      return std::make_pair(false, state.repeat_count >= min_repeat_count);
+      if (state.repeat_count >= min_repeat_count) {
+        Enqueue(ParserState{
+            state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0
+        });
+      }
+      return std::make_pair(false, false);
     }
     default: {
       return std::make_pair(true, false);
