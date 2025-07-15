@@ -840,6 +840,15 @@ int32_t EBNFParser::HandleRepetitionRange(
     }
     return builder_.AddSequence(elements);
   }
+
+  // case 2.2: upper - lower < 4. We need to divide the repetition into 3 parts:
+  //  1. The first large one.
+  //  2. expr
+  //  3. expr?
+
+  XGRAMMAR_DCHECK(can_be_skipped < 4);
+
+  // Add the first large repetition.
   if (grammar_expr.type == GrammarExprType::kRuleRef) {
     new_rule_id = builder_.AddRule(
         builder_.GetNewRuleName(repeat_name), builder_.GetRule(grammar_expr[0]).body_expr_id
@@ -850,7 +859,46 @@ int32_t EBNFParser::HandleRepetitionRange(
         builder_.AddChoices({builder_.AddSequence({grammar_expr_id})})
     );
   }
-  return builder_.AddRepeat(new_rule_id, lower, upper);
+  std::vector<int32_t> elements;
+  elements.push_back(builder_.AddRepeat(new_rule_id, lower - (4 - can_be_skipped), upper - 4));
+
+  // Add expr.
+  for (int i = 0; i < (4 - can_be_skipped); i++) {
+    if (grammar_expr.type == GrammarExprType::kRuleRef) {
+      new_rule_id = builder_.AddRule(
+          builder_.GetNewRuleName(repeat_name), builder_.GetRule(grammar_expr[0]).body_expr_id
+      );
+    } else {
+      new_rule_id = builder_.AddRule(
+          builder_.GetNewRuleName(repeat_name),
+          builder_.AddChoices({builder_.AddSequence({grammar_expr_id})})
+      );
+    }
+    elements.push_back(builder_.AddRuleRef(new_rule_id));
+  }
+
+  // Add expr?
+  for (int i = 0; i < can_be_skipped; i++) {
+    auto new_rule_name = builder_.GetNewRuleName(repeat_name);
+    auto new_grammar_expr_id =
+        builder_.AddChoices({builder_.AddEmptyStr(), builder_.AddSequence({grammar_expr_id})});
+    auto new_rule_id = builder_.AddRule(new_rule_name, new_grammar_expr_id);
+    elements.push_back(builder_.AddRuleRef(new_rule_id));
+  }
+
+  // Add lookahead assertions for the repetitions.
+  std::vector<int> lookahead_elements = elements;
+  for (int i = 0; i < static_cast<int>(elements.size()); i++) {
+    lookahead_elements.erase(lookahead_elements.begin());
+    int look_ahead_expr_id = builder_.AddSequence(lookahead_elements);
+    XGRAMMAR_DCHECK(
+        builder_.GetGrammarExpr(elements[i]).type == GrammarExprType::kRuleRef ||
+        builder_.GetGrammarExpr(elements[i]).type == GrammarExprType::kRepeat
+    );
+    int ref_rule_id = builder_.GetGrammarExpr(elements[i])[0];
+    builder_.UpdateLookaheadAssertion(ref_rule_id, look_ahead_expr_id);
+  }
+  return builder_.AddSequence(elements);
 }
 
 int32_t EBNFParser::ParseElementWithQuantifier() {
