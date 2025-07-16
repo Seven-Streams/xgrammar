@@ -147,8 +147,8 @@ def test_repetition_range_exact():
     before = """root ::= "a"{3}
 """
     expected = """root ::= (((root_1_xgrammar_repetition_context root_1_xgrammar_repetition_context_1 root_1_xgrammar_repetition_context_2)))
-root_1_xgrammar_repetition_context ::= (("a")) (=(root_1_xgrammar_repetition_context_1 root_1_xgrammar_repetition_context_2))
-root_1_xgrammar_repetition_context_1 ::= (("a")) (=(root_1_xgrammar_repetition_context_2))
+root_1_xgrammar_repetition_context ::= (("a")) (=("a" "a"))
+root_1_xgrammar_repetition_context_1 ::= (("a")) (=("a"))
 root_1_xgrammar_repetition_context_2 ::= (("a"))
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
@@ -161,8 +161,8 @@ def test_repetition_range_min_max():
     before = """root ::= "a"{2,4}
 """
     expected = """root ::= (((root_1_xgrammar_repetition_context{0, 2} root_1_xgrammar_repetition_context_1 root_1_xgrammar_repetition_context_2)))
-root_1_xgrammar_repetition_context ::= (("a")) (=(root_1_xgrammar_repetition_context_1 root_1_xgrammar_repetition_context_2))
-root_1_xgrammar_repetition_context_1 ::= (("a")) (=(root_1_xgrammar_repetition_context_2))
+root_1_xgrammar_repetition_context ::= (("a")) (=("a" "a"))
+root_1_xgrammar_repetition_context_1 ::= (("a")) (=("a"))
 root_1_xgrammar_repetition_context_2 ::= (("a"))
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
@@ -175,8 +175,8 @@ def test_repetition_range_min_only():
     before = """root ::= "a"{2,}
 """
     expected = """root ::= (((root_1_xgrammar_repetition_context{0, 2147483645} root_1_xgrammar_repetition_context_1 root_1_xgrammar_repetition_context_2)))
-root_1_xgrammar_repetition_context ::= (("a")) (=(root_1_xgrammar_repetition_context_1 root_1_xgrammar_repetition_context_2))
-root_1_xgrammar_repetition_context_1 ::= (("a")) (=(root_1_xgrammar_repetition_context_2))
+root_1_xgrammar_repetition_context ::= (("a")) (=("a" "a"))
+root_1_xgrammar_repetition_context_1 ::= (("a")) (=("a"))
 root_1_xgrammar_repetition_context_2 ::= (("a"))
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
@@ -290,7 +290,7 @@ rule2 ::= [0-9]+ "." [0-9]*
 rule1 ::= (((rule1_1_xgrammar_repetition_context{0, 2} rule1_1_xgrammar_repetition_context_1))) (=((":")))
 rule2 ::= ((rule2_1 "." [0-9]*))
 root_1 ::= ((((rule1) | (rule2)) root_1) | ((rule1) | (rule2)))
-rule1_1_xgrammar_repetition_context ::= (([a-z])) (=(rule1_1_xgrammar_repetition_context_1))
+rule1_1_xgrammar_repetition_context ::= (([a-z])) (=([a-z]))
 rule1_1_xgrammar_repetition_context_1 ::= (([a-z]))
 rule2_1 ::= (([0-9] rule2_1) | [0-9])
 """
@@ -372,17 +372,17 @@ d ::= ((d_1_xgrammar_repetition_context{0, 2147483647}))
 e ::= ((e_1_xgrammar_repetition_context{0, 2147483645} e_1_xgrammar_repetition_context_1 e_1_xgrammar_repetition_context_2))
 f ::= ((f_1_xgrammar_repetition_context f_1_xgrammar_repetition_context_1 f_1_xgrammar_repetition_context_2))
 g ::= ("")
-a_1_xgrammar_repetition_context ::= (("a")) (=(a_1_xgrammar_repetition_context_1))
+a_1_xgrammar_repetition_context ::= (("a")) (=("a"))
 a_1_xgrammar_repetition_context_1 ::= (("a"))
 b_1_xgrammar_repetition_context ::= ((a) | ("b")) (=(b_1_xgrammar_repetition_context_1))
 b_1_xgrammar_repetition_context_1 ::= ((a) | ("b"))
 c_1_xgrammar_repetition_context ::= (("c"))
 d_1_xgrammar_repetition_context ::= (("d"))
-e_1_xgrammar_repetition_context ::= (("e")) (=(e_1_xgrammar_repetition_context_1 e_1_xgrammar_repetition_context_2))
-e_1_xgrammar_repetition_context_1 ::= (("e")) (=(e_1_xgrammar_repetition_context_2))
+e_1_xgrammar_repetition_context ::= (("e")) (=("ee"))
+e_1_xgrammar_repetition_context_1 ::= (("e")) (=("e"))
 e_1_xgrammar_repetition_context_2 ::= (("e"))
-f_1_xgrammar_repetition_context ::= (("f")) (=(f_1_xgrammar_repetition_context_1 f_1_xgrammar_repetition_context_2))
-f_1_xgrammar_repetition_context_1 ::= (("f")) (=(f_1_xgrammar_repetition_context_2))
+f_1_xgrammar_repetition_context ::= (("f")) (=("ff"))
+f_1_xgrammar_repetition_context_1 ::= (("f")) (=("f"))
 f_1_xgrammar_repetition_context_2 ::= (("f"))
 """
 

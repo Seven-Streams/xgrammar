@@ -788,7 +788,15 @@ int32_t EBNFParser::HandleRepetitionRange(
   }
 
   // Add the lookahead elements
-  auto lookahead_elements = elements;
+  std::vector<int32_t> lookahead_elements;
+  const auto& grammar_element = builder_.GetGrammarExpr(grammar_expr_id);
+  if (grammar_element.type == GrammarBuilder::GrammarExprType::kCharacterClass ||
+      grammar_element.type == GrammarBuilder::GrammarExprType::kCharacterClassStar ||
+      grammar_element.type == GrammarBuilder::GrammarExprType::kByteString) {
+    lookahead_elements = std::vector<int32_t>(elements.size(), grammar_expr_id);
+  } else {
+    lookahead_elements = elements;
+  }
   if (elements.empty()) {
     return builder_.AddEmptyStr();
   }
