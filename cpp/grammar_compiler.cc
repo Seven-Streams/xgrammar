@@ -759,7 +759,10 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   // Step 1. Compute the ids of rules that can be empty
   compiled_grammar_impl->grammar->allow_empty_rule_ids = AllowEmptyRuleAnalyzer::Apply(grammar);
 
-  // Step 2. Build the fsm for each rule
+  // Step 2. Normalize the repeat expressions in the grammar.
+  RepetitionNormalizer::Apply(&compiled_grammar_impl->grammar);
+
+  // Step 3. Build the fsm for each rule
   GrammarFSMBuilder::Apply(&compiled_grammar_impl->grammar);
 
   if (tokenizer_info_.GetVocabSize() == 0) {

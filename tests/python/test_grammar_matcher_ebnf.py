@@ -56,17 +56,17 @@ input_accepted_test_repetition_with_empty = (
     ("abcbc", True),
     ("bcbcbcbcbc", True),
     ("bcbcbcbcbcbcbcb", True),
-    ("d", False),
     ("aaaa", False),
     ("", True),
     ("a", True),
+    ("d", True),
 )
 
 
 @pytest.mark.parametrize("input, accepted", input_accepted_test_repetition_with_empty)
 def test_repetition_with_empty(input: str, accepted: bool):
     grammar_str = """
-        root ::= rule {2, 3}
+        root ::= rule {2, 3} "d"?
         rule ::= ("a" | [bc] {4,}) | ""
     """
     grammar = xgr.Grammar.from_ebnf(grammar_str)
