@@ -74,8 +74,14 @@ void EarleyParser::Complete(const ParserState& state, const GrammarExpr& grammar
       }
       XGRAMMAR_DCHECK(element_expr.type == GrammarExprType::kRepeat);
       if (state.rule_start_pos ==
-          static_cast<int32_t>(rule_id_to_completeable_states_.size() - 1)) {
-        // It means that the subrule of the repeat is empty. This is not allowed.
+              static_cast<int32_t>(rule_id_to_completeable_states_.size() - 1) &&
+          std::binary_search(
+              grammar_->allow_empty_rule_ids.begin(),
+              grammar_->allow_empty_rule_ids.end(),
+              element_expr[0]
+          )) {
+        // It means that the subrule of the repeat is empty, and we have already detected it.
+        // We shouldn't add it into the queue.
         continue;
       }
       // The parent state is a repeat, we need to increase the repeat count.
