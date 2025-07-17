@@ -608,6 +608,7 @@ void EarleyParser::PushLookaheadSequence(const int32_t sequence_id) {
       /*rule_id*/ -1, sequence_id, 0, ParserState::kNoPrevInputPos, 0
   );
   tmp_states_to_be_added_.clear();
+  tmp_states_visited_in_queue_.Clear();
   Enqueue(lookahead_state);
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();

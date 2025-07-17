@@ -540,11 +540,31 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (accepted) {
         // Accept the rest chars one by one.
         for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
-          if (!Advance(token[j])) {
-            accepted = false;
+          /*
+           * When can't a token be accepted?
+           * - First, if we can always advance, there's no doubt that the token can be accepted.
+           * - Then, we need to consider when we can't advance anymore.
+           *   - If we can't reach the end of the rule, then the token should be rejected.
+           *   - If we can reach the end of the rule, then we should also advance on the lookahead
+           * parser.
+           *     - If we can always advance on the lookahead parser, then the token should be
+           * uncertain.
+           *     - Otherwise, we must consider if the lookahead parser can reach end during the
+           * parsing:
+           *       - If it can reach the end during the parsing, then the token should be uncertain.
+           *       - Otherwise, it should be rejected.
+           *
+           */
+          accepted = Advance(token[j]);
+          if (!accepted) {
             break;
           }
           tmp_can_reach_end_stack_.push_back(IsCompleted());
+          if (IsCompleted() && lookahead_parser.has_value()) {
+            lookahead_parser->PushLookaheadSequence(
+                grammar_->GetRule(init_rule_id).lookahead_assertion_id
+            );
+          }
           tmp_can_reach_end_prefix_or_stack_.push_back(
               tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
           );
