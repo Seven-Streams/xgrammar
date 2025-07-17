@@ -15,6 +15,7 @@
 
 #include "fsm.h"
 #include "grammar_data_structure.h"
+#include "support/compact_2d_array.h"
 #include "support/encoding.h"
 #include "support/logging.h"
 #include "xgrammar/grammar.h"
@@ -600,6 +601,34 @@ void RepeatDetector::Clear() {
     visited_set_.clear();
   }
   size_ = 0;
+}
+
+void EarleyParser::PushLookaheadSequence(const int32_t sequence_id) {
+  ParserState lookahead_state(
+      /*rule_id*/ -1, sequence_id, 0, ParserState::kNoPrevInputPos, 0
+  );
+  tmp_states_to_be_added_.clear();
+  Enqueue(lookahead_state);
+  while (!tmp_process_state_queue_.empty()) {
+    const auto state = tmp_process_state_queue_.front();
+    tmp_process_state_queue_.pop();
+    GrammarExpr grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
+    auto [scanable, completable] = Predict(state, grammar_expr);
+    if (completable) {
+      Complete(state, grammar_expr);
+    } else if (scanable) {  // A completable state can be scanned.
+      tmp_states_to_be_added_.push_back(state);
+    }
+  }
+
+  // Update the scanable states history.
+  if (!tmp_states_to_be_added_.empty()) {
+    for (const auto& state : scanable_state_history_[scanable_state_history_.size() - 1]) {
+      tmp_states_to_be_added_.push_back(state);
+    }
+    scanable_state_history_.PopBack(1);
+    scanable_state_history_.PushBack(tmp_states_to_be_added_);
+  }
 }
 
 }  // namespace xgrammar

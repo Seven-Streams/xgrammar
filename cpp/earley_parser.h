@@ -443,6 +443,12 @@ class EarleyParser {
     }
     return result;
   }
+
+  /*!
+   * \brief Push a lookahead sequence into the Earley parser.
+   * \param sequence_id The sequence id of the lookahead assertion.
+   */
+  void PushLookaheadSequence(const int32_t sequence_id);
 };
 
 }  // namespace xgrammar

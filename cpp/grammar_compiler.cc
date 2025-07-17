@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -460,6 +461,19 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   const std::string* prev_token = nullptr;
+  std::optional<EarleyParser> lookahead_parser = std::nullopt;
+  if (grammar_->GetRule(init_rule_id).lookahead_assertion_id != -1) {
+    lookahead_parser.emplace(EarleyParser(
+        grammar_,
+        ParserState{
+            -1,
+            grammar_->GetRule(init_rule_id).lookahead_assertion_id,
+            0,
+            ParserState::kNoPrevInputPos,
+            0
+        }
+    ));
+  };
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
     const auto& interval = possible_intervals[interval_idx];
     for (int i = interval.first; i < interval.second; ++i) {
@@ -634,6 +648,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     XGRAMMAR_DCHECK(sequence.type == Grammar::Impl::GrammarExprType::kTagDispatch);
     first_character_mask.set();
   }
+
+  // Check if it's rejected-heavy. If so, we won't fill the rejected indices.
   bool rejected_indices_are_filled = GetTokenMaskWithFirstCharacterCheck(
       sorted_decoded_vocab, first_character_mask, subtree_nodes_range, is_root_rule
   );
