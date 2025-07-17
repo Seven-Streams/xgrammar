@@ -463,6 +463,13 @@ class EarleyParser {
    * \brief Get the number of how many characters are accepted by the Earley parser.
    */
   size_t GetAcceptedCharactersCount() const { return rule_id_to_completeable_states_.size() - 1; }
+
+  /*!
+   * \brief Check if earley parser can accept new character.
+   */
+  bool CanAcceptCharacter() const {
+    return scanable_state_history_[scanable_state_history_.size() - 1].size() != 0;
+  }
 };
 
 }  // namespace xgrammar
