@@ -523,6 +523,12 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           // Case 2. The common prefix is shorter than the previous matched size. Rollback
           // the non-common part.
           PopLastStates(prev_matched_size - lcp_len);
+          if (lookahead_parser.has_value()) {
+            lookahead_parser->PopLastStates(std::min(
+                prev_matched_size - lcp_len,
+                static_cast<int>(lookahead_parser->GetAcceptedCharactersCount())
+            ));
+          }
           tmp_can_reach_end_stack_.erase(
               tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
               tmp_can_reach_end_stack_.end()
@@ -601,6 +607,11 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   // Rollback the last matched part.
   PopLastStates(prev_matched_size);
+  if (lookahead_parser.has_value()) {
+    lookahead_parser->PopLastStates(std::min(
+        prev_matched_size, static_cast<int>(lookahead_parser->GetAcceptedCharactersCount())
+    ));
+  }
 
   if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size()) &&
       fill_reject_indices) {
