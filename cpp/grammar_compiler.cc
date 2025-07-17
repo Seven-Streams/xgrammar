@@ -518,7 +518,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
       bool accepted = true;
-      bool lookahead_accepted = false;
+      bool lookahead_accepted = true;
       if (prev_token != nullptr) {
         int lcp_len =
             std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
@@ -563,9 +563,12 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (accepted) {
         // It means that (accepted || lookahead_accepted) == true.
         // Consider the lookahead parser and the current parser.
-        accepted = CanAcceptCharacter();
+        accepted = CanAcceptCharacter() || tmp_can_reach_end_prefix_or_stack_.back();
         if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
-          lookahead_accepted = lookahead_parser->CanAcceptCharacter();
+          lookahead_accepted = lookahead_parser->CanAcceptCharacter() ||
+                               tmp_can_reach_end_prefix_or_stack_of_lookahead_.back();
+        } else {
+          lookahead_accepted = false;
         }
 
         // Accept the rest chars one by one.
@@ -588,7 +591,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
            */
           accepted = Advance(token[j]);
           if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
-            lookahead_accepted = Advance(token[j]);
+            lookahead_accepted = lookahead_parser->Advance(token[j]);
           }
           if (!accepted && !lookahead_accepted) {
             break;
@@ -608,7 +611,8 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
           // It indicates that if there is a lookahead parser, then it should be in use
           // now.
-          if (IsCompleted() && lookahead_parser.has_value()) {
+          if (IsCompleted() && lookahead_parser.has_value() &&
+              (lookahead_parser->GetAcceptedCharactersCount() != 0)) {
             lookahead_parser->PushLookaheadSequence(
                 grammar_->GetRule(init_rule_id).lookahead_assertion_id
             );
@@ -633,8 +637,8 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
       bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
       bool pass_lookahead_assertion =
-          lookahead_accepted ||
-          (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_of_lookahead_.back());
+          (!lookahead_parser.has_value()) ||
+          (lookahead_accepted || tmp_can_reach_end_prefix_or_stack_of_lookahead_.back());
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
       } else if (can_reach_end && !is_root_rule && pass_lookahead_assertion &&
