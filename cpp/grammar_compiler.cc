@@ -289,6 +289,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   std::vector<int32_t> tmp_uncertain_indices_;
   std::vector<bool> tmp_can_reach_end_stack_;
   std::vector<bool> tmp_can_reach_end_prefix_or_stack_;
+  std::vector<bool> tmp_can_reach_end_stack_of_lookahead_;
+  std::vector<bool> tmp_can_reach_end_prefix_or_stack_of_lookahead_;
 };
 
 bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
@@ -524,10 +526,19 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           // the non-common part.
           PopLastStates(prev_matched_size - lcp_len);
           if (lookahead_parser.has_value()) {
-            lookahead_parser->PopLastStates(std::min(
+            int lookahead_value = std::min(
                 prev_matched_size - lcp_len,
                 static_cast<int>(lookahead_parser->GetAcceptedCharactersCount())
-            ));
+            );
+            lookahead_parser->PopLastStates(lookahead_value);
+            tmp_can_reach_end_stack_of_lookahead_.erase(
+                tmp_can_reach_end_stack_of_lookahead_.end() - lookahead_value,
+                tmp_can_reach_end_stack_of_lookahead_.end()
+            );
+            tmp_can_reach_end_prefix_or_stack_of_lookahead_.erase(
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.end() - lookahead_value,
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.end()
+            );
           }
           tmp_can_reach_end_stack_.erase(
               tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
@@ -608,9 +619,18 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   // Rollback the last matched part.
   PopLastStates(prev_matched_size);
   if (lookahead_parser.has_value()) {
-    lookahead_parser->PopLastStates(std::min(
+    int lookahead_value = std::min(
         prev_matched_size, static_cast<int>(lookahead_parser->GetAcceptedCharactersCount())
-    ));
+    );
+    lookahead_parser->PopLastStates(lookahead_value);
+    tmp_can_reach_end_stack_of_lookahead_.erase(
+        tmp_can_reach_end_stack_of_lookahead_.end() - lookahead_value,
+        tmp_can_reach_end_stack_of_lookahead_.end()
+    );
+    tmp_can_reach_end_prefix_or_stack_of_lookahead_.erase(
+        tmp_can_reach_end_prefix_or_stack_of_lookahead_.end() - lookahead_value,
+        tmp_can_reach_end_prefix_or_stack_of_lookahead_.end()
+    );
   }
 
   if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size()) &&
