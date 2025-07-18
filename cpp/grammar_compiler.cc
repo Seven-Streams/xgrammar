@@ -593,42 +593,66 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
            *
            */
           accepted = Advance(token[j]);
-          if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
-            lookahead_accepted = lookahead_parser->Advance(token[j]);
-          }
-          if (!accepted && !lookahead_accepted) {
-            break;
-          }
           if (!accepted) {
-            // It means that the current rule can't match any more characters!
-            // We need to add an empty state.
-            PushEmptyState();
-          }
+            /* Under this circumstance, we need to check the lookahead parser.
+             * If the lookahead parser exists, here are two possible cases:
+             * 1. The lookahead parser hasn't been used. Then we need to initialize the
+             * lookahead parser with the characters before.
+             * 2. The lookahead parser exactly matches the characters before.
+             */
 
-          // It the lookahead parser is in use, and it can't accept the character,
-          // then we need to push an empty state.
-          if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back() &&
-              !lookahead_accepted) {
-            lookahead_parser->PushEmptyState();
-          }
+            // The lookahead parser doesn't exist, or the token can't meet the end of the rule.
+            // In this case, it will be rejected.
+            if ((!lookahead_parser.has_value()) || (!tmp_can_reach_end_prefix_or_stack_.back())) {
+              break;
+            }
 
-          // It indicates that if there is a lookahead parser, then it should be in use
-          // now.
-          if (IsCompleted() && lookahead_parser.has_value() &&
-              (lookahead_parser->GetAcceptedCharactersCount() != 0)) {
-            lookahead_parser->PushLookaheadSequence(
-                grammar_->GetRule(init_rule_id).lookahead_assertion_id
-            );
-          }
+            // Case 1. The lookahead parser hasn't been used. We need to match the
+            // characters before.
+            XGRAMMAR_DCHECK(lookahead_parser.has_value());
+            int lookahead_sequence_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
+            bool start = false;
+            if (lookahead_parser->GetAcceptedCharactersCount() == 0) {
+              for (int k = 0; k < j; k++) {
+                // Before the token reaches the end, we need to do nothing.
+                start = start || tmp_can_reach_end_stack_[k];
+                if (!start) {
+                  continue;
+                }
+                // If current token can reach the end of the rule, then it can enter the
+                // lookahead parser.
+                if ((k != 0) && tmp_can_reach_end_stack_[k]) {
+                  lookahead_parser->PushLookaheadSequence(lookahead_sequence_id);
+                }
+                if (!Advance(token[k])) {
+                  lookahead_parser->PushEmptyState();
+                }
+                tmp_can_reach_end_stack_of_lookahead_.push_back(lookahead_parser->IsCompleted());
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.push_back(
+                    tmp_can_reach_end_stack_of_lookahead_.back() ||
+                    tmp_can_reach_end_prefix_or_stack_of_lookahead_.back()
+                );
+              }
+            }
 
-          // The lookahead parser exists, and it has reached the end of the rule,
-          // which indicates that the lookahead parser is in use.
-          if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
-            tmp_can_reach_end_stack_of_lookahead_.push_back(lookahead_parser->IsCompleted());
-            tmp_can_reach_end_prefix_or_stack_of_lookahead_.push_back(
-                tmp_can_reach_end_stack_of_lookahead_.back() ||
-                tmp_can_reach_end_prefix_or_stack_of_lookahead_.back()
-            );
+            // Match the left characters.
+            for (int k = j; k < static_cast<int>(token.size()); ++k) {
+              if (!lookahead_parser->Advance(token[k])) {
+                break;
+              }
+              PushEmptyState();
+              tmp_can_reach_end_stack_of_lookahead_.push_back(lookahead_parser->IsCompleted());
+              tmp_can_reach_end_prefix_or_stack_of_lookahead_.push_back(
+                  tmp_can_reach_end_stack_of_lookahead_.back() ||
+                  tmp_can_reach_end_prefix_or_stack_of_lookahead_.back()
+              );
+              tmp_can_reach_end_stack_.push_back(IsCompleted());
+              tmp_can_reach_end_prefix_or_stack_.push_back(
+                  tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
+              );
+              prev_matched_size = k + 1;
+            }
+            break;
           }
           tmp_can_reach_end_stack_.push_back(IsCompleted());
           tmp_can_reach_end_prefix_or_stack_.push_back(
