@@ -118,6 +118,8 @@ class Grammar::Impl {
     // tag_expr should be a byte string, and rule_id should be a rule id.
     // loop_after_dispatch is a bool.
     kTagDispatch,
+    // data format: [grammar_expr_id, min_repeat_count, max_repeat_count]
+    kRepeat,
   };
 
   /*! \brief The object representing a grammar expr. */
@@ -138,6 +140,7 @@ class Grammar::Impl {
     }
     const int32_t* begin() const { return data; }
     const int32_t* end() const { return data + data_len; }
+    void SetData(int index, int value) { const_cast<int32_t*>(data)[index] = value; }
   };
 
   /*! \brief Get the number of grammar_exprs. */
