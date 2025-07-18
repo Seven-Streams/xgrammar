@@ -450,6 +450,33 @@ class EarleyParser {
     }
     return result;
   }
+
+  /*!
+   * \brief Push a lookahead sequence into the Earley parser.
+   * \param sequence_id The sequence id of the lookahead assertion.
+   */
+  void PushLookaheadSequence(const int32_t sequence_id);
+
+  /*!
+   * \brief Push an empty state into the Earley parser.
+   */
+  void PushEmptyState() {
+    rule_id_to_completeable_states_.emplace_back();
+    is_completed_.push_back(false);
+    scanable_state_history_.PushBack(nullptr, 0);
+  }
+
+  /*!
+   * \brief Get the number of how many characters are accepted by the Earley parser.
+   */
+  size_t GetAcceptedCharactersCount() const { return rule_id_to_completeable_states_.size() - 1; }
+
+  /*!
+   * \brief Check if earley parser can accept new character.
+   */
+  bool CanAcceptCharacter() const {
+    return scanable_state_history_[scanable_state_history_.size() - 1].size() != 0;
+  }
 };
 
 }  // namespace xgrammar

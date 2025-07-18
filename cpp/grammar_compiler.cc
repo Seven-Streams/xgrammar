@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -291,6 +292,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   std::vector<int32_t> tmp_uncertain_indices_;
   std::vector<bool> tmp_can_reach_end_stack_;
   std::vector<bool> tmp_can_reach_end_prefix_or_stack_;
+  std::vector<bool> tmp_can_reach_end_stack_of_lookahead_;
+  std::vector<bool> tmp_can_reach_end_prefix_or_stack_of_lookahead_;
 };
 
 std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
@@ -463,6 +466,25 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   const std::string* prev_token = nullptr;
+  std::optional<EarleyParser> lookahead_parser = std::nullopt;
+  if (grammar_->GetRule(init_rule_id).lookahead_assertion_id != -1) {
+    lookahead_parser.emplace(EarleyParser(
+        grammar_,
+        ParserState{
+            -1,
+            grammar_->GetRule(init_rule_id).lookahead_assertion_id,
+            0,
+            ParserState::kNoPrevInputPos,
+            0
+        }
+    ));
+  }
+  if (lookahead_parser.has_value()) {
+    tmp_can_reach_end_stack_of_lookahead_.assign({lookahead_parser->IsCompleted()});
+    tmp_can_reach_end_prefix_or_stack_of_lookahead_.assign(
+        {tmp_can_reach_end_stack_of_lookahead_.back()}
+    );
+  }
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
     const auto& interval = possible_intervals[interval_idx];
     for (int i = interval.first; i < interval.second; ++i) {
@@ -499,6 +521,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
       bool accepted = true;
+      bool lookahead_accepted = true;
       if (prev_token != nullptr) {
         int lcp_len =
             std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
@@ -512,6 +535,21 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           // Case 2. The common prefix is shorter than the previous matched size. Rollback
           // the non-common part.
           PopLastStates(prev_matched_size - lcp_len);
+          if (lookahead_parser.has_value()) {
+            int lookahead_value = std::min(
+                prev_matched_size - lcp_len,
+                static_cast<int>(lookahead_parser->GetAcceptedCharactersCount())
+            );
+            lookahead_parser->PopLastStates(lookahead_value);
+            tmp_can_reach_end_stack_of_lookahead_.erase(
+                tmp_can_reach_end_stack_of_lookahead_.end() - lookahead_value,
+                tmp_can_reach_end_stack_of_lookahead_.end()
+            );
+            tmp_can_reach_end_prefix_or_stack_of_lookahead_.erase(
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.end() - lookahead_value,
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.end()
+            );
+          }
           tmp_can_reach_end_stack_.erase(
               tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
               tmp_can_reach_end_stack_.end()
@@ -523,15 +561,74 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         }
         prev_matched_size = std::min(prev_matched_size, lcp_len);
       }
-
       prev_token = &token;
 
       if (accepted) {
+        // It means that (accepted || lookahead_accepted) == true.
+        // Consider the lookahead parser and the current parser.
+        accepted = CanAcceptCharacter() || tmp_can_reach_end_prefix_or_stack_.back();
+        if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
+          lookahead_accepted = lookahead_parser->CanAcceptCharacter() ||
+                               tmp_can_reach_end_prefix_or_stack_of_lookahead_.back();
+        } else {
+          lookahead_accepted = false;
+        }
+
         // Accept the rest chars one by one.
         for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
-          if (!Advance(token[j])) {
-            accepted = false;
+          /*
+           * When can't a token be accepted?
+           * - First, if we can always advance, there's no doubt that the token can be accepted.
+           * - Then, we need to consider when we can't advance anymore.
+           *   - If we can't reach the end of the rule, then the token should be rejected.
+           *   - If we can reach the end of the rule, then we should also advance on the lookahead
+           * parser.
+           *     - If we can always advance on the lookahead parser, then the token should be
+           * uncertain.
+           *     - Otherwise, we must consider if the lookahead parser can reach end during the
+           * parsing:
+           *       - If it can reach the end during the parsing, then the token should be
+           * uncertain.
+           *       - Otherwise, it should be rejected.
+           *
+           */
+          accepted = Advance(token[j]);
+          if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
+            lookahead_accepted = lookahead_parser->Advance(token[j]);
+          }
+          if (!accepted && !lookahead_accepted) {
             break;
+          }
+          if (!accepted) {
+            // It means that the current rule can't match any more characters!
+            // We need to add an empty state.
+            PushEmptyState();
+          }
+
+          // It the lookahead parser is in use, and it can't accept the character,
+          // then we need to push an empty state.
+          if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back() &&
+              !lookahead_accepted) {
+            lookahead_parser->PushEmptyState();
+          }
+
+          // It indicates that if there is a lookahead parser, then it should be in use
+          // now.
+          if (IsCompleted() && lookahead_parser.has_value() &&
+              (lookahead_parser->GetAcceptedCharactersCount() != 0)) {
+            lookahead_parser->PushLookaheadSequence(
+                grammar_->GetRule(init_rule_id).lookahead_assertion_id
+            );
+          }
+
+          // The lookahead parser exists, and it has reached the end of the rule,
+          // which indicates that the lookahead parser is in use.
+          if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
+            tmp_can_reach_end_stack_of_lookahead_.push_back(lookahead_parser->IsCompleted());
+            tmp_can_reach_end_prefix_or_stack_of_lookahead_.push_back(
+                tmp_can_reach_end_stack_of_lookahead_.back() ||
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.back()
+            );
           }
           tmp_can_reach_end_stack_.push_back(IsCompleted());
           tmp_can_reach_end_prefix_or_stack_.push_back(
@@ -542,30 +639,22 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
-
+      bool pass_lookahead_assertion =
+          (!lookahead_parser.has_value()) ||
+          (lookahead_accepted || tmp_can_reach_end_prefix_or_stack_of_lookahead_.back());
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
+      } else if (can_reach_end && !is_root_rule && pass_lookahead_assertion &&
+                 prev_matched_size > 0) {
+        // 1. If the current rule is the root rule (is_root_rule=true), there are no
+        // uncertain tokens. Not accepted tokens are just rejected.
+        // 2. If a token cannot pass the lookahead assertion, it is rejected.
+        tmp_uncertain_indices_.push_back(i);
       } else {
-        auto lookahead_result_pair = IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
-        if (can_reach_end && !is_root_rule && lookahead_result_pair.first &&
-            prev_matched_size > 0) {
-          // 1. If the current rule is the root rule (is_root_rule=true), there are no
-          // uncertain tokens. Not accepted tokens are just rejected.
-          // 2. If a token cannot pass the lookahead assertion, it is rejected.
-          tmp_uncertain_indices_.push_back(i);
-          // On the subtree, they are all uncertain tokens.
-          if (lookahead_result_pair.second) {
-            for (int j = i + 1; j < subtree_nodes_range[i]; ++j) {
-              tmp_uncertain_indices_.push_back(j);
-            }
-            i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
-          }
-        } else {
-          tmp_rejected_indices_.push_back(i);
-          last_rejected_range = subtree_nodes_range[i];
-          fill_reject_indices =
-              tmp_rejected_indices_.size() < AdaptiveTokenMask::USE_BITSET_THRESHOLD;
-        }
+        tmp_rejected_indices_.push_back(i);
+        last_rejected_range = subtree_nodes_range[i];
+        fill_reject_indices =
+            tmp_rejected_indices_.size() < AdaptiveTokenMask::USE_BITSET_THRESHOLD;
       }
     }
     if (interval_idx != possible_intervals.size() - 1 && fill_reject_indices) {
@@ -579,6 +668,12 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   // Rollback the last matched part.
   PopLastStates(prev_matched_size);
+  if (lookahead_parser.has_value()) {
+    int lookahead_value = std::min(
+        prev_matched_size, static_cast<int>(lookahead_parser->GetAcceptedCharactersCount())
+    );
+    lookahead_parser->PopLastStates(lookahead_value);
+  }
 
   if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size()) &&
       fill_reject_indices) {
@@ -646,6 +741,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     XGRAMMAR_DCHECK(sequence.type == Grammar::Impl::GrammarExprType::kTagDispatch);
     first_character_mask.set();
   }
+
+  // Check if it's rejected-heavy. If so, we won't fill the rejected indices.
   bool rejected_indices_are_filled = GetTokenMaskWithFirstCharacterCheck(
       sorted_decoded_vocab, first_character_mask, subtree_nodes_range, is_root_rule
   );
