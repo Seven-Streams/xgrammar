@@ -2117,7 +2117,7 @@ Result<JSONSchemaConverter::ArraySpec, SchemaError> JSONSchemaConverter::ParseAr
     }
   }
 
-  return Result<ArraySpec, SchemaError>::Ok(ArraySpec{
+  return ResultOk<ArraySpec>(ArraySpec{
       prefix_item_schemas, allow_additional_items, additional_item_schema, min_items, max_items
   });
 }
@@ -2777,7 +2777,7 @@ Result<JSONSchemaConverter::ObjectSpec, SchemaError> JSONSchemaConverter::ParseO
     );
   }
 
-  return Result<ObjectSpec, SchemaError>::Ok(ObjectSpec{
+  return ResultOk(ObjectSpec{
       properties,
       pattern_properties,
       allow_additional_properties,

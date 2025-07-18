@@ -62,6 +62,10 @@ class GrammarPrinter {
   std::string PrintTagDispatch(const GrammarExpr& grammar_expr);
   /*! \brief Print a GrammarExpr for repeat. */
   std::string PrintRepeat(const GrammarExpr& grammar_expr);
+  /*! \brief Print a string. */
+  std::string PrintString(const std::string& str);
+  /*! \brief Print a boolean. */
+  std::string PrintBoolean(bool value);
 
   Grammar grammar_;
 };

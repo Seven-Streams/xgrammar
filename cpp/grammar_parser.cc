@@ -979,51 +979,49 @@ int32_t EBNFParser::ParseTagDispatch() {
     tag_dispatch.tag_rule_pairs.push_back({tag_str_node->value, rule_id});
   }
 
+  // stop_eos
   tag_dispatch.stop_eos = true;
-
-  // stop_eos?
-  tag_dispatch.stop_eos = true;
-  // if (auto it = args.named_arguments.find("stop_eos"); it != args.named_arguments.end()) {
-  //   auto bool_node = std::get_if<MacroIR::BooleanNode>(it->second.get());
-  //   if (bool_node == nullptr) {
-  //     ReportParseError("stop_eos must be a boolean literal", delta_element);
-  //   }
-  //   tag_dispatch.stop_eos = bool_node->value;
-  // }
+  if (auto it = args.named_arguments.find("stop_eos"); it != args.named_arguments.end()) {
+    auto bool_node = std::get_if<MacroIR::BooleanNode>(it->second.get());
+    if (bool_node == nullptr) {
+      ReportParseError("stop_eos must be a boolean literal", delta_element);
+    }
+    tag_dispatch.stop_eos = bool_node->value;
+  }
 
   // stop_str
-  // if (auto it = args.named_arguments.find("stop_str"); it != args.named_arguments.end()) {
-  //   auto tuple_node = std::get_if<MacroIR::TupleNode>(it->second.get());
-  //   if (tuple_node == nullptr) {
-  //     ReportParseError("Stop strings must be a tuple", delta_element);
-  //   }
+  if (auto it = args.named_arguments.find("stop_str"); it != args.named_arguments.end()) {
+    auto tuple_node = std::get_if<MacroIR::TupleNode>(it->second.get());
+    if (tuple_node == nullptr) {
+      ReportParseError("Stop strings must be a tuple", delta_element);
+    }
 
-  //   for (const auto& element : tuple_node->elements) {
-  //     auto stop_str_node = std::get_if<MacroIR::StringNode>(element.get());
-  //     if (stop_str_node == nullptr || stop_str_node->value.empty()) {
-  //       ReportParseError("Stop string must be a non-empty string literal", delta_element);
-  //     }
-  //     tag_dispatch.stop_str.push_back(stop_str_node->value);
-  //   }
-  // }
+    for (const auto& element : tuple_node->elements) {
+      auto stop_str_node = std::get_if<MacroIR::StringNode>(element.get());
+      if (stop_str_node == nullptr || stop_str_node->value.empty()) {
+        ReportParseError("Stop string must be a non-empty string literal", delta_element);
+      }
+      tag_dispatch.stop_str.push_back(stop_str_node->value);
+    }
+  }
 
   // loop_after_dispatch
   tag_dispatch.loop_after_dispatch = true;
-  // if (auto it = args.named_arguments.find("loop_after_dispatch");
-  //     it != args.named_arguments.end()) {
-  //   auto bool_node = std::get_if<MacroIR::BooleanNode>(it->second.get());
-  //   if (bool_node == nullptr) {
-  //     ReportParseError("loop_after_dispatch must be a boolean literal", delta_element);
-  //   }
-  //   tag_dispatch.loop_after_dispatch = bool_node->value;
-  // }
+  if (auto it = args.named_arguments.find("loop_after_dispatch");
+      it != args.named_arguments.end()) {
+    auto bool_node = std::get_if<MacroIR::BooleanNode>(it->second.get());
+    if (bool_node == nullptr) {
+      ReportParseError("loop_after_dispatch must be a boolean literal", delta_element);
+    }
+    tag_dispatch.loop_after_dispatch = bool_node->value;
+  }
 
-  // // Well formed check
-  // if (!tag_dispatch.stop_eos && tag_dispatch.stop_str.empty()) {
-  //   ReportParseError(
-  //       "The TagDispatch must have stop_eos=true or stop_str is not empty", delta_element
-  //   );
-  // }
+  // Well formed check
+  if (!tag_dispatch.stop_eos && tag_dispatch.stop_str.empty()) {
+    ReportParseError(
+        "The TagDispatch must have stop_eos=true or stop_str is not empty", delta_element
+    );
+  }
 
   return builder_.AddTagDispatch(tag_dispatch);
 }

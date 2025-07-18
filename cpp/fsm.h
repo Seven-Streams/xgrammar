@@ -395,10 +395,15 @@ class CompactFSM {
    * transitions, the first one will be returned.
    * \param from The source state to transition from.
    * \param character The input character.
+   * \param targets The target states to be filled with the possible next states.
    * \return The target state if a valid transition exists, kNoNextState otherwise.
    */
-  int GetNextState(int from, int value, FSMEdge::EdgeType edge_type = FSMEdge::EdgeType::kCharRange)
-      const;
+  void GetNextStates(
+      int from,
+      int value,
+      FSMEdge::EdgeType edge_type = FSMEdge::EdgeType::kCharRange,
+      std::vector<int>* targets = nullptr
+  ) const;
 
   /*!
    * \brief Advance the FSM to the next state.
