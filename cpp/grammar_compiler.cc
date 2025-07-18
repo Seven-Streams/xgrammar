@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <cassert>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -521,7 +522,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
       bool accepted = true;
-      bool lookahead_accepted = true;
       if (prev_token != nullptr) {
         int lcp_len =
             std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
@@ -535,7 +535,8 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           // Case 2. The common prefix is shorter than the previous matched size. Rollback
           // the non-common part.
           PopLastStates(prev_matched_size - lcp_len);
-          if (lookahead_parser.has_value()) {
+          if (lookahead_parser.has_value() &&
+              (lookahead_parser->GetAcceptedCharactersCount() != 0)) {
             int lookahead_value = std::min(
                 prev_matched_size - lcp_len,
                 static_cast<int>(lookahead_parser->GetAcceptedCharactersCount())
@@ -566,14 +567,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (accepted) {
         // It means that (accepted || lookahead_accepted) == true.
         // Consider the lookahead parser and the current parser.
-        accepted = CanAcceptCharacter() || tmp_can_reach_end_prefix_or_stack_.back();
-        if (lookahead_parser.has_value() && tmp_can_reach_end_prefix_or_stack_.back()) {
-          lookahead_accepted = lookahead_parser->CanAcceptCharacter() ||
-                               tmp_can_reach_end_prefix_or_stack_of_lookahead_.back();
-        } else {
-          lookahead_accepted = false;
-        }
-
+        accepted = CanAcceptCharacter() || tmp_can_reach_end_stack_.back();
         // Accept the rest chars one by one.
         for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
           /*
@@ -611,20 +605,19 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
             // characters before.
             XGRAMMAR_DCHECK(lookahead_parser.has_value());
             int lookahead_sequence_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
-            bool start = false;
             if (lookahead_parser->GetAcceptedCharactersCount() == 0) {
               for (int k = 0; k < j; k++) {
                 // Before the token reaches the end, we need to do nothing.
-                start = start || tmp_can_reach_end_stack_[k];
-                if (!start) {
+                if (!tmp_can_reach_end_prefix_or_stack_[k]) {
                   continue;
                 }
                 // If current token can reach the end of the rule, then it can enter the
                 // lookahead parser.
-                if ((k != 0) && tmp_can_reach_end_stack_[k]) {
+                if ((lookahead_parser->GetAcceptedCharactersCount() != 0) &&
+                    tmp_can_reach_end_stack_[k]) {
                   lookahead_parser->PushLookaheadSequence(lookahead_sequence_id);
                 }
-                if (!Advance(token[k])) {
+                if (!lookahead_parser->Advance(token[k])) {
                   lookahead_parser->PushEmptyState();
                 }
                 tmp_can_reach_end_stack_of_lookahead_.push_back(lookahead_parser->IsCompleted());
@@ -634,7 +627,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
                 );
               }
             }
-
             // Match the left characters.
             for (int k = j; k < static_cast<int>(token.size()); ++k) {
               if (!lookahead_parser->Advance(token[k])) {
@@ -646,14 +638,29 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
                   tmp_can_reach_end_stack_of_lookahead_.back() ||
                   tmp_can_reach_end_prefix_or_stack_of_lookahead_.back()
               );
-              tmp_can_reach_end_stack_.push_back(IsCompleted());
-              tmp_can_reach_end_prefix_or_stack_.push_back(
-                  tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
-              );
+              tmp_can_reach_end_stack_.push_back(false);
+              tmp_can_reach_end_prefix_or_stack_.push_back(true);
               prev_matched_size = k + 1;
             }
             break;
           }
+
+          // If we can advance normally, then we will reset the lookahead parser.
+          if (lookahead_parser.has_value() &&
+              (lookahead_parser->GetAcceptedCharactersCount() != 0)) {
+            tmp_can_reach_end_prefix_or_stack_of_lookahead_.erase(
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.end() -
+                    lookahead_parser->GetAcceptedCharactersCount(),
+                tmp_can_reach_end_prefix_or_stack_of_lookahead_.end()
+            );
+            tmp_can_reach_end_stack_of_lookahead_.erase(
+                tmp_can_reach_end_stack_of_lookahead_.end() -
+                    lookahead_parser->GetAcceptedCharactersCount(),
+                tmp_can_reach_end_stack_of_lookahead_.end()
+            );
+            lookahead_parser->PopLastStates(lookahead_parser->GetAcceptedCharactersCount());
+          }
+
           tmp_can_reach_end_stack_.push_back(IsCompleted());
           tmp_can_reach_end_prefix_or_stack_.push_back(
               tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
@@ -664,8 +671,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
       bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
       bool pass_lookahead_assertion =
-          (!lookahead_parser.has_value()) ||
-          (lookahead_accepted || tmp_can_reach_end_prefix_or_stack_of_lookahead_.back());
+          (!lookahead_parser.has_value()) || tmp_can_reach_end_prefix_or_stack_of_lookahead_.back();
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
       } else if (can_reach_end && !is_root_rule && pass_lookahead_assertion &&
