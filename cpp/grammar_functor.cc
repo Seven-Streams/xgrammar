@@ -1058,6 +1058,7 @@ class RepetitionNormalizerImpl {
         continue;
       }
       int repeat_rule_id = expr[0];
+      (*grammar)->exact_lookahead.push_back(repeat_rule_id);
       if (std::binary_search(
               (*grammar)->allow_empty_rule_ids.begin(),
               (*grammar)->allow_empty_rule_ids.end(),
@@ -1067,6 +1068,7 @@ class RepetitionNormalizerImpl {
         expr.SetData(1, 0);  // Set min repeat to 0
       }
     }
+    std::sort((*grammar)->exact_lookahead.begin(), (*grammar)->exact_lookahead.end());
   }
 };
 
