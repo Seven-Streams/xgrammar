@@ -249,11 +249,8 @@ class Grammar::Impl {
   /*! \brief The ids of the rules that are allowed to be empty. */
   std::vector<int32_t> allow_empty_rule_ids;
 
-  /*! \brief Store repetition ranges.
-   *  std::get<0> is the rule id, std::get<1> is the min repeat count,
-   *  std::get<2> is the max repeat count.
-   */
-  std::vector<std::tuple<int32_t, int32_t, int32_t>> repetition_ranges;
+  /*! \brief Store the lookahead which are exact, used to reduce uncertainty.*/
+  std::vector<int32_t> exact_lookahead;
 
   friend class GrammarBuilder;
   friend class GrammarCompiler;
@@ -286,8 +283,8 @@ XGRAMMAR_MEMBER_TABLE(
     &Grammar::Impl::per_rule_fsms,
     "allow_empty_rule_ids",
     &Grammar::Impl::allow_empty_rule_ids,
-    "repetition_ranges",
-    &Grammar::Impl::repetition_ranges
+    "exact_lookahead",
+    &Grammar::Impl::exact_lookahead
 );
 
 }  // namespace xgrammar
