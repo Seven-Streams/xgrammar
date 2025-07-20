@@ -220,5 +220,26 @@ def test_structural_tag_mask_gen():
     assert tokenizer.eos_token_id not in rejected_token_ids
 
 
+input__accepted__test_inner_dispatch = [
+    ("bbbtag1A", True),
+    ("bbbtagatag2C", True),
+    ("bbbaaaaa", True),
+    ("btag1tag2", False),
+    ("btag1Atag2C", True),
+]
+
+
+@pytest.mark.parametrize("input, accepted", input__accepted__test_inner_dispatch)
+def test_inner_dispatch(input: str, accepted: bool):
+    grammar_ebnf = r"""
+        root ::= "b" TagDispatch(("tag1", rule1), ("tag2", rule2))
+        rule1 ::= "A"
+        rule2 ::= "C"
+        stop_eos=true,
+        stop_str=(),
+        loop_after_dispatch=true
+    """
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)
