@@ -77,7 +77,7 @@ void EarleyParser::Complete(const ParserState& state) {
 }
 
 std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
-    const ParserState& state, const GrammarExpr& grammar_expr
+    const ParserState& state
 ) {
   // Check if it's the tag dispatch.
   if (state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value()) {
@@ -86,6 +86,7 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
     const auto& fsm = grammar_->per_rule_fsms[state.rule_id].value();
     return std::make_pair(fsm.IsScanableState(state.element_id), fsm.IsEndState(state.element_id));
   }
+  const GrammarExpr& grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
   XGRAMMAR_DCHECK(
       grammar_expr.type == GrammarExprType::kSequence ||
       grammar_expr.type == GrammarExprType::kEmptyStr
@@ -172,23 +173,12 @@ bool EarleyParser::Advance(const uint8_t ch) {
     // XGRAMMAR_LOG(INFO) << "Processing state: " << tmp_process_state_queue_.front().ToString();
     const auto state = std::move(tmp_process_state_queue_.front());
     tmp_process_state_queue_.pop();
-    if (state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value()) {
-      auto [scanable, completable] = Predict(state, {});
-      if (completable) {
-        Complete(state);
-      }
-      if (scanable) {
-        tmp_states_to_be_added_.push_back(state);
-      }
-    } else {
-      GrammarExpr grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
-      auto [scanable, completable] = Predict(state, grammar_expr);
-      if (completable) {
-        Complete(state);
-      }
-      if (scanable) {
-        tmp_states_to_be_added_.push_back(state);
-      }
+    auto [scanable, completable] = Predict(state);
+    if (completable) {
+      Complete(state);
+    }
+    if (scanable) {
+      tmp_states_to_be_added_.push_back(state);
     }
   }
 
@@ -250,23 +240,12 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
-    if (state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value()) {
-      auto [scanable, completable] = Predict(state, {});
-      if (completable) {
-        Complete(state);
-      }
-      if (scanable) {
-        tmp_states_to_be_added_.push_back(state);
-      }
-    } else {
-      GrammarExpr grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
-      auto [scanable, completable] = Predict(state, grammar_expr);
-      if (completable) {
-        Complete(state);
-      }
-      if (scanable) {
-        tmp_states_to_be_added_.push_back(state);
-      }
+    auto [scanable, completable] = Predict(state);
+    if (completable) {
+      Complete(state);
+    }
+    if (scanable) {
+      tmp_states_to_be_added_.push_back(state);
     }
   }
   is_completed_.push_back(tmp_accept_stop_token_);

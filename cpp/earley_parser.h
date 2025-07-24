@@ -291,7 +291,7 @@ class EarleyParser {
    * then return true, otherwise return false.
    * \return Second: If the state is completable, then return true, otherwise return false.
    */
-  std::pair<bool, bool> Predict(const ParserState& state, const GrammarExpr& grammar_expr);
+  std::pair<bool, bool> Predict(const ParserState& state);
 
   /*!
    * \brief Handle the unexpanded rule, used for pushing initial state.
