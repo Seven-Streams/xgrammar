@@ -283,7 +283,7 @@ class EarleyParser {
    * of the grammar is used to check if the grammar is completed,
    * so it should be added into the next states.
    */
-  void Complete(const ParserState& state, const GrammarExpr& grammar_expr);
+  void Complete(const ParserState& state);
 
   /*!
    * \brief The prediction operation of the Earley parser.
@@ -360,7 +360,7 @@ class EarleyParser {
    * \param cur_sequence The sequence of the current state.
    * \return The next state, Invalid state if the character is not accepted.
    */
-  void AdvanceFsm(const ParserState& state, const uint8_t ch, const GrammarExpr& cur_sequence);
+  void AdvanceFsm(const ParserState& state, const uint8_t ch);
 
   /*!
    * \brief Enqueue the state into the queue.

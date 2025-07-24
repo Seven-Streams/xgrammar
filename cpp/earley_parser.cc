@@ -41,7 +41,7 @@ void EarleyParser::PopLastStates(int32_t cnt) {
   scanable_state_history_.PopBack(cnt);
 }
 
-void EarleyParser::Complete(const ParserState& state, const GrammarExpr& grammar_expr) {
+void EarleyParser::Complete(const ParserState& state) {
   // Check if a rule is completed.
   if (state.rule_start_pos == ParserState::kNoPrevInputPos) {
     // assert: if a root rule can achieve here, then it must be completed.
@@ -54,8 +54,8 @@ void EarleyParser::Complete(const ParserState& state, const GrammarExpr& grammar
        parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
-    const auto& parent_expr = grammar_->GetGrammarExpr(parent_state.sequence_id);
     if (parent_state.rule_id == -1 || !grammar_->per_rule_fsms[parent_state.rule_id].has_value()) {
+      const auto& parent_expr = grammar_->GetGrammarExpr(parent_state.sequence_id);
       // The new rule is not referenced by a fsm.
       XGRAMMAR_DCHECK(
           grammar_->GetGrammarExpr(parent_expr[parent_state.element_id]).type ==
@@ -108,9 +108,8 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
 }
 
 void EarleyParser::Scan(const ParserState& state, const uint8_t ch) {
-  const auto& cur_rule = grammar_->GetGrammarExpr(state.sequence_id);
-
   if (state.rule_id == -1 || (!grammar_->per_rule_fsms[state.rule_id].has_value())) {
+    const auto& cur_rule = grammar_->GetGrammarExpr(state.sequence_id);
     const auto& element_expr = grammar_->GetGrammarExpr(cur_rule[state.element_id]);
     // The element is a rule reference, we do not need to scan it.
     switch (element_expr.type) {
@@ -132,7 +131,7 @@ void EarleyParser::Scan(const ParserState& state, const uint8_t ch) {
       }
     }
   } else {
-    AdvanceFsm(state, ch, cur_rule);
+    AdvanceFsm(state, ch);
   }
 }
 
@@ -171,15 +170,25 @@ bool EarleyParser::Advance(const uint8_t ch) {
   rule_id_to_completeable_states_.emplace_back();
   while (!tmp_process_state_queue_.empty()) {
     // XGRAMMAR_LOG(INFO) << "Processing state: " << tmp_process_state_queue_.front().ToString();
-    const auto state = tmp_process_state_queue_.front();
+    const auto state = std::move(tmp_process_state_queue_.front());
     tmp_process_state_queue_.pop();
-    GrammarExpr grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
-    auto [scanable, completable] = Predict(state, grammar_expr);
-    if (completable) {
-      Complete(state, grammar_expr);
-    }
-    if (scanable) {
-      tmp_states_to_be_added_.push_back(state);
+    if (state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value()) {
+      auto [scanable, completable] = Predict(state, {});
+      if (completable) {
+        Complete(state);
+      }
+      if (scanable) {
+        tmp_states_to_be_added_.push_back(state);
+      }
+    } else {
+      GrammarExpr grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
+      auto [scanable, completable] = Predict(state, grammar_expr);
+      if (completable) {
+        Complete(state);
+      }
+      if (scanable) {
+        tmp_states_to_be_added_.push_back(state);
+      }
     }
   }
 
@@ -241,13 +250,23 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
   while (!tmp_process_state_queue_.empty()) {
     const auto state = tmp_process_state_queue_.front();
     tmp_process_state_queue_.pop();
-    GrammarExpr grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
-    auto [scanable, completable] = Predict(state, grammar_expr);
-    if (completable) {
-      Complete(state, grammar_expr);
-    }
-    if (scanable) {
-      tmp_states_to_be_added_.push_back(state);
+    if (state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value()) {
+      auto [scanable, completable] = Predict(state, {});
+      if (completable) {
+        Complete(state);
+      }
+      if (scanable) {
+        tmp_states_to_be_added_.push_back(state);
+      }
+    } else {
+      GrammarExpr grammar_expr = grammar_->GetGrammarExpr(state.sequence_id);
+      auto [scanable, completable] = Predict(state, grammar_expr);
+      if (completable) {
+        Complete(state);
+      }
+      if (scanable) {
+        tmp_states_to_be_added_.push_back(state);
+      }
     }
   }
   is_completed_.push_back(tmp_accept_stop_token_);
@@ -351,7 +370,6 @@ void EarleyParser::ExpandNextRuleRefElement(
   tmp_states_visited_in_queue_.Insert({ref_rule_id, -1, -1, -1, -1});
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
   const auto& ref_grammar_expr_id = ref_rule.body_expr_id;
-  const auto& ref_grammar_expr = grammar_->GetGrammarExpr(ref_grammar_expr_id);
 
   if (grammar_->per_rule_fsms[ref_rule_id].has_value()) {
     if (std::find(
@@ -370,6 +388,7 @@ void EarleyParser::ExpandNextRuleRefElement(
     return;
   }
 
+  const auto& ref_grammar_expr = grammar_->GetGrammarExpr(ref_grammar_expr_id);
   XGRAMMAR_DCHECK(!grammar_->per_rule_fsms[ref_rule_id].has_value());
   for (const auto& sequence_id : ref_grammar_expr) {
     const auto& sequence = grammar_->GetGrammarExpr(sequence_id);
@@ -450,7 +469,6 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
     tmp_states_visited_in_queue_.Insert({ref_rule_id, -1, -1, -1, -1});
     const auto& ref_rule = grammar_->GetRule(ref_rule_id);
     const auto& ref_grammar_expr_id = ref_rule.body_expr_id;
-    const auto& ref_grammar_expr = grammar_->GetGrammarExpr(ref_grammar_expr_id);
 
     if (grammar_->per_rule_fsms[ref_rule_id].has_value()) {
       if (std::binary_search(
@@ -469,6 +487,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
           0
       });
     } else {
+      const auto& ref_grammar_expr = grammar_->GetGrammarExpr(ref_grammar_expr_id);
       for (const auto& sequence_id : ref_grammar_expr) {
         const auto& sequence = grammar_->GetGrammarExpr(sequence_id);
         if (sequence.type == GrammarExprType::kEmptyStr) {
@@ -625,9 +644,7 @@ void EarleyParser::AdvanceCharacterClassStar(
   }
 }
 
-void EarleyParser::AdvanceFsm(
-    const ParserState& state, const uint8_t ch, const GrammarExpr& cur_sequence
-) {
+void EarleyParser::AdvanceFsm(const ParserState& state, const uint8_t ch) {
   XGRAMMAR_DCHECK(state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value());
   const auto& current_fsm = grammar_->per_rule_fsms[state.rule_id].value();
   for (const auto& edge : current_fsm->GetEdges(state.element_id)) {
@@ -638,9 +655,9 @@ void EarleyParser::AdvanceFsm(
     new_state.element_id = edge.target;
     if ((!current_fsm.IsNonTerminalState(edge.target)) &&
         (!current_fsm.IsEndState(edge.target) && current_fsm.IsScanableState(edge.target))) {
-      EnqueueWithoutProcessing(new_state);
+      EnqueueWithoutProcessing(std::move(new_state));
     } else {
-      Enqueue(new_state);
+      Enqueue(std::move(new_state));
     }
   }
 }
