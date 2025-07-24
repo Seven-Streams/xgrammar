@@ -632,7 +632,12 @@ void EarleyParser::AdvanceFsm(const ParserState& state, const uint8_t ch) {
     }
     auto new_state = state;
     new_state.element_id = edge.target;
-    Enqueue(std::move(new_state));
+    if ((!current_fsm.IsNonTerminalState(edge.target)) &&
+        (!current_fsm.IsEndState(edge.target) && current_fsm.IsScanableState(edge.target))) {
+      EnqueueWithoutProcessing(std::move(new_state));
+    } else {
+      Enqueue(std::move(new_state));
+    }
   }
 }
 
