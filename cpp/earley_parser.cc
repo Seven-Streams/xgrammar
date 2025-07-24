@@ -50,8 +50,8 @@ void EarleyParser::Complete(const ParserState& state) {
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.rule_start_pos];
-  for (auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
-       parent_state_iter != parent_states_map.end() && parent_state_iter->first == state.rule_id;
+  const auto& range = parent_states_map.equal_range(state.rule_id);
+  for (auto parent_state_iter = range.first; parent_state_iter != range.second;
        parent_state_iter++) {
     const auto& parent_state = parent_state_iter->second;
     if (parent_state.rule_id == -1 || !grammar_->per_rule_fsms[parent_state.rule_id].has_value()) {
