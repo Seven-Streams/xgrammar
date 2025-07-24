@@ -1130,7 +1130,7 @@ std::optional<FSMWithStartEnd> ChoiceFSMBuilderImpl::Build(
   auto result = FSMWithStartEnd::Union(fsm_list);
   result = result.SimplifyEpsilon();
   result = result.MergeEquivalentSuccessors();
-  if (result->NumStates() < 20) {
+  if (result->NumStates() < 100) {
     result = result.ToDFA();
     result = result.MinimizeDFA();
   }
