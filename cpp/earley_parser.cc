@@ -79,7 +79,7 @@ void EarleyParser::Complete(const ParserState& state) {
 std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
     const ParserState& state
 ) {
-  // Check if it's the tag dispatch.
+  // Check if the rule has a corresponding FSM.
   if (state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value()) {
     // Try to expand the fsm.
     ExpandNextRuleRefElementOnFSM(state);
@@ -282,7 +282,7 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
     Enqueue(ParserState{
         cur_rule_id,
         cur_rule_body_id,
-        grammar_->per_rule_fsms[state.rule_id].value().GetStart(),
+        grammar_->per_rule_fsms[state.rule_id]->GetStart(),
         ParserState::kNoPrevInputPos,
         0
     });
@@ -388,19 +388,18 @@ void EarleyParser::ExpandNextRuleRefElement(
 void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
   XGRAMMAR_DCHECK(state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value());
   const auto& fsm = grammar_->per_rule_fsms[state.rule_id].value();
-  tmp_fsm_rule_id_target_pairs.clear();
 
   // Add the rule reference pairs, and enqueue the epsilon edges.
   for (const auto& edge : fsm->GetEdges(state.element_id)) {
-    if (edge.IsRuleRef()) {
-      // The edge is a rule reference.
-      tmp_fsm_rule_id_target_pairs.emplace_back(edge.GetRefRuleId(), edge.target);
-    } else if (edge.IsEpsilon()) {
+    if (edge.IsEpsilon()) {
       Enqueue(ParserState{state.rule_id, state.sequence_id, edge.target, state.rule_start_pos, 0});
+      continue;
     }
-  }
-
-  for (const auto& [ref_rule_id, target] : tmp_fsm_rule_id_target_pairs) {
+    if (!edge.IsRuleRef()) {
+      continue;
+    }
+    const int& target = edge.target;
+    const int& ref_rule_id = edge.GetRefRuleId();
     if ((fsm->GetEdges(target).size() == 0) && fsm.IsEndState(target) &&
         state.rule_start_pos != ParserState::kNoPrevInputPos) {
       // It's a right recursion. We can optimize it.
