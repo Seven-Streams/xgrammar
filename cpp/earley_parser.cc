@@ -34,9 +34,9 @@ void EarleyParser::PopLastStates(int32_t cnt) {
   if (cnt >= static_cast<int32_t>(rule_id_to_completeable_states_.size())) {
     XGRAMMAR_LOG(FATAL) << "The number of states to be popped is larger than the size of states.";
   }
-  rule_id_to_completeable_states_.erase(
-      rule_id_to_completeable_states_.end() - cnt, rule_id_to_completeable_states_.end()
-  );
+  for (int i = 0; i < cnt; ++i) {
+    rule_id_to_completeable_states_.pop_back();
+  }
   is_completed_.erase(is_completed_.end() - cnt, is_completed_.end());
   scanable_state_history_.PopBack(cnt);
 }
@@ -50,10 +50,10 @@ void EarleyParser::Complete(const ParserState& state) {
   }
   // Check all the possible parent states.
   const auto& parent_states_map = rule_id_to_completeable_states_[state.rule_start_pos];
-  const auto& range = parent_states_map.equal_range(state.rule_id);
-  for (auto parent_state_iter = range.first; parent_state_iter != range.second;
-       parent_state_iter++) {
-    const auto& parent_state = parent_state_iter->second;
+  for (const auto& [ref_id, parent_state] : parent_states_map) {
+    if (ref_id != state.rule_id) {
+      continue;
+    }
     if (parent_state.rule_id == -1 || !grammar_->per_rule_fsms[parent_state.rule_id].has_value()) {
       const auto& parent_expr = grammar_->GetGrammarExpr(parent_state.sequence_id);
       // The new rule is not referenced by a fsm.
@@ -308,7 +308,7 @@ void EarleyParser::ExpandNextRuleRefElement(
   if (state.element_id != grammar_expr.size() - 1) {
     // It's not the right recursion, or it's the root rule.
     auto& states_map = rule_id_to_completeable_states_.back();
-    states_map.insert({ref_rule_id, state});
+    states_map.push_back(std::make_pair(ref_rule_id, state));
   } else {
     if (state.rule_start_pos == ParserState::kNoPrevInputPos) {
       right_recursion_to_root = true;
@@ -316,20 +316,17 @@ void EarleyParser::ExpandNextRuleRefElement(
       // If it's the right recursion, we need to add the ancestors of the parent state.
       auto& states_map = rule_id_to_completeable_states_.back();
       auto& parent_states_map = rule_id_to_completeable_states_[state.rule_start_pos];
-      const auto& range = states_map.equal_range(ref_rule_id);
       const auto in_vec = [&](const ParserState& state_) {
-        return std::find_if(range.first, range.second, [&](const auto& s) {
-                 return StateEqualForParsing()(s.second, state_);
-               }) != range.second;
+        return std::find_if(states_map.begin(), states_map.end(), [&](const auto& s) {
+                 return StateEqualForParsing()(s.second, state_) && s.first == ref_rule_id;
+               }) != states_map.end();
       };
 
-      for (auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
-           parent_state_iter != parent_states_map.end() &&
-           parent_state_iter->first == state.rule_id;
-           parent_state_iter++) {
-        const auto& parent_state = parent_state_iter->second;
+      for (const auto& parent_state_iter : parent_states_map) {
+        if (parent_state_iter.first != state.rule_id) continue;
+        const auto& parent_state = parent_state_iter.second;
         if (!in_vec(parent_state)) {
-          states_map.insert({ref_rule_id, parent_state});
+          states_map.push_back({ref_rule_id, parent_state});
         }
       }
     }
@@ -420,26 +417,24 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
       } else {
         auto& states_map = rule_id_to_completeable_states_.back();
         auto& parent_states_map = rule_id_to_completeable_states_[state.rule_start_pos];
-        const auto& range = states_map.equal_range(ref_rule_id);
         const auto in_vec = [&](const ParserState& state_) {
-          return std::find_if(range.first, range.second, [&](const auto& s) {
-                   return StateEqualForParsing()(s.second, state_);
-                 }) != range.second;
+          return std::find_if(states_map.begin(), states_map.end(), [&](const auto& s) {
+                   return StateEqualForParsing()(s.second, state_) && s.first == ref_rule_id;
+                 }) != states_map.end();
         };
-        for (auto parent_state_iter = parent_states_map.lower_bound(state.rule_id);
-             parent_state_iter != parent_states_map.end() &&
-             parent_state_iter->first == state.rule_id;
-             parent_state_iter++) {
-          const auto& parent_state = parent_state_iter->second;
+
+        for (const auto& parent_state_iter : parent_states_map) {
+          if (parent_state_iter.first != state.rule_id) continue;
+          const auto& parent_state = parent_state_iter.second;
           if (!in_vec(parent_state)) {
-            states_map.insert({ref_rule_id, parent_state});
+            states_map.push_back({ref_rule_id, parent_state});
           }
         }
       }
     } else {
       // If it's not a right recursion, we need to add the current state.
       auto& states_map = rule_id_to_completeable_states_.back();
-      states_map.insert(
+      states_map.push_back(
           {ref_rule_id,
            ParserState{state.rule_id, state.sequence_id, target, state.rule_start_pos, 0}}
       );
