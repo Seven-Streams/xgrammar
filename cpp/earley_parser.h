@@ -257,7 +257,7 @@ class EarleyParser {
   RepeatDetector tmp_states_visited_in_queue_;
 
   /*! \brief The targets of the fsm edges, used in AdvanceFsm. */
-  std::vector<int> tmp_fsm_targets_;
+  std::vector<std::pair<int32_t, int32_t>> tmp_fsm_rule_id_target_pairs;
 
   /*! \brief Check if the stop token is accepted. */
   bool stop_token_is_accepted_ = false;

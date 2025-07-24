@@ -388,19 +388,19 @@ void EarleyParser::ExpandNextRuleRefElement(
 void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
   XGRAMMAR_DCHECK(state.rule_id != -1 && grammar_->per_rule_fsms[state.rule_id].has_value());
   const auto& fsm = grammar_->per_rule_fsms[state.rule_id].value();
-  std::vector<std::pair<int32_t, int32_t>> rule_id_target_pairs;
+  tmp_fsm_rule_id_target_pairs.clear();
 
   // Add the rule reference pairs, and enqueue the epsilon edges.
   for (const auto& edge : fsm->GetEdges(state.element_id)) {
     if (edge.IsRuleRef()) {
       // The edge is a rule reference.
-      rule_id_target_pairs.emplace_back(edge.GetRefRuleId(), edge.target);
+      tmp_fsm_rule_id_target_pairs.emplace_back(edge.GetRefRuleId(), edge.target);
     } else if (edge.IsEpsilon()) {
       Enqueue(ParserState{state.rule_id, state.sequence_id, edge.target, state.rule_start_pos, 0});
     }
   }
 
-  for (const auto& [ref_rule_id, target] : rule_id_target_pairs) {
+  for (const auto& [ref_rule_id, target] : tmp_fsm_rule_id_target_pairs) {
     if ((fsm->GetEdges(target).size() == 0) && fsm.IsEndState(target) &&
         state.rule_start_pos != ParserState::kNoPrevInputPos) {
       // It's a right recursion. We can optimize it.
