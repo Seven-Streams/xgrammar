@@ -736,82 +736,50 @@ FSMWithStartEnd FSMWithStartEnd::Optional() const {
 }
 
 FSMWithStartEnd FSMWithStartEnd::Not() const {
+  // Check if the FSM contains any rule references.
+  if (!IsLeaf()) {
+    XGRAMMAR_LOG(FATAL) << "Not operation is not supported for FSM with rule references.";
+  }
+
   FSMWithStartEnd result = is_dfa_ ? Copy() : ToDFA();
-  int state_cnt = result.NumStates();
   // Reverse all the final states.
-  std::unordered_set<int> final_states;
+  std::vector<uint8_t> new_final_states(result.NumStates() + 1, false);
   for (int i = 0; i < result->NumStates(); ++i) {
     if (!result.IsEndState(i)) {
-      final_states.insert(i);
+      new_final_states[i] = true;  // Mark all states as final except the original final states.
     }
   }
 
-  // Add all the rules in the alphabet.
-  std::unordered_set<int> rules;
-  for (const auto& edges : result->GetEdges()) {
-    for (const auto& edge : edges) {
-      if (edge.IsRuleRef()) {
-        rules.insert(edge.GetRefRuleId());
-      }
-    }
-  }
+  // Add a new final state that accepts all characters.
+  int accept_all_new_state = result.AddState();
+  new_final_states[accept_all_new_state] = true;
 
-  // Add a new state to avoid the blocking.
-  final_states.insert(result.AddState());
-  for (auto rule : rules) {
-    result->AddRuleEdge(result.NumStates() - 1, result.NumStates() - 1, rule);
-  }
-  result->AddEdge(result.NumStates() - 1, result.NumStates() - 1, 0, 0xFF);
-  result.AddEndState(result.NumStates() - 1);
-
+  std::bitset<256> char_set;
   for (int i = 0; i < result.NumStates(); i++) {
-    const auto& state_edges = result->GetEdges(i);
-    std::vector<bool> char_has_edges(0x100, false);
-    std::unordered_set<int> rule_has_edges;
-    for (const auto& edge : state_edges) {
+    char_set.reset();
+    // Collect all characters that are not accepted by the original FSM.
+    for (const auto& edge : result->GetEdges(i)) {
       if (edge.IsCharRange()) {
-        for (int i = edge.min; i <= edge.max; ++i) {
-          char_has_edges[i] = true;
-        }
-      }
-      if (edge.IsRuleRef()) {
-        rule_has_edges.insert(edge.GetRefRuleId());
-      }
-    }
-
-    // Add the left characters to the new state.
-    int interval_start = -1;
-    for (int j = 0; j < 0x100; ++j) {
-      if (!char_has_edges[j]) {
-        // The char doesn't have any edges. Thus, we can accept it in the
-        // complement FSM.
-        if (interval_start == -1) {
-          interval_start = j;
-        }
-      } else {
-        if (interval_start != -1) {
-          // state_cnt is the state to accept all such characters.
-          result->AddEdge(i, state_cnt, interval_start, j - 1);
-          interval_start = -1;
+        for (int j = edge.min; j <= edge.max; ++j) {
+          char_set.set(j);
         }
       }
     }
-    if (interval_start != -1) {
-      result->AddEdge(i, state_cnt, interval_start, 0xFF);
-    }
-
-    // Add the left rules to the new state.
-    for (auto rule : rules) {
-      if (rule_has_edges.find(rule) == rule_has_edges.end()) {
-        result->AddRuleEdge(result.NumStates() - 1, state_cnt, rule);
+    // Add edges for characters that are not accepted.
+    for (int left_bound = 0; left_bound < 256; ++left_bound) {
+      if (char_set[left_bound]) {
+        continue;  // Skip characters that are accepted.
       }
+      int right_bound = left_bound + 1;
+      while (right_bound < 256 && !char_set[right_bound]) {
+        ++right_bound;
+      }
+      result->AddEdge(i, accept_all_new_state, left_bound, right_bound - 1);
+      left_bound = right_bound;
     }
   }
-  std::vector<uint8_t> new_end_states(result.NumStates(), false);
-  for (const auto& final_state : final_states) {
-    new_end_states[final_state] = true;
-  }
-  result.SetEndStates(new_end_states);
+
+  result.SetEndStates(new_final_states);
   return result;
 }
 
@@ -897,39 +865,6 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
   }
   auto lhs_dfa = lhs.ToDFA();
   auto rhs_dfa = rhs.ToDFA();
-  std::unordered_set<int> rules_lhs;
-  std::unordered_set<int> rules;
-  std::set<int> interval_ends;
-  std::vector<std::pair<int, int>> intervals;
-  // This part is to build the equivalent alphabet.
-  for (const auto& edges : lhs_dfa->GetEdges()) {
-    for (const auto& edge : edges) {
-      if (edge.IsRuleRef()) {
-        rules_lhs.insert(edge.GetRefRuleId());
-      } else if (edge.IsCharRange()) {
-        interval_ends.insert(edge.min);
-        interval_ends.insert(edge.max + 1);
-      }
-    }
-  }
-  for (const auto& edges : rhs_dfa->GetEdges()) {
-    for (const auto& edge : edges) {
-      if (edge.IsRuleRef()) {
-        if (rules_lhs.find(edge.GetRefRuleId()) != rules_lhs.end()) {
-          rules.insert(edge.GetRefRuleId());
-        }
-      } else if (edge.IsCharRange()) {
-        interval_ends.insert(edge.min);
-        interval_ends.insert(edge.max + 1);
-      }
-    }
-  }
-  for (auto it = interval_ends.begin(); it != interval_ends.end(); ++it) {
-    auto next_it = std::next(it);
-    if (next_it != interval_ends.end()) {
-      intervals.emplace_back(*it, *next_it - 1);
-    }
-  }
 
   // Initialize the result FSM.
   FSM result_fsm(0);
@@ -941,78 +876,27 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
   result.AddState();
   state_map[{lhs_dfa.GetStart(), rhs_dfa.GetStart()}] = 0;
   while (!queue.empty()) {
-    if (int(state_map.size()) > num_of_states_limited) {
-      return ResultErr("Intersection have too many states!");
+    auto [lhs_state, rhs_state] = std::move(queue.front());
+    if (lhs_dfa.IsEndState(lhs_state) && rhs_dfa.IsEndState(rhs_state)) {
+      result.AddEndState(state_map[{lhs_state, rhs_state}]);
     }
-    auto state = queue.front();
     queue.pop();
-    if (visited.find(state) != visited.end()) {
-      continue;
-    }
-    visited.insert(state);
-    int lhs_state = state.first;
-    int rhs_state = state.second;
-    for (const auto& interval : intervals) {
-      for (const auto& lhs_edge : lhs_dfa->GetEdges(lhs_state)) {
-        if (!lhs_edge.IsCharRange()) {
-          continue;
+    for (const auto& lhs_edge : lhs_dfa->GetEdges(lhs_state)) {
+      for (const auto& rhs_edge : rhs_dfa->GetEdges(rhs_state)) {
+        XGRAMMAR_DCHECK(lhs_edge.IsCharRange() && rhs_edge.IsCharRange());
+        // Check if the edges intersect.
+        if (lhs_edge.min > rhs_edge.max || rhs_edge.min > lhs_edge.max) {
+          continue;  // No intersection.
         }
-        if (lhs_edge.min > interval.first || lhs_edge.max < interval.second) {
-          continue;
+        int min_value = std::max(lhs_edge.min, rhs_edge.min);
+        int max_value = std::min(lhs_edge.max, rhs_edge.max);
+        if (state_map.find(std::make_pair(lhs_edge.target, rhs_edge.target)) == state_map.end()) {
+          state_map[{lhs_edge.target, rhs_edge.target}] = result.AddState();
+          queue.push({lhs_edge.target, rhs_edge.target});
         }
-        for (const auto& rhs_edge : rhs_dfa->GetEdges(rhs_state)) {
-          if (!rhs_edge.IsCharRange()) {
-            continue;
-          }
-          if (rhs_edge.min > interval.first || rhs_edge.max < interval.second) {
-            continue;
-          }
-          auto next_state = std::make_pair(lhs_edge.target, rhs_edge.target);
-          if (state_map.find(next_state) == state_map.end()) {
-            state_map[next_state] = state_map.size();
-            queue.push(next_state);
-            result.AddState();
-          }
-          result->AddEdge(
-              state_map[{lhs_state, rhs_state}],
-              state_map[next_state],
-              interval.first,
-              interval.second
-          );
-          break;
-        }
+        int target_state = state_map[{lhs_edge.target, rhs_edge.target}];
+        result->AddEdge(state_map[{lhs_state, rhs_state}], target_state, min_value, max_value);
       }
-    }
-    for (const auto& rule : rules) {
-      for (const auto& lhs_edge : lhs_dfa->GetEdges(lhs_state)) {
-        if (!lhs_edge.IsRuleRef()) {
-          continue;
-        }
-        if (lhs_edge.GetRefRuleId() != rule) {
-          continue;
-        }
-        for (const auto& rhs_edge : rhs_dfa->GetEdges(rhs_state)) {
-          if (!rhs_edge.IsRuleRef()) {
-            continue;
-          }
-          if (rhs_edge.GetRefRuleId() != rule) {
-            continue;
-          }
-          auto next_state = std::make_pair(lhs_edge.target, rhs_edge.target);
-          if (state_map.find(next_state) == state_map.end()) {
-            state_map[next_state] = state_map.size();
-            queue.push(next_state);
-            result.AddState();
-          }
-          result->AddRuleEdge(state_map[{lhs_state, rhs_state}], state_map[next_state], rule);
-          break;
-        }
-      }
-    }
-  }
-  for (const auto& state : visited) {
-    if (lhs_dfa.IsEndState(state.first) && rhs_dfa.IsEndState(state.second)) {
-      result.AddEndState(state_map[state]);
     }
   }
   return ResultOk(std::move(result));
