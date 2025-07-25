@@ -212,6 +212,7 @@ EarleyParser::EarleyParser(
     rule_id_to_completeable_states_.emplace_back();
     is_completed_.push_back(false);
     scanable_state_history_.PushBack({init});
+    return;
   }
 
   // Otherwise, we expand the initial state, and process the queue.
