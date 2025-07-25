@@ -803,12 +803,6 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   compiled_grammar_impl->grammar = grammar;
   compiled_grammar_impl->tokenizer_info = tokenizer_info_;
 
-  // Step 1. Compute the ids of rules that can be empty
-  compiled_grammar_impl->grammar->allow_empty_rule_ids = AllowEmptyRuleAnalyzer::Apply(grammar);
-
-  // Step 2. Build the fsm for each rule
-  GrammarFSMBuilder::Apply(&compiled_grammar_impl->grammar);
-
   // XGRAMMAR_LOG(INFO) << grammar;
   // for (int rule_id = 0; rule_id < static_cast<int>(grammar->NumRules()); ++rule_id) {
   //   if (compiled_grammar_impl->grammar->per_rule_fsms[rule_id].has_value()) {
