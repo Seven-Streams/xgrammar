@@ -635,8 +635,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   tmp_uncertain_indices_.clear();
   // For every character in the current token, stores whether it is possible to reach the end of
   // the rule when matching until this character. Store it in a stack for later rollback.
-  tmp_can_reach_end_stack_.assign({IsCompleted()});
-  tmp_can_reach_end_prefix_or_stack_.assign({tmp_can_reach_end_stack_.back()});
+  tmp_can_reach_end_stack_.push_back(false);
+  tmp_can_reach_end_prefix_or_stack_.push_back(false);
   std::bitset<256> first_character_mask;
   const auto& sequence = grammar_->GetGrammarExpr(initial_state.sequence_id);
   if (!grammar_->per_rule_fsms[init_rule_id].has_value()) {
