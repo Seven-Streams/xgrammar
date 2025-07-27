@@ -364,7 +364,8 @@ void EarleyParser::ExpandNextRuleRefElement(
   auto ref_rule_id = (*sub_grammar_expr)[0];
 
   bool right_recursion_to_root = false;
-  if (state.element_id != grammar_expr.size() - 1 || sub_grammar_expr->type == GrammarExprType::kRepeat) {
+  if (state.element_id != grammar_expr.size() - 1 ||
+      sub_grammar_expr->type == GrammarExprType::kRepeat) {
     // It's not the right recursion, or it's the root rule.
     auto& states_map = rule_id_to_completeable_states_.back();
     states_map.push_back(std::make_pair(ref_rule_id, state));
@@ -399,8 +400,8 @@ void EarleyParser::ExpandNextRuleRefElement(
     Enqueue(
         ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0}
     );
+    return;
   }
-  return;
 
   // If the reference rule is not visited, we need to add it to the queue.
   const auto& ref_rule = grammar_->GetRule(ref_rule_id);
