@@ -392,7 +392,6 @@ void EarleyParser::ExpandNextRuleRefElement(
     }
   }
 
-  // Check if the reference rule is already visited.
   if (std::find(
           grammar_->allow_empty_rule_ids.begin(), grammar_->allow_empty_rule_ids.end(), ref_rule_id
       ) != grammar_->allow_empty_rule_ids.end()) {
@@ -400,7 +399,6 @@ void EarleyParser::ExpandNextRuleRefElement(
     Enqueue(
         ParserState{state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0}
     );
-    return;
   }
 
   // If the reference rule is not visited, we need to add it to the queue.
@@ -439,9 +437,7 @@ void EarleyParser::ExpandNextRuleRefElement(
       });
       continue;
     }
-    // Assert: the state can't be repeated. Since the rule_start_pos is the current
-    // position, and the rule can only be predicted once.
-    tmp_process_state_queue_.push(ParserState{
+    Enqueue(ParserState{
         ref_rule_id,
         sequence_id,
         0,
@@ -500,7 +496,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
       );
     }
 
-    // Check if the reference rule is already visited.
+    // Check if the reference rule can be empty.
     if (std::binary_search(
             grammar_->allow_empty_rule_ids.begin(),
             grammar_->allow_empty_rule_ids.end(),
@@ -540,9 +536,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
           });
           continue;
         }
-        // Assert: the state can't be repeated. Since the rule_start_pos is the current
-        // position, and the rule can only be predicted once.
-        tmp_process_state_queue_.push(ParserState{
+        Enqueue(ParserState{
             ref_rule_id,
             sequence_id,
             0,
