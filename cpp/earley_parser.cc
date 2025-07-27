@@ -535,9 +535,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
       for (const auto& sequence_id : ref_grammar_expr) {
         const auto& sequence = grammar_->GetGrammarExpr(sequence_id);
         if (sequence.type == GrammarExprType::kEmptyStr) {
-          Enqueue(ParserState{
-              state.rule_id, state.sequence_id, state.element_id + 1, state.rule_start_pos, 0
-          });
+          Enqueue(ParserState{state.rule_id, state.sequence_id, target, state.rule_start_pos, 0});
           continue;
         }
         Enqueue(ParserState{
