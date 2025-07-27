@@ -160,8 +160,12 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
       }
       return std::make_pair(false, false);
     }
+    case GrammarExprType::kByteString:
+    case GrammarExprType::kCharacterClass: {
+      return std::make_pair(true, false);  // The element is scanable, but not completable.
+    }
     default: {
-      return std::make_pair(true, false);
+      return std::make_pair(false, false);
     }
   }
 }
