@@ -61,105 +61,6 @@ Grammar Grammar::FromStructuralTag(
 
 // Optimized json grammar for the speed of the grammar matcher
 const std::string kJSONGrammarString = R"(
-root ::= (
-    "{" [ \n\t]* members_and_embrace |
-    "[" [ \n\t]* elements_or_embrace
-)
-value_non_str ::= (
-    "{" [ \n\t]* members_and_embrace |
-    "[" [ \n\t]* elements_or_embrace |
-    "0" fraction exponent |
-    [1-9] [0-9]* fraction exponent |
-    "-" [0-9] fraction exponent |
-    "-" [1-9] [0-9]* fraction exponent |
-    "true" |
-    "false" |
-    "null"
-) (= [ \n\t,}\]])
-members_and_embrace ::= ("\"" characters_and_colon [ \n\t]* members_suffix | "}") (= [ \n\t,}\]])
-members_suffix ::= (
-    value_non_str [ \n\t]* member_suffix_suffix |
-    "\"" characters_and_embrace |
-    "\"" characters_and_comma [ \n\t]* "\"" characters_and_colon [ \n\t]* members_suffix
-) (= [ \n\t,}\]])
-member_suffix_suffix ::= (
-    "}" |
-    "," [ \n\t]* "\"" characters_and_colon [ \n\t]* members_suffix
-) (= [ \n\t,}\]])
-elements_or_embrace ::= (
-    "{" [ \n\t]* members_and_embrace elements_rest [ \n\t]* "]" |
-    "[" [ \n\t]* elements_or_embrace elements_rest [ \n\t]* "]" |
-    "\"" characters_item elements_rest [ \n\t]* "]" |
-    "0" fraction exponent elements_rest [ \n\t]* "]" |
-    [1-9] [0-9]* fraction exponent elements_rest [ \n\t]* "]" |
-    "-" "0" fraction exponent elements_rest [ \n\t]* "]" |
-    "-" [1-9] [0-9]* fraction exponent elements_rest [ \n\t]* "]" |
-    "true" elements_rest [ \n\t]* "]" |
-    "false" elements_rest [ \n\t]* "]" |
-    "null" elements_rest [ \n\t]* "]" |
-    "]"
-)
-elements ::= (
-    "{" [ \n\t]* members_and_embrace elements_rest |
-    "[" [ \n\t]* elements_or_embrace elements_rest |
-    "\"" characters_item elements_rest |
-    "0" fraction exponent elements_rest |
-    [1-9] [0-9]* fraction exponent elements_rest |
-    "-" [0-9] fraction exponent elements_rest |
-    "-" [1-9] [0-9]* fraction exponent elements_rest |
-    "true" elements_rest |
-    "false" elements_rest |
-    "null" elements_rest
-)
-elements_rest ::= (
-    "" |
-    [ \n\t]* "," [ \n\t]* elements
-)
-characters_and_colon ::= (
-    "\"" [ \n\t]* ":" |
-    [^"\\\x00-\x1F] characters_and_colon |
-    "\\" escape characters_and_colon
-) (=[ \n\t]* [\"{[0-9tfn-])
-characters_and_comma ::= (
-    "\"" [ \n\t]* "," |
-    [^"\\\x00-\x1F] characters_and_comma |
-    "\\" escape characters_and_comma
-) (=[ \n\t]* "\"")
-characters_and_embrace ::= (
-    "\"" [ \n\t]* "}" |
-    [^"\\\x00-\x1F] characters_and_embrace |
-    "\\" escape characters_and_embrace
-) (=[ \n\t]* [},])
-characters_item ::= (
-    "\"" |
-    [^"\\\x00-\x1F] characters_item |
-    "\\" escape characters_item
-) (= [ \n\t]* [,\]])
-escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
-fraction ::= "" | "." [0-9] [0-9]*
-exponent ::= "" |  "e" sign [0-9] [0-9]* | "E" sign [0-9] [0-9]*
-sign ::= "" | "+" | "-"
-)";
-
-Grammar Grammar::BuiltinJSONGrammar() {
-  static const Grammar grammar = FromEBNF(kJSONGrammarString);
-  return grammar;
-}
-
-Grammar Grammar::Union(const std::vector<Grammar>& grammars) {
-  return GrammarUnionFunctor::Apply(grammars);
-}
-
-Grammar Grammar::Concat(const std::vector<Grammar>& grammars) {
-  return GrammarConcatFunctor::Apply(grammars);
-}
-
-std::ostream& operator<<(std::ostream& os, const Grammar& grammar) {
-  os << grammar.ToString();
-  return os;
-}
-
-const std::string kPythonGrammarString = R"(
 root ::= statements? ENDMARKER
 
 interactive ::= statement_newline
@@ -260,11 +161,11 @@ import_from ::= (
 
 import_from_targets ::= (
     "(" import_from_as_names ","? [)]
-    | import_from_as_names !","
+    | import_from_as_names
     | "*"
 )
 
-import_from_as_names ::= import_from_as_name, ("," import_from_as_name)*
+import_from_as_names ::= import_from_as_name ("," import_from_as_name)*
 
 import_from_as_name ::= NAME ("as" NAME)?
 
@@ -328,10 +229,8 @@ param_star_annotation ::= NAME star_annotation
 annotation ::= ":" expression
 
 star_annotation ::= ":" star_expression
-default ::= "=" expression  | invalid_default
 
-# If statement
-# ------------
+default ::= "=" expression
 
 if_stmt ::= (
     "if" named_expression ":" block elif_stmt
@@ -339,7 +238,7 @@ if_stmt ::= (
 )
 
 elif_stmt ::= (
-    | "elif" named_expression ":" block elif_stmt
+    "elif" named_expression ":" block elif_stmt
     | "elif" named_expression ":" block else_block?
 )
 
@@ -350,7 +249,7 @@ while_stmt ::= "while" named_expression ":" block else_block?
 for_stmt ::= "async"? "for" star_targets "in" star_expressions ":" TYPE_COMMENT? block else_block?
 
 with_stmt ::= (
-    | "async"? "with" "(" with_item ("," with_item)*  ","? [)] ":" TYPE_COMMENT? block
+    "async"? "with" "(" with_item ("," with_item)*  ","? [)] ":" TYPE_COMMENT? block
     | "async"? "with" with_item ("," with_item)* ":" TYPE_COMMENT? block
 )
 
@@ -363,7 +262,7 @@ try_stmt ::= (
 )
 
 except_block ::= (
-    | "except" expression ("as" NAME)? ":" block
+    "except" expression ("as" NAME)? ":" block
     | "except" ":" block
 )
 
@@ -391,7 +290,7 @@ as_pattern ::= or_pattern "as" pattern_capture_target
 or_pattern ::= closed_pattern ("|" closed_pattern)*
 
 closed_pattern ::= (
-    | literal_pattern
+    literal_pattern
     | capture_pattern
     | wildcard_pattern
     | value_pattern
@@ -402,7 +301,7 @@ closed_pattern ::= (
 )
 
 literal_pattern ::= (
-    | signed_number
+     signed_number
     | complex_number
     | strings
     | "None"
@@ -411,7 +310,7 @@ literal_pattern ::= (
 )
 
 literal_expr ::= (
-    | signed_number
+    signed_number
     | complex_number
     | strings
     | "None"
@@ -484,10 +383,9 @@ keyword_pattern ::= NAME "=" pattern
 
 type_alias ::= "type" NAME type_params? "=" expression
 
-type_params:
-    | "[" type_param_seq "]"
+type_params ::= "[" type_param_seq "]"
 
-type_param_seq: type_param ("," type_param)* ","?
+type_param_seq ::= type_param ("," type_param)* ","?
 
 type_param ::= (
     NAME type_param_bound? type_param_default?
@@ -586,7 +484,7 @@ sum ::= (
 )
 
 term ::= (
-    | term "*" factor
+    term "*" factor
     | term "/" factor
     | term "//" factor
     | term "%" factor
@@ -619,7 +517,7 @@ slices ::= (
 )
 
 slice ::= (
-    | expression? ":" expression? (":" expression?)?
+    expression? ":" expression? (":" expression?)?
     | named_expression
 )
 
@@ -668,7 +566,7 @@ lambda_param_with_default ::= lambda_param default ","?
 
 lambda_param_maybe_default ::= lambda_param default? ","?
 
-lambda_param: NAME
+lambda_param ::= NAME
 
 fstring_middle ::= fstring_replacement_field | FSTRING_MIDDLE
 
@@ -694,7 +592,7 @@ set ::= "{" star_named_expressions "}"
 
 dict ::= "{" [double_starred_kvpairs] "}"
 
-double_starred_kvpairs ::= double_starred_kvpair ("," double_starred_kvpair* ","?
+double_starred_kvpairs ::= double_starred_kvpair ("," double_starred_kvpair)* ","?
 
 double_starred_kvpair ::= "**" bitwise_or | kvpair
 
@@ -708,20 +606,20 @@ listcomp ::= "[" named_expression for_if_clauses "]"
 
 setcomp ::= "{" named_expression for_if_clauses "}"
 
-genexp ::= "(" ( assignment_expression | expression !":=") for_if_clauses [)]
+genexp ::= "(" ( assignment_expression | expression) for_if_clauses [)]
 
 dictcomp ::= "{" kvpair for_if_clauses "}"
 
 arguments ::= args ","?
 
 args ::= (
-    | (starred_expression | assignment_expression | expression)
+    (starred_expression | assignment_expression | expression)
     ("," (starred_expression | assignment_expression | expression))* ("," kwargs)?
     | kwargs
 )
 
 kwargs ::= (
-    | kwarg_or_starred ("," kwarg_or_starred)* "," kwarg_or_double_starred ("," kwarg_or_double_starred)*
+    kwarg_or_starred ("," kwarg_or_starred)* "," kwarg_or_double_starred ("," kwarg_or_double_starred)*
     | kwarg_or_starred ("," kwarg_or_starred)*
     | kwarg_or_double_starred ("," kwarg_or_double_starred)*
 )
@@ -765,7 +663,7 @@ single_subscript_attribute_target ::= (
 )
 
 t_primary ::= (
-    | t_primary "." NAME
+    t_primary "." NAME
     | t_primary "[" slices "]"
     | t_primary genexp
     | t_primary "(" [arguments] [)]
@@ -802,6 +700,55 @@ type_expressions ::= (
 func_type_comment ::= (
     NEWLINE TYPE_COMMENT
     | TYPE_COMMENT
-))";
+)
+
+ENDMARKER ::= ""
+NEWLINE ::= "\\n"
+NAME ::= "[a-zA-Z_][a-zA-Z0-9_]*"
+INDENT ::= "INDENT"
+DEDENT ::= "DEDENT"
+TYPE_COMMENT ::= "#" string
+NUMBER ::= integer | floatnumber | imagnumber
+FSTRING_MIDDLE ::= "{{" | "}}" | [^\\0{}]
+FSTRING_START ::= "f\\""
+FSTRING_END ::= ["]
+STRING ::= stringliteral | bytesliteral
+
+integer      ::= decinteger | bininteger | octinteger | hexinteger
+decinteger   ::= nonzerodigit ("_"? digit)* | "0"+ ("_"? "0")*
+bininteger   ::= "0" [bB] ("_"? bindigit)+
+octinteger   ::= "0" [oO] ("_"? octdigit)+
+hexinteger   ::= "0" [xX] ("_"? hexdigit)+
+nonzerodigit ::= [1-9]
+digit        ::= [0-9]
+bindigit     ::= [01]
+octdigit     ::= [0-7]
+hexdigit     ::= [0-9a-fA-F]
+floatnumber   ::= pointfloat | exponentfloat
+pointfloat    ::= [digitpart] fraction | digitpart "."
+exponentfloat ::= (digitpart | pointfloat) exponent
+digitpart     ::= digit ("_"? digit)*
+fraction      ::= "." digitpart
+exponent      ::= ("e" | "E") ["+" | "-"] digitpart
+imagnumber ::= (floatnumber | digitpart) ("j" | "J")
+stringliteral   ::= stringprefix? (shortstring | longstring)
+stringprefix    ::= "r" | "u" | "R" | "U" | "f" | "F"
+                    | "fr" | "Fr" | "fR" | "FR" | "rf" | "rF" | "Rf" | "RF"
+shortstring     ::= "'" shortstringitem* "'" | ["] shortstringitem* ["]
+longstring      ::= "'''" longstringitem* "'''" | ["]["]["] longstringitem* ["]["]["]
+shortstringitem ::= shortstringchar | stringescapeseq
+longstringitem  ::= longstringchar | stringescapeseq
+bytesliteral   ::= bytesprefix(shortbytes | longbytes)
+bytesprefix    ::= "b" | "B" | "br" | "Br" | "bR" | "BR" | "rb" | "rB" | "Rb" | "RB"
+shortbytes     ::= "'" shortbytesitem* "'" | ["] shortbytesitem* ["]
+longbytes      ::= "'''" longbytesitem* "'''" | ["]["]["] longbytesitem* ["]["]["]
+shortbytesitem ::= shortbyteschar | bytesescapeseq
+longbytesitem  ::= longbyteschar | bytesescapeseq
+shortstringchar ::= [^\"\\n]
+stringescapeseq ::= "\" [\\x0-\\x7f]
+longstringchar  ::= [^\\\\]
+shortbyteschar ::= [\\x0-\\x09\\x11-!#-[\\]-~]
+bytesescapeseq ::= [\\\\] [\\x0-\\x7f]
+longbyteschar  ::= [\\x0-[\\]-~])";
 
 }  // namespace xgrammar
