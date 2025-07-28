@@ -560,7 +560,7 @@ isnot_bitwise_or ::= "is" "not" bitwise_or
 
 is_bitwise_or ::= "is" bitwise_or
 
-bitwise_or ::= bitwise_or ("|" bitwise_xor)?
+bitwise_or ::= bitwise_xor ("|" bitwise_xor)?
 
 bitwise_xor ::= (bitwise_xor "^")? bitwise_and
 
@@ -596,7 +596,7 @@ factor ::= (
 
 power ::= await_primary ("**" factor)?
 
-await_primary ::= "await" primary
+await_primary ::= "await"? primary
 
 primary ::= (
     primary "." NAME |
@@ -685,7 +685,7 @@ tuple ::= "(" (star_named_expression "," star_named_expressions?)?[)]
 
 set ::= "{" star_named_expressions "}"
 
-dict ::= "{" [double_starred_kvpairs] "}"
+dict ::= "{" double_starred_kvpairs? "}"
 
 double_starred_kvpairs ::= double_starred_kvpair ("," double_starred_kvpair)* ","?
 
@@ -799,7 +799,7 @@ func_type_comment ::= (
 
 ENDMARKER ::= ""
 NEWLINE ::= "\\n"
-NAME ::= "[a-zA-Z_][a-zA-Z0-9_]*"
+NAME ::= [a-zA-Z_][a-zA-Z0-9_]*
 INDENT ::= "INDENT"
 DEDENT ::= "DEDENT"
 TYPE_COMMENT ::= "#" string
@@ -824,7 +824,7 @@ pointfloat    ::= [digitpart] fraction | digitpart "."
 exponentfloat ::= (digitpart | pointfloat) exponent
 digitpart     ::= digit ("_"? digit)*
 fraction      ::= "." digitpart
-exponent      ::= ("e" | "E") ["+" | "-"] digitpart
+exponent      ::= ("e" | "E") ("+" | "-")? digitpart
 imagnumber ::= (floatnumber | digitpart) ("j" | "J")
 stringliteral   ::= stringprefix? (shortstring | longstring)
 stringprefix    ::= "r" | "u" | "R" | "U" | "f" | "F"
@@ -844,6 +844,7 @@ stringescapeseq ::= "\" [\\x0-\\x7f]
 longstringchar  ::= [^\\\\]
 shortbyteschar ::= [\\x0-\\x09\\x11-!#-[\\]-~]
 bytesescapeseq ::= [\\\\] [\\x0-\\x7f]
-longbyteschar  ::= [\\x0-[\\]-~])";
+longbyteschar  ::= [\\x0-[\\]-~]
+WB ::= [ \\n\\t])";
 
 }  // namespace xgrammar
