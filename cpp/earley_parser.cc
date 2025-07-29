@@ -369,7 +369,8 @@ void EarleyParser::ExpandNextRuleRefElement(
 
   bool right_recursion_to_root = false;
   if (state.element_id != grammar_expr.size() - 1 ||
-      sub_grammar_expr->type == GrammarExprType::kRepeat) {
+      sub_grammar_expr->type == GrammarExprType::kRepeat ||
+      state.rule_start_pos == static_cast<int64_t>(rule_id_to_completeable_states_.size() - 1)) {
     // It's not the right recursion, or it's the root rule.
     auto& states_map = rule_id_to_completeable_states_.back();
     states_map.push_back(std::make_pair(ref_rule_id, state));
@@ -468,7 +469,8 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
     const int& target = edge.target;
     const int& ref_rule_id = edge.GetRefRuleId();
     bool right_recursion_to_root = false;
-    if ((fsm->GetEdges(target).size() == 0) && fsm.IsEndState(target)) {
+    if ((fsm->GetEdges(target).size() == 0) && fsm.IsEndState(target) &&
+        state.rule_start_pos != static_cast<int64_t>(rule_id_to_completeable_states_.size() - 1)) {
       // It's a right recursion. We can optimize it.
       // If it's the right recursion, we need to add the ancestors of the parent state.
       if (state.rule_start_pos == ParserState::kNoPrevInputPos) {
