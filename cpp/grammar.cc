@@ -162,11 +162,15 @@ std::ostream& operator<<(std::ostream& os, const Grammar& grammar) {
 const std::string KPythonGrammarString = R"(
 root ::= statements? ENDMARKER
 
+WB ::= [ ]*
+
+MUSTWB ::= [ ]+
+
 interactive ::= statement_newline
 
 eval ::= expressions NEWLINE* ENDMARKER
 
-func_type ::= "(" [ ]* type_expressions? [)] [ ]* "->" [ ]* expression NEWLINE* ENDMARKER
+func_type ::= "(" WB type_expressions? [)] WB "->" WB expression NEWLINE* ENDMARKER
 
 statements ::= statement+
 
@@ -178,7 +182,7 @@ statement_newline ::= (
     NEWLINE |
     ENDMARKER
 )
-simple_stmts ::= simple_stmt (";" [ ]* simple_stmt)* (";" [ ]*)? NEWLINE
+simple_stmts ::= simple_stmt (";" WB simple_stmt)* (";" WB)? NEWLINE
 
 simple_stmt ::= (
     assignment |
@@ -209,167 +213,132 @@ compound_stmt ::= (
 )
 
 assignment ::= (
-    NAME ":" [ ]* expression ("=" [ ]* annotated_rhs)? |
-    ("(" [ ]* single_target [)] [ ]* |
-    single_subscript_attribute_target) ":" [ ]* expression ("=" [ ]* annotated_rhs)? |
-    (star_targets "=" [ ]*)+ (yield_expr | star_expressions) TYPE_COMMENT? |
-    single_target augassign (yield_expr | star_expressions)
+    NAME ":" WB expression ("=" WB (yield_expr | star_expressions))? |
+    ("(" WB single_target [)] WB |
+    single_subscript_attribute_target) ":" WB expression ("=" WB (yield_expr | star_expressions))? |
+    (star_targets "=" WB)+ (yield_expr | star_expressions) TYPE_COMMENT? |
+    single_target (( [+\-*/@%&|^] | ">>" | "<<" | "//" | "**" ) "=" WB) (yield_expr | star_expressions)
 )
 
-annotated_rhs ::= yield_expr | star_expressions
+return_stmt ::= "return" MUSTWB star_expressions?
 
-augassign ::= ( [+\-*/@%&|^] | ">>" | "<<" | "//" | "**" ) "=" [ ]*
+raise_stmt ::= "raise" MUSTWB (expression (MUSTWB "from" MUSTWB expression )?)?
 
-return_stmt ::= "return" [ ]+ star_expressions?
+global_stmt ::= "global" MUSTWB NAME ("," WB NAME)*
 
-raise_stmt ::= "raise" [ ]+ (expression ([ ]+ "from" [ ]+ expression )?)?
+nonlocal_stmt ::= "nonlocal" MUSTWB NAME ("," WB NAME)*
 
-global_stmt ::= "global" [ ]+ NAME ("," [ ]* NAME)*
-
-nonlocal_stmt ::= "nonlocal" [ ]+ NAME ("," [ ]* NAME)*
-
-del_stmt ::= "del" [ ]+ del_targets
+del_stmt ::= "del" MUSTWB del_targets
 
 yield_stmt ::= yield_expr
 
-assert_stmt ::= "assert" [ ]+ expression ("," [ ]* expression)?
+assert_stmt ::= "assert" MUSTWB expression ("," WB expression)?
 
-import_stmt ::= import_name | import_from
-
-
-import_name ::= "import" [ ]+ dotted_as_names
-
-import_from ::= (
-    "from" [ ]+ ("." | "...")* dotted_name [ ]+ "import" [ ]+ import_from_targets |
-    "from" [ ]+ ("." | "...")+ [ ]+ "import" [ ]+ import_from_targets
+import_stmt ::= (
+    "import" MUSTWB dotted_as_names |
+    "from" MUSTWB ("." | "...")* dotted_name MUSTWB "import" MUSTWB import_from_targets |
+    "from" MUSTWB ("." | "...")+ MUSTWB "import" MUSTWB import_from_targets
 )
 
 import_from_targets ::= (
-    "(" [ ]* import_from_as_names ","? [ ]* [)] [ ]* |
+    "(" WB import_from_as_names ","? WB [)] WB |
     import_from_as_names |
-    "*" [ ]*
+    "*" WB
 )
 
-import_from_as_names ::= import_from_as_name ("," [ ]* import_from_as_name)*
+import_from_as_names ::= NAME (MUSTWB "as" MUSTWB NAME)? ("," WB NAME (MUSTWB "as" MUSTWB NAME)? )*
 
-import_from_as_name ::= NAME ([ ]+ "as" [ ]+ NAME)?
+dotted_as_names ::= dotted_as_name ("," WB dotted_as_name)*
 
-dotted_as_names ::= dotted_as_name ("," [ ]* dotted_as_name)*
+dotted_as_name ::= dotted_name (MUSTWB "as" MUSTWB NAME)
 
-dotted_as_name ::= dotted_name ([ ]+ "as" [ ]+ NAME)
-
-dotted_name ::= (dotted_name "." [ ]*)? NAME
+dotted_name ::= (dotted_name "." WB)? NAME
 
 block ::= (
     NEWLINE INDENT statements DEDENT |
     simple_stmts
 )
 
-decorators ::= ("@" [ ]* named_expression NEWLINE )+
+decorators ::= ("@" WB named_expression NEWLINE )+
 
-class_def ::= decorators? class_def_raw
+class_def ::= decorators? "class" MUSTWB NAME (type_params)? ("(" WB arguments? [)] WB)? ":" WB block
 
-class_def_raw ::= "class" [ ]+ NAME (type_params)? ("(" [ ]* arguments? [)] [ ]*)? ":" [ ]* block
-
-
-function_def ::= decorators? function_def_raw
-
-function_def_raw ::= ("async" [ ]+)? "def" [ ]+ NAME type_params? "(" [ ]* params? [)] [ ]* ("->" [ ]* expression )? ":" [ ]* (func_type_comment)? block
-
-params ::= parameters
+function_def ::= decorators? ("async" MUSTWB)? "def" MUSTWB NAME type_params? "(" WB parameters? [)] WB ("->" WB expression )? ":" WB (func_type_comment)? block
 
 parameters ::= (
-    slash_no_default param_no_default* param_with_default* (star_etc)? |
-    slash_with_default param_with_default* (star_etc)? |
+    param_no_default+ "/" WB ","? WB param_no_default* param_with_default* (star_etc)? |
+    param_no_default* param_with_default+ "/" WB ","? WB param_with_default* (star_etc)? |
     param_no_default+ param_with_default* (star_etc)? |
     param_with_default+ (star_etc)? |
     star_etc
 )
 
-slash_no_default ::= param_no_default+ "/" [ ]* ","? [ ]*
-
-slash_with_default ::= param_no_default* param_with_default+ "/" [ ]* ","? [ ]*
-
 star_etc ::= (
-    "*" [ ]* param_no_default param_maybe_default* kwds? |
-    "*" [ ]* param_no_default_star_annotation param_maybe_default* kwds? |
-    "*" [ ]* "," [ ]* param_maybe_default+ kwds? |
+    "*" WB param_no_default param_maybe_default* kwds? |
+    "*" WB NAME ":" WB star_expression ","? WB TYPE_COMMENT? param_maybe_default* kwds? |
+    "*" WB "," WB param_maybe_default+ kwds? |
     kwds
 )
 
-kwds ::= "**" [ ]* param_no_default
+kwds ::= "**" WB param_no_default
 
-param_no_default ::= param ","? [ ]* TYPE_COMMENT?
+param_no_default ::= NAME WB expression? ","? WB TYPE_COMMENT?
 
-param_no_default_star_annotation ::= param_star_annotation ","? [ ]* TYPE_COMMENT?
+param_with_default ::= NAME WB expression? ","? WB TYPE_COMMENT?
 
-param_with_default ::= param default ","? [ ]* TYPE_COMMENT?
+param_maybe_default ::= NAME WB expression? ","? WB TYPE_COMMENT?
 
-param_maybe_default ::= param default? ","? [ ]* TYPE_COMMENT?
-
-param ::= NAME annotation?
-
-param_star_annotation ::= NAME star_annotation
-
-annotation ::= ":" [ ]* expression
-
-star_annotation ::= ":" [ ]* star_expression
-
-default ::= "=" [ ]* expression
+default ::= "=" WB expression
 
 if_stmt ::= (
-    "if" [ ]+ named_expression ":" [ ]* block elif_stmt |
-    "if" [ ]+ named_expression ":" [ ]* block else_block?
+    "if" MUSTWB named_expression ":" WB block elif_stmt |
+    "if" MUSTWB named_expression ":" WB block else_block?
 )
 
 elif_stmt ::= (
-    "elif" [ ]+ named_expression ":" [ ]* block elif_stmt |
-    "elif" [ ]+ named_expression ":" [ ]* block else_block?
+    "elif" MUSTWB named_expression ":" WB block elif_stmt |
+    "elif" MUSTWB named_expression ":" WB block else_block?
 )
 
-else_block ::= "else" [ ]* ":" [ ]* block
+else_block ::= "else" WB ":" WB block
 
-while_stmt ::= "while" [ ]+ named_expression ":" [ ]* block else_block?
+while_stmt ::= "while" MUSTWB named_expression ":" WB block else_block?
 
-for_stmt ::= ("async" [ ]+)? "for" [ ]+ star_targets [ ]+ "in" [ ]+ star_expressions [ ]* ":" [ ]* TYPE_COMMENT? block else_block?
+for_stmt ::= ("async" MUSTWB)? "for" MUSTWB star_targets MUSTWB "in" MUSTWB star_expressions WB ":" WB TYPE_COMMENT? block else_block?
 
 with_stmt ::= (
-    ("async" [ ]+)? "with" [ ]+ "(" [ ]* with_item ("," [ ]* with_item)*  ","? [ ]* [)] [ ]* ":" [ ]* TYPE_COMMENT? block |
-    ("async" [ ]+)? "with" [ ]+ with_item ("," [ ]* with_item)* ":" [ ]* TYPE_COMMENT? block
+    ("async" MUSTWB)? "with" MUSTWB "(" WB with_item ("," WB with_item)*  ","? WB [)] WB ":" WB TYPE_COMMENT? block |
+    ("async" MUSTWB)? "with" MUSTWB with_item ("," WB with_item)* ":" WB TYPE_COMMENT? block
 )
 
-with_item ::= expression ([ ]+ "as" [ ]+ star_target)?
+with_item ::= expression (MUSTWB "as" MUSTWB star_target)?
 
 try_stmt ::= (
-    "try" [ ]* ":" [ ]* block finally_block |
-    "try" [ ]* ":" [ ]* block except_block+ (else_block)? (finally_block)? |
-    "try" [ ]* ":" [ ]* block except_star_block+ (else_block)? (finally_block)?
+    "try" WB ":" WB block finally_block |
+    "try" WB ":" WB block except_block+ (else_block)? (finally_block)? |
+    "try" WB ":" WB block except_star_block+ (else_block)? (finally_block)?
 )
 
-except_block ::= "except" [ ]+ (expression ([ ]+ "as" [ ]+ NAME)?)? ":" [ ]* block
+except_block ::= "except" MUSTWB (expression (MUSTWB "as" MUSTWB NAME)?)? ":" WB block
 
-except_star_block ::= "except" [ ]+ "*" [ ]* expression ([ ]+ "as" [ ]+ NAME)? ":" [ ]* block
+except_star_block ::= "except" MUSTWB "*" WB expression (MUSTWB "as" MUSTWB NAME)? ":" WB block
 
-finally_block ::= "finally" [ ]* ":" [ ]* block
+finally_block ::= "finally" WB ":" WB block
 
-match_stmt ::= "match" [ ]+ subject_expr ":" [ ]* NEWLINE INDENT case_block+ DEDENT
+match_stmt ::= "match" MUSTWB (
+    star_named_expression "," WB star_named_expressions? |
+    named_expression)
+ ":" WB NEWLINE INDENT case_block+ DEDENT
 
-subject_expr ::= (
-    star_named_expression "," [ ]* star_named_expressions? |
-    named_expression
-)
-
-case_block ::= "case" [ ]+ patterns guard? ":" [ ]* block
-
-guard ::= "if" [ ]+ named_expression
+case_block ::= "case" MUSTWB patterns ("if" MUSTWB named_expression)? ":" WB block
 
 patterns ::= open_sequence_pattern | pattern
 
 pattern ::= as_pattern | or_pattern
 
-as_pattern ::= or_pattern [ ]+ "as" [ ]+ pattern_capture_target
+as_pattern ::= or_pattern MUSTWB "as" MUSTWB pattern_capture_target
 
-or_pattern ::= closed_pattern ("|" [ ]* closed_pattern)*
+or_pattern ::= closed_pattern ("|" WB closed_pattern)*
 
 closed_pattern ::= (
     literal_pattern |
@@ -386,182 +355,182 @@ literal_pattern ::= (
     signed_number |
     complex_number |
     strings |
-    "None" [ ]*|
-    "True" [ ]*|
-    "False" [ ]*
+    "None" WB|
+    "True" WB|
+    "False" WB
 )
 
 complex_number ::= (
-    signed_number "+" [ ]* NUMBER |
-    signed_number "-" [ ]* NUMBER
+    signed_number "+" WB NUMBER |
+    signed_number "-" WB NUMBER
 )
 
-signed_number ::= ("-" [ ]*)? NUMBER
+signed_number ::= ("-" WB)? NUMBER
 
 capture_pattern ::= pattern_capture_target
 
 pattern_capture_target ::= NAME
 
-wildcard_pattern ::= "_" [ ]*
+wildcard_pattern ::= "_" WB
 
 value_pattern ::= attr
 
-attr ::= name_or_attr "." [ ]* NAME
+attr ::= name_or_attr "." WB NAME
 
 name_or_attr ::= attr | NAME
 
-group_pattern ::= "(" [ ]* pattern [)] [ ]*
+group_pattern ::= "(" WB pattern [)] WB
 
-sequence_pattern ::= "[" [ ]* maybe_sequence_pattern? "]" [ ]* | "(" [ ]* open_sequence_pattern? [)] [ ]*
+sequence_pattern ::= "[" WB maybe_sequence_pattern? "]" WB | "(" WB open_sequence_pattern? [)] WB
 
-open_sequence_pattern ::= maybe_star_pattern "," [ ]* maybe_sequence_pattern?
+open_sequence_pattern ::= maybe_star_pattern "," WB maybe_sequence_pattern?
 
-maybe_sequence_pattern ::= maybe_star_pattern ("," [ ]* maybe_star_pattern)* ","? [ ]*
+maybe_sequence_pattern ::= maybe_star_pattern ("," WB maybe_star_pattern)* ","? WB
 
 maybe_star_pattern ::= star_pattern | pattern
 
-star_pattern ::= "*" [ ]* pattern_capture_target | "*" [ ]* wildcard_pattern
+star_pattern ::= "*" WB pattern_capture_target | "*" WB wildcard_pattern
 
 mapping_pattern ::= (
-    "{" [ ]* "}" [ ]* |
-    "{" [ ]* double_star_pattern ","? [ ]* "}" [ ]* |
-    "{" [ ]* items_pattern "," double_star_pattern ","? [ ]* "}" [ ]*|
-    "{" [ ]* items_pattern ","? [ ]* "}" [ ]*
+    "{" WB "}" WB |
+    "{" WB double_star_pattern ","? WB "}" WB |
+    "{" WB items_pattern "," double_star_pattern ","? WB "}" WB|
+    "{" WB items_pattern ","? WB "}" WB
 )
 
-items_pattern ::= key_value_pattern ("," [ ]* key_value_pattern)*
+items_pattern ::= key_value_pattern ("," WB key_value_pattern)*
 
-key_value_pattern ::= (literal_pattern | attr) ":" [ ]* pattern
+key_value_pattern ::= (literal_pattern | attr) ":" WB pattern
 
-double_star_pattern ::= "**" [ ]* pattern_capture_target
+double_star_pattern ::= "**" WB pattern_capture_target
 
 class_pattern ::= (
-    name_or_attr "(" [ ]* [)] [ ]*|
-    name_or_attr "(" [ ]* positional_patterns ","? [ ]* [)] [ ]*|
-    name_or_attr "(" [ ]* keyword_patterns ","? [ ]* [)] [ ]* |
-    name_or_attr "(" [ ]* positional_patterns "," [ ]* keyword_patterns ","? [ ]* [)] [ ]*
+    name_or_attr "(" WB [)] WB|
+    name_or_attr "(" WB positional_patterns ","? WB [)] WB|
+    name_or_attr "(" WB keyword_patterns ","? WB [)] WB |
+    name_or_attr "(" WB positional_patterns "," WB keyword_patterns ","? WB [)] WB
 )
 
-positional_patterns ::= pattern ("," [ ]* pattern)*
+positional_patterns ::= pattern ("," WB pattern)*
 
-keyword_patterns ::= keyword_pattern ("," [ ]* keyword_pattern)*
+keyword_patterns ::= keyword_pattern ("," WB keyword_pattern)*
 
-keyword_pattern ::= NAME "=" [ ]* pattern
+keyword_pattern ::= NAME "=" WB pattern
 
-type_alias ::= "type" [ ]+ NAME type_params? "=" [ ]* expression
+type_alias ::= "type" MUSTWB NAME type_params? "=" WB expression
 
-type_params ::= "[" [ ]* type_param_seq "]" [ ]*
+type_params ::= "[" WB type_param_seq "]" WB
 
-type_param_seq ::= type_param ("," [ ]* type_param)* ","? [ ]*
+type_param_seq ::= type_param ("," WB type_param)* ","? WB
 
 type_param ::= (
     NAME type_param_bound? type_param_default? |
-    "*" [ ]* NAME type_param_starred_default? |
-    "**" [ ]* NAME type_param_default?
+    "*" WB NAME type_param_starred_default? |
+    "**" WB NAME type_param_default?
 )
 
-type_param_bound ::= ":" [ ]* expression
+type_param_bound ::= ":" WB expression
 
-type_param_default ::= "=" [ ]* expression
+type_param_default ::= "=" WB expression
 
-type_param_starred_default ::= "=" [ ]* star_expression
+type_param_starred_default ::= "=" WB star_expression
 
-expressions ::= expression ("," [ ]* expression )* ","? [ ]*
+expressions ::= expression ("," WB expression )* ","? WB
 
 expression ::= (
-    disjunction ("if" [ ]+ disjunction "else" [ ]+ expression)? |
+    disjunction ("if" MUSTWB disjunction "else" MUSTWB expression)? |
     lambdef
 )
 
 yield_expr ::= (
-    "yield" [ ]+ "from" [ ]+ expression |
-    "yield" [ ]+ star_expressions?
+    "yield" MUSTWB "from" MUSTWB expression |
+    "yield" MUSTWB star_expressions?
 )
 
-star_expressions ::= star_expression ("," [ ]* star_expression )* ","? [ ]*
+star_expressions ::= star_expression ("," WB star_expression )* ","? WB
 
-star_expression ::= "*" [ ]* bitwise_or | expression
+star_expression ::= "*" WB bitwise_or | expression
 
-star_named_expressions ::= star_named_expression ("," [ ]* star_named_expression)* ","? [ ]*
+star_named_expressions ::= star_named_expression ("," WB star_named_expression)* ","? WB
 
-star_named_expression ::= "*" [ ]* bitwise_or | named_expression
+star_named_expression ::= "*" WB bitwise_or | named_expression
 
-assignment_expression ::= NAME ":=" [ ]* expression
+assignment_expression ::= NAME ":=" WB expression
 
 named_expression ::= assignment_expression | expression
 
-disjunction ::= conjunction ([ ]+ "or" [ ]+ conjunction )*
+disjunction ::= conjunction (MUSTWB "or" MUSTWB conjunction )*
 
-conjunction ::= inversion ([ ]+ "and" [ ]+ inversion )*
+conjunction ::= inversion (MUSTWB "and" MUSTWB inversion )*
 
-inversion ::= "not" [ ]+ inversion | comparison
+inversion ::= "not" MUSTWB inversion | comparison
 
 comparison ::= bitwise_or compare_op_bitwise_or_pair*
 
 compare_op_bitwise_or_pair ::= (
-    [!>=<] "=" | [><] | ("not" [ ]+)? "in" [ ]+ | "is" [ ]+ ("not" [ ]+)?
+    [!>=<] "=" | [><] | ("not" MUSTWB)? "in" MUSTWB | "is" MUSTWB ("not" MUSTWB)?
 ) bitwise_or
 
-bitwise_or ::= bitwise_xor ("|" [ ]* bitwise_xor)?
+bitwise_or ::= bitwise_xor ("|" WB bitwise_xor)?
 
-bitwise_xor ::= (bitwise_xor "^" [ ]*)? bitwise_and
+bitwise_xor ::= (bitwise_xor "^" WB)? bitwise_and
 
-bitwise_and ::= (bitwise_and "&" [ ]*)? shift_expr
+bitwise_and ::= (bitwise_and "&" WB)? shift_expr
 
 shift_expr ::= (
-     shift_expr "<<" [ ]* sum |
-     shift_expr ">>" [ ]* sum |
+     shift_expr "<<" WB sum |
+     shift_expr ">>" WB sum |
      sum
 )
 
 sum ::= (
-     sum "+" [ ]* term |
-     sum "-" [ ]* term |
+     sum "+" WB term |
+     sum "-" WB term |
      term
 )
 
 term ::= (
-    term "*" [ ]* factor |
-    term "/" ("/")? [ ]* factor |
-    term "%" [ ]* factor |
-    term "@" [ ]* factor |
+    term "*" WB factor |
+    term "/" ("/")? WB factor |
+    term "%" WB factor |
+    term "@" WB factor |
     factor
 )
 
 factor ::= (
-    "+" [ ]* factor |
-    "-" [ ]* factor |
-    "~" [ ]* factor |
+    "+" WB factor |
+    "-" WB factor |
+    "~" WB factor |
     power
 )
 
-power ::= await_primary ("**" [ ]* factor)?
+power ::= await_primary ("**" WB factor)?
 
-await_primary ::= ("await" [ ]+)? primary
+await_primary ::= ("await" MUSTWB)? primary
 
 primary ::= (
-    primary "." [ ]* NAME |
+    primary "." WB NAME |
     primary genexp |
-    primary "(" [ ]* arguments? [)] [ ]* |
-    primary "[" [ ]* slices "]" [ ]* |
+    primary "(" WB arguments? [)] WB |
+    primary "[" WB slices "]" WB |
     atom
 )
 
 slices ::= (
     slice |
-    (slice | starred_expression) ("," [ ]* (slice | starred_expression))* ","? [ ]*
+    (slice | starred_expression) ("," WB (slice | starred_expression))* ","? WB
 )
 
 slice ::= (
-    expression? ":" [ ]* expression? (":" [ ]* expression?)? |
+    expression? ":" WB expression? (":" WB expression?)? |
     named_expression
 )
 
 atom ::= (
     NAME |
-    "True" [ ]*|
-    "False" [ ]*|
-    "None" [ ]*|
+    "True" WB|
+    "False" WB|
+    "None" WB|
     strings |
     NUMBER |
     (tuple | group | genexp) |
@@ -570,9 +539,9 @@ atom ::= (
     "..."
 )
 
-group ::= "(" [ ]* (yield_expr | named_expression) [)] [ ]*
+group ::= "(" WB (yield_expr | named_expression) [)] WB
 
-lambdef ::= "lambda" [ ]+ lambda_params? ":" [ ]* expression
+lambdef ::= "lambda" MUSTWB lambda_params? ":" WB expression
 
 lambda_params ::= lambda_parameters
 
@@ -584,33 +553,33 @@ lambda_parameters ::= (
     lambda_star_etc
 )
 
-lambda_slash_no_default ::= lambda_param_no_default+ "/" [ ]* ","? [ ]*
+lambda_slash_no_default ::= lambda_param_no_default+ "/" WB ","? WB
 
-lambda_slash_with_default ::= lambda_param_no_default* lambda_param_with_default+ "/" [ ]* ","? [ ]*
+lambda_slash_with_default ::= lambda_param_no_default* lambda_param_with_default+ "/" WB ","? WB
 
 lambda_star_etc ::= (
-    "*" [ ]* lambda_param_no_default lambda_param_maybe_default* lambda_kwds? |
-    "*" [ ]* "," [ ]* lambda_param_maybe_default+ lambda_kwds? |
+    "*" WB lambda_param_no_default lambda_param_maybe_default* lambda_kwds? |
+    "*" WB "," WB lambda_param_maybe_default+ lambda_kwds? |
     lambda_kwds
 )
 
-lambda_kwds ::= "**" [ ]* lambda_param_no_default
+lambda_kwds ::= "**" WB lambda_param_no_default
 
-lambda_param_no_default ::= lambda_param ","? [ ]*
+lambda_param_no_default ::= lambda_param ","? WB
 
-lambda_param_with_default ::= lambda_param default ","? [ ]*
+lambda_param_with_default ::= lambda_param default ","? WB
 
-lambda_param_maybe_default ::= lambda_param default? ","? [ ]*
+lambda_param_maybe_default ::= lambda_param default? ","? WB
 
 lambda_param ::= NAME
 
 fstring_middle ::= fstring_replacement_field | FSTRING_MIDDLE
 
-fstring_replacement_field ::= "{" [ ]* annotated_rhs "="? [ ]* fstring_conversion? fstring_full_format_spec? "}" [ ]*
+fstring_replacement_field ::= "{" WB (yield_expr | star_expressions) "="? WB fstring_conversion? fstring_full_format_spec? "}" WB
 
-fstring_conversion ::= "!" [ ]* NAME
+fstring_conversion ::= "!" WB NAME
 
-fstring_full_format_spec ::= ":" [ ]* fstring_format_spec*
+fstring_full_format_spec ::= ":" WB fstring_format_spec*
 
 fstring_format_spec ::= FSTRING_MIDDLE | fstring_replacement_field
 
@@ -620,116 +589,116 @@ string ::= STRING
 
 strings ::= (fstring|string)+
 
-list ::="[" [ ]* star_named_expressions? "]" [ ]*
+list ::="[" WB star_named_expressions? "]" WB
 
-tuple ::= "(" [ ]* (star_named_expression "," [ ]* star_named_expressions?)? [)] [ ]*
+tuple ::= "(" WB (star_named_expression "," WB star_named_expressions?)? [)] WB
 
-set ::= "{" [ ]* star_named_expressions "}" [ ]*
+set ::= "{" WB star_named_expressions "}" WB
 
-dict ::= "{" [ ]* double_starred_kvpairs? "}" [ ]*
+dict ::= "{" WB double_starred_kvpairs? "}" WB
 
-double_starred_kvpairs ::= double_starred_kvpair ("," [ ]* double_starred_kvpair)* ","? [ ]*
+double_starred_kvpairs ::= double_starred_kvpair ("," WB double_starred_kvpair)* ","? WB
 
-double_starred_kvpair ::= "**" [ ]* bitwise_or | kvpair
+double_starred_kvpair ::= "**" WB bitwise_or | kvpair
 
-kvpair ::= expression ":" [ ]* expression
+kvpair ::= expression ":" WB expression
 
 for_if_clauses ::= for_if_clause+
 
-for_if_clause ::= ("async" [ ]+)? "for" [ ]+ star_targets [ ]+ "in" [ ]+ disjunction ([ ]+ "if" [ ]+ disjunction )*
+for_if_clause ::= ("async" MUSTWB)? "for" MUSTWB star_targets MUSTWB "in" MUSTWB disjunction (MUSTWB "if" MUSTWB disjunction )*
 
-listcomp ::= "[" [ ]* named_expression for_if_clauses "]" [ ]*
+listcomp ::= "[" WB named_expression for_if_clauses "]" WB
 
-setcomp ::= "{" [ ]* named_expression for_if_clauses "}" [ ]*
+setcomp ::= "{" WB named_expression for_if_clauses "}" WB
 
-genexp ::= "(" [ ]* (assignment_expression | expression) for_if_clauses [)] [ ]*
+genexp ::= "(" WB (assignment_expression | expression) for_if_clauses [)] WB
 
-dictcomp ::= "{" [ ]* kvpair for_if_clauses "}" [ ]*
+dictcomp ::= "{" WB kvpair for_if_clauses "}" WB
 
-arguments ::= args ","? [ ]*
+arguments ::= args ","? WB
 
 args ::= (
     (starred_expression | assignment_expression | expression)
-    ("," [ ]* (starred_expression | assignment_expression | expression))* ("," [ ]* kwargs)? |
+    ("," WB (starred_expression | assignment_expression | expression))* ("," WB kwargs)? |
     kwargs
 )
 
 kwargs ::= (
-    kwarg_or_starred ("," [ ]* kwarg_or_starred)* "," [ ]* kwarg_or_double_starred ("," [ ]* kwarg_or_double_starred)* |
-    kwarg_or_starred ("," [ ]* kwarg_or_starred)* |
-    kwarg_or_double_starred ("," [ ]* kwarg_or_double_starred)*
+    kwarg_or_starred ("," WB kwarg_or_starred)* "," WB kwarg_or_double_starred ("," WB kwarg_or_double_starred)* |
+    kwarg_or_starred ("," WB kwarg_or_starred)* |
+    kwarg_or_double_starred ("," WB kwarg_or_double_starred)*
 )
 
-starred_expression ::= "*" [ ]* expression
+starred_expression ::= "*" WB expression
 
-kwarg_or_starred ::= NAME "=" [ ]* expression | starred_expression
+kwarg_or_starred ::= NAME "=" WB expression | starred_expression
 
-kwarg_or_double_starred ::= NAME "=" [ ]* expression | "**" [ ]* expression
+kwarg_or_double_starred ::= NAME "=" WB expression | "**" WB expression
 
-star_targets ::= star_target ("," [ ]* star_target )* ","? [ ]*
+star_targets ::= star_target ("," WB star_target )* ","? WB
 
-star_targets_list_seq ::= star_target ("," [ ]* star_target)* ","? [ ]*
+star_targets_list_seq ::= star_target ("," WB star_target)* ","? WB
 
-star_targets_tuple_seq ::= star_target ("," [ ]* star_target )* ","? [ ]*
+star_targets_tuple_seq ::= star_target ("," WB star_target )* ","? WB
 
-star_target ::= ("*" [ ]*)? target_with_star_atom
+star_target ::= ("*" WB)? target_with_star_atom
 
 target_with_star_atom ::= (
-    t_primary "." [ ]* NAME |
-    t_primary "[" [ ]* slices "]" [ ]* |
+    t_primary "." WB NAME |
+    t_primary "[" WB slices "]" WB |
     star_atom
 )
 
 star_atom ::= (
     NAME |
-    "(" [ ]* target_with_star_atom [)] [ ]* |
-    "(" [ ]* star_targets_tuple_seq? [)] [ ]*|
-    "[" [ ]* star_targets_list_seq? "]" [ ]*
+    "(" WB target_with_star_atom [)] WB |
+    "(" WB star_targets_tuple_seq? [)] WB|
+    "[" WB star_targets_list_seq? "]" WB
 )
 
 single_target ::= (
     single_subscript_attribute_target |
     NAME |
-    "(" [ ]* single_target [)] [ ]*
+    "(" WB single_target [)] WB
 )
 
 single_subscript_attribute_target ::= (
-    t_primary "." [ ]* NAME |
-    t_primary "[" [ ]* slices "]" [ ]*
+    t_primary "." WB NAME |
+    t_primary "[" WB slices "]" WB
 )
 
 t_primary ::= (
-    t_primary "." [ ]* NAME |
-    t_primary "[" [ ]* slices "]" [ ]* |
+    t_primary "." WB NAME |
+    t_primary "[" WB slices "]" WB |
     t_primary genexp |
-    t_primary "(" [ ]* arguments? [)] [ ]* |
+    t_primary "(" WB arguments? [)] WB |
     atom
 )
 
-t_lookahead ::= ("(" | "[" | ".") [ ]*
+t_lookahead ::= ("(" | "[" | ".") WB
 
-del_targets ::= del_target ("," [ ]* del_target)* ","? [ ]*
+del_targets ::= del_target ("," WB del_target)* ","? WB
 
 del_target ::= (
-    t_primary "." [ ]* NAME |
-    t_primary "[" [ ]* slices "]" [ ]* |
+    t_primary "." WB NAME |
+    t_primary "[" WB slices "]" WB |
     del_t_atom
 )
 
 del_t_atom ::= (
     NAME |
-    "(" [ ]* del_target [)] [ ]* |
-    "(" [ ]* del_targets? [)] [ ]* |
-    "[" [ ]* del_targets? "]" [ ]*
+    "(" WB del_target [)] WB |
+    "(" WB del_targets? [)] WB |
+    "[" WB del_targets? "]" WB
 )
 
 type_expressions ::= (
-    expression ("," [ ]* expression)* "," [ ]* "*" [ ]* expression ("," [ ]* "**" [ ]* expression)? |
-    expression ("," [ ]* expression)* "," [ ]* "**" [ ]* expression |
-    "*" [ ]* expression "," [ ]* "**" [ ]* expression |
-    "*" [ ]* expression |
-    "**" [ ]* expression |
-    expression ("," [ ]* expression)*
+    expression ("," WB expression)* "," WB "*" WB expression ("," WB "**" WB expression)? |
+    expression ("," WB expression)* "," WB "**" WB expression |
+    "*" WB expression "," WB "**" WB expression |
+    "*" WB expression |
+    "**" WB expression |
+    expression ("," WB expression)*
 )
 
 func_type_comment ::= (
@@ -739,15 +708,15 @@ func_type_comment ::= (
 
 ENDMARKER ::= ""
 NEWLINE ::= "\\n"
-NAME ::= [a-zA-Z_][a-zA-Z0-9_]* [ ]*
+NAME ::= [a-zA-Z_][a-zA-Z0-9_]* WB
 INDENT ::= "INDENT"
 DEDENT ::= "DEDENT"
 TYPE_COMMENT ::= "#" longstringitem
-NUMBER ::= (integer | floatnumber | imagnumber) [ ]*
+NUMBER ::= (integer | floatnumber | imagnumber) WB
 FSTRING_MIDDLE ::= "{{" | "}}" | [^\\0{}]
 FSTRING_START ::= "f\\""
 FSTRING_END ::= ["]
-STRING ::= (stringliteral | bytesliteral) [ ]*
+STRING ::= (stringliteral | bytesliteral) WB
 
 integer      ::= decinteger | bininteger | octinteger | hexinteger
 decinteger   ::= nonzerodigit ("_"? digit)* | "0"+ ("_"? "0")*
