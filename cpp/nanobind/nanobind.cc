@@ -158,12 +158,7 @@ NB_MODULE(xgrammar_bindings, m) {
           nb::call_guard<nb::gil_scoped_release>()
       )
       .def_static(
-          "from_function_call",
-          &Grammar::FromFunctionCall,
-          nb::arg("args_names"),
-          nb::arg("args_types"),
-          nb::arg("function_type"),
-          nb::call_guard<nb::gil_scoped_release>()
+          "from_function_call", &Grammar::FromFunctionCall, nb::call_guard<nb::gil_scoped_release>()
       )
       .def_static("from_regex", &Grammar::FromRegex, nb::call_guard<nb::gil_scoped_release>())
       .def_static(
