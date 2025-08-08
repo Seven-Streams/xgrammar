@@ -2,9 +2,6 @@ import sys
 
 import pytest
 
-import xgrammar as xgr
-from xgrammar.testing import _is_grammar_accept_string
-
 # def test_empty_function_call():
 #     expect_grammar = """root ::= ("")
 # """
