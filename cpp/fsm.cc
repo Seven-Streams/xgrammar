@@ -984,7 +984,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
   return ResultOk(std::move(result));
 }
 
-bool FSMWithStartEnd::CheckDFA() {
+bool FSMWithStartEnd::IsDFA() {
   if (is_dfa_) {
     return true;
   }
