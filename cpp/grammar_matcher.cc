@@ -668,7 +668,6 @@ std::string GrammarMatcher::Impl::FindJumpForwardString() {
       can_find_next_char = false;
       break;
     }
-
     // 1. Check that for every leaf ParserState, the next possible char is unique and the same
     // -1 means not found yet; 0~255 means the next char
     int next_char = -1;

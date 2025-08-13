@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "compiled_grammar_impl.h"
 #include "fsm.h"
 #include "support/utils.h"
 
