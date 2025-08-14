@@ -50,10 +50,12 @@ class FSMImplBase {
   FSMImplBase() = default;
 
   /*! \brief Copy constructor. */
-  FSMImplBase(const ContainerType& edges) : edges_(edges) {}
+  FSMImplBase(const ContainerType& edges, const std::vector<int32_t>& special_configs)
+      : edges_(edges), special_configs_(special_configs) {}
 
   /*! \brief Move constructor. */
-  FSMImplBase(ContainerType&& edges) : edges_(std::move(edges)) {}
+  FSMImplBase(ContainerType&& edges, std::vector<int32_t>&& special_configs)
+      : edges_(std::move(edges)), special_configs_(std::move(special_configs)) {}
 
   int NumStates() const { return edges_.size(); }
 
@@ -362,11 +364,23 @@ void FSM::Impl::AddFSM(const FSM& fsm, std::unordered_map<int, int>* state_mappi
 FSM FSM::Impl::RebuildWithMapping(std::unordered_map<int, int>& state_mapping, int new_num_states)
     const {
   std::vector<std::set<FSMEdge>> new_edges_set(new_num_states);
+  std::vector<int32_t> new_special_configs;
   for (int i = 0; i < static_cast<int>(edges_.size()); ++i) {
     for (const auto& edge : edges_[i]) {
       if (edge.IsEpsilon() && state_mapping[i] == state_mapping[edge.target]) {
         continue;  // Skip self-loops for epsilon edges.
       }
+      if (edge.IsRepetition()) {
+        int new_config_index = new_special_configs.size();
+        new_special_configs.push_back(special_configs_[edge.max]);
+        new_special_configs.push_back(special_configs_[edge.max + 1]);
+        new_special_configs.push_back(special_configs_[edge.max + 2]);
+        new_edges_set[state_mapping[i]].insert(
+            FSMEdge(EdgeType::kRepetition, new_config_index, state_mapping[edge.target])
+        );
+        continue;
+      }
+
       new_edges_set[state_mapping[i]].insert(FSMEdge(edge.min, edge.max, state_mapping[edge.target])
       );
     }
@@ -375,7 +389,7 @@ FSM FSM::Impl::RebuildWithMapping(std::unordered_map<int, int>& state_mapping, i
   for (int i = 0; i < new_num_states; ++i) {
     new_edges[i].insert(new_edges[i].end(), new_edges_set[i].begin(), new_edges_set[i].end());
   }
-  return FSM(std::move(new_edges));
+  return FSM(std::move(new_edges), std::move(special_configs_));
 }
 
 void FSM::Impl::SortEdges() {
@@ -390,17 +404,20 @@ CompactFSM FSM::Impl::ToCompact() {
   for (int i = 0; i < static_cast<int>(edges_.size()); ++i) {
     edges.PushBack(edges_[i]);
   }
-  return CompactFSM(edges);
+  return CompactFSM(edges, special_configs_);
 }
 
 /****************** FSM ******************/
 
 FSM::FSM(int num_states) : pimpl_(std::make_shared<Impl>(num_states)) {}
 
-FSM::FSM(const std::vector<std::vector<FSMEdge>>& edges) : pimpl_(std::make_shared<Impl>(edges)) {}
+FSM::FSM(
+    const std::vector<std::vector<FSMEdge>>& edges, const std::vector<int32_t>& special_configs
+)
+    : pimpl_(std::make_shared<Impl>(edges, special_configs)) {}
 
-FSM::FSM(std::vector<std::vector<FSMEdge>>&& edges)
-    : pimpl_(std::make_shared<Impl>(std::move(edges))) {}
+FSM::FSM(std::vector<std::vector<FSMEdge>>&& edges, std::vector<int32_t>&& special_configs)
+    : pimpl_(std::make_shared<Impl>(std::move(edges), std::move(special_configs))) {}
 
 int FSM::NumStates() const { return pimpl_->NumStates(); }
 
@@ -612,16 +629,18 @@ FSM CompactFSM::Impl::ToFSM() const {
     const auto& row = edges_[i];
     edges[i].insert(edges[i].end(), row.begin(), row.end());
   }
-  return FSM(edges);
+  return FSM(edges, special_configs_);
 }
 
 /****************** CompactFSM ******************/
 
-CompactFSM::CompactFSM(const Compact2DArray<FSMEdge>& edges)
-    : pimpl_(std::make_shared<Impl>(edges)) {}
+CompactFSM::CompactFSM(
+    const Compact2DArray<FSMEdge>& edges, const std::vector<int32_t>& special_configs
+)
+    : pimpl_(std::make_shared<Impl>(edges, special_configs)) {}
 
-CompactFSM::CompactFSM(Compact2DArray<FSMEdge>&& edges)
-    : pimpl_(std::make_shared<Impl>(std::move(edges))) {}
+CompactFSM::CompactFSM(Compact2DArray<FSMEdge>&& edges, std::vector<int32_t>&& special_configs)
+    : pimpl_(std::make_shared<Impl>(std::move(edges), std::move(special_configs))) {}
 
 int CompactFSM::NumStates() const { return pimpl_->NumStates(); }
 
@@ -1421,6 +1440,8 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_result_num_states) const 
           continue;
         } else if (edge.IsRuleRef()) {
           rules.insert(edge.GetRefRuleId());
+        } else if (edge.IsRepetition()) {
+          return ResultErr("Repetition is not allowed in to dfa.");
         }
       }
     }

@@ -166,12 +166,12 @@ class FSM {
   /*!
    * \brief Construct an FSM with a given set of edges.
    */
-  FSM(const std::vector<std::vector<FSMEdge>>& edges);
+  FSM(const std::vector<std::vector<FSMEdge>>& edges, const std::vector<int32_t>& special_configs);
 
   /*!
    * \brief Construct an FSM with a given set of edges.
    */
-  FSM(std::vector<std::vector<FSMEdge>>&& edges);
+  FSM(std::vector<std::vector<FSMEdge>>&& edges, std::vector<int32_t>&& special_configs);
 
   /****************** FSM Visitors ******************/
 
@@ -370,9 +370,11 @@ class CompactFSM {
   // for serialization only
   CompactFSM() = default;
 
-  explicit CompactFSM(const Compact2DArray<FSMEdge>& edges);
+  explicit CompactFSM(
+      const Compact2DArray<FSMEdge>& edges, const std::vector<int32_t>& special_configs
+  );
 
-  explicit CompactFSM(Compact2DArray<FSMEdge>&& edges);
+  explicit CompactFSM(Compact2DArray<FSMEdge>&& edges, std::vector<int32_t>&& special_configs);
 
   /****************** CompactFSM Visitors ******************/
 
@@ -875,7 +877,7 @@ inline bool FSMWithStartEndBase<FSMType>::IsLeaf() const {
   GetReachableStates(&reachable_states);
   for (const auto& state : reachable_states) {
     for (const auto& edge : fsm_.GetEdges(state)) {
-      if (edge.IsRuleRef()) {
+      if (edge.IsRuleRef() || edge.IsRepetition()) {
         return false;
       }
     }
