@@ -101,6 +101,13 @@ std::string FSMImplBase<ContainerType>::EdgesToString(std::optional<std::vector<
         result += "Eps->" + std::to_string(edge.target);
       } else if (edge.min == FSMEdge::EdgeType::kEOS) {
         result += "EOS->" + std::to_string(edge.target);
+      } else if (edge.min == FSMEdge::EdgeType::kRepetition) {
+        result += "Repetition(" + std::to_string(special_configs_[edge.max]) + "){" +
+                  std::to_string(special_configs_[edge.max + 1]) + ", " +
+                  std::to_string(special_configs_[edge.max + 2]) + "}->" +
+                  std::to_string(edge.target);
+      } else {
+        XGRAMMAR_LOG(FATAL) << "Unexpected edge type: " << edge.min;
       }
       if (j < static_cast<int>(edges.size()) - 1) {
         result += ", ";

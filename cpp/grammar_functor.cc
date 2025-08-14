@@ -22,6 +22,7 @@
 #include "grammar_impl.h"
 #include "support/encoding.h"
 #include "support/logging.h"
+#include "support/utils.h"
 #include "xgrammar/grammar.h"
 
 namespace xgrammar {
@@ -1068,6 +1069,7 @@ class GrammarFSMBuilderImpl {
   static std::optional<FSMWithStartEnd> Sequence(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> Choices(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> TagDispatch(const Grammar::Impl::TagDispatch& tag_dispatch);
+  static std::optional<FSMWithStartEnd> Repetition(const GrammarExpr& expr);
 
   /* Building tool funtions.*/
   static std::optional<FSMWithStartEnd> BuildTagDispatchWithEOSStop(
@@ -1639,6 +1641,16 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::TagDispatch(
   }
 }
 
+std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::Repetition(const GrammarExpr& expr) {
+  FSMWithStartEnd result_fsm;
+  result_fsm.AddState();
+  result_fsm.AddState();
+  result_fsm.SetStartState(0);
+  result_fsm.AddEndState(1);
+  result_fsm.GetFsm().AddRepetitionEdge(0, 1, expr[0], expr[1], expr[2]);
+  return result_fsm;
+}
+
 class RepetitionNormalizerImpl {
  public:
   void Apply(Grammar* grammar) {
@@ -1741,6 +1753,10 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilder::TagDispatch(
     const Grammar::Impl::TagDispatch& tag_dispatch
 ) {
   return GrammarFSMBuilderImpl::TagDispatch(tag_dispatch);
+}
+
+std::optional<FSMWithStartEnd> GrammarFSMBuilder::Repetition(const GrammarExpr& expr) {
+  return GrammarFSMBuilderImpl::Repetition(expr);
 }
 
 }  // namespace xgrammar

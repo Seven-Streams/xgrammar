@@ -353,6 +353,7 @@ class GrammarFSMBuilder {
   static std::optional<FSMWithStartEnd> Sequence(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> Choices(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> TagDispatch(const Grammar::Impl::TagDispatch& tag_dispatch);
+  static std::optional<FSMWithStartEnd> Repetition(const GrammarExpr& expr);
 };
 class SubGrammarAdder {
  public:

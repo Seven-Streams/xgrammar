@@ -5,15 +5,12 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <cstdint>
-#include <iostream>
 #include <vector>
 
 #include "fsm.h"
 #include "fsm_builder.h"
 #include "grammar_functor.h"
-#include "support/logging.h"
 #include "xgrammar/grammar.h"
 
 using namespace xgrammar;
@@ -426,4 +423,17 @@ TEST(XGrammarFSMBuilderTest, TestChoicesFSMBuilder) {
 
   EXPECT_TRUE(fsm_rule2_result.has_value());
   EXPECT_EQ(fsm_rule2_result->ToString(), expected_fsm_rule2);
+}
+
+TEST(XGrammarFSMBuilderTest, TestRepetitionFSMBuilder) {
+  std::vector<int32_t> expr = {10, 25, 100};
+  auto grammar_expr =
+      GrammarExpr{GrammarExprType::kRepeat, expr.data(), static_cast<int32_t>(expr.size())};
+  auto fsm_result = GrammarFSMBuilder::Repetition(grammar_expr);
+  EXPECT_TRUE(fsm_result.has_value());
+  std::string expected_fsm = R"(FSM(num_states=2, start=0, end=[1], edges=[
+0: [Repetition(10){25, 100}->1]
+1: []
+]))";
+  EXPECT_EQ(fsm_result->ToString(), expected_fsm);
 }
