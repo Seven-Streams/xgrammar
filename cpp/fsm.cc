@@ -68,6 +68,12 @@ class FSMImplBase {
   // pointer.
   decltype(auto) GetEdges(int state) const { return edges_[state]; }
 
+  std::tuple<int32_t, int32_t, int32_t> GetSpecialConfig(int index) const {
+    return std::make_tuple(
+        special_configs_[index], special_configs_[index + 1], special_configs_[index + 2]
+    );
+  }
+
   void GetEpsilonClosure(std::unordered_set<int>* state_set) const;
 
   void GetPossibleRules(int state_num, std::unordered_set<int>* rules) const;
@@ -648,6 +654,10 @@ const Compact2DArray<FSMEdge>& CompactFSM::GetEdges() const { return pimpl_->Get
 
 Compact2DArray<FSMEdge>::Row CompactFSM::GetEdges(int state) const {
   return pimpl_->GetEdges(state);
+}
+
+std::tuple<int32_t, int32_t, int32_t> CompactFSM::GetSpecialConfig(int index) const {
+  return pimpl_->GetSpecialConfig(index);
 }
 
 std::string CompactFSM::EdgesToString(std::optional<std::vector<int>> states) const {

@@ -1418,6 +1418,14 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::Sequence(
         fsm_lists.push_back(std::move(fsm.value()));
         break;
       }
+      case (ExprType::kRepeat): {
+        auto fsm = Repetition(sequence_expr);
+        if (!fsm.has_value()) {
+          return std::nullopt;
+        }
+        fsm_lists.push_back(std::move(fsm.value()));
+        break;
+      }
       default: {
         return std::nullopt;
       }

@@ -104,6 +104,11 @@ struct alignas(8) FSMEdge {
    */
   bool IsRepetition() const { return min == EdgeType::kRepetition; }
 
+  int32_t GetRepetitionId() const {
+    XGRAMMAR_DCHECK(IsRepetition()) << "The edge is not a repetition.";
+    return max;  // The target state is the repetition id.
+  }
+
   /*!
    * \brief Check if the edge is an EOS transition.
    */
@@ -396,6 +401,13 @@ class CompactFSM {
    * \return The edges of the CompactFSM.
    */
   Compact2DArray<FSMEdge>::Row GetEdges(int state) const;
+
+  /*!
+   * \brief Get the specialconfig of a given edge.
+   * \param index The index of the given edge.
+   * \return The tuple of the configs.
+   */
+  std::tuple<int32_t, int32_t, int32_t> GetSpecialConfig(int index) const;
 
   /*!
    * \brief Convert the edges of the CompactFSM to a string. Used in printing the CompactFSM.
