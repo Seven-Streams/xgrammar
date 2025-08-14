@@ -305,6 +305,18 @@ class FSM {
   void AddEOSEdge(int from, int to);
 
   /*!
+   * \brief Add a repetition transition between to states.
+   * \param from The source state.
+   * \param to The target state.
+   * \param rule_id The repetition rule_id.
+   * \param min_repetition_time The minimum number of times to repeat.
+   * \param max_repetition_time The maximum number of times to repeat.
+   */
+  void AddRepetitionEdge(
+      int from, int to, int rule_id, int min_repetition_time, int max_repetition_time
+  );
+
+  /*!
    * \brief Add a whole FSM to the current FSM.
    * \param fsm The FSM to be added.
    * \param state_mapping The mapping from the state ids of the added FSM to the new ids in the

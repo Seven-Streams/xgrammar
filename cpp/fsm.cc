@@ -74,7 +74,7 @@ class FSMImplBase {
 
  protected:
   ContainerType edges_;
-  std::vector<std::pair<int32_t, int32_t>> special_configs_;
+  std::vector<int32_t> special_configs_;
 
   friend struct member_trait<CompactFSM::Impl>;
 };
@@ -221,6 +221,15 @@ class FSM::Impl : public FSMImplBase<std::vector<std::vector<FSMEdge>>> {
   void AddEpsilonEdge(int from, int to) { AddEdge(from, to, FSMEdge::EdgeType::kEpsilon, 0); }
 
   void AddEOSEdge(int from, int to) { AddEdge(from, to, FSMEdge::EdgeType::kEOS, 0); }
+
+  void AddRepetitionEdge(
+      int from, int to, int rule_id, int min_repetition_time, int max_repetition_time
+  ) {
+    AddEdge(from, to, FSMEdge::EdgeType::kRepetition, special_configs_.size());
+    special_configs_.push_back(rule_id);
+    special_configs_.push_back(min_repetition_time);
+    special_configs_.push_back(max_repetition_time);
+  }
 
   void AddFSM(const FSM& fsm, std::unordered_map<int, int>* state_mapping);
 
@@ -391,6 +400,12 @@ void FSM::AddEpsilonEdge(int from, int to) { pimpl_->AddEpsilonEdge(from, to); }
 void FSM::AddRuleEdge(int from, int to, int16_t rule_id) { pimpl_->AddRuleEdge(from, to, rule_id); }
 
 void FSM::AddEOSEdge(int from, int to) { pimpl_->AddEOSEdge(from, to); }
+
+void FSM::AddRepetitionEdge(
+    int from, int to, int rule_id, int min_repetition_time, int max_repetition_time
+) {
+  pimpl_->AddRepetitionEdge(from, to, rule_id, min_repetition_time, max_repetition_time);
+}
 
 void FSM::AddFSM(const FSM& fsm, std::unordered_map<int, int>* state_mapping) {
   pimpl_->AddFSM(fsm, state_mapping);
