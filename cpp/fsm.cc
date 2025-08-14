@@ -74,6 +74,8 @@ class FSMImplBase {
 
  protected:
   ContainerType edges_;
+  std::vector<std::pair<int32_t, int32_t>> special_configs_;
+
   friend struct member_trait<CompactFSM::Impl>;
 };
 
@@ -465,7 +467,9 @@ class CompactFSM::Impl : public FSMImplBase<Compact2DArray<FSMEdge>> {
   friend std::size_t MemorySize(const Impl& impl) { return MemorySize(impl.edges_); }
 };
 
-XGRAMMAR_MEMBER_ARRAY(CompactFSM::Impl, &CompactFSM::Impl::edges_);
+XGRAMMAR_MEMBER_ARRAY(
+    CompactFSM::Impl, &CompactFSM::Impl::edges_, &CompactFSM::Impl::special_configs_
+);
 
 void CompactFSM::Impl::GetNextStates(
     int from, int value, EdgeType edge_type, std::vector<int>* targets

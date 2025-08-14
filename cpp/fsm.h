@@ -40,6 +40,7 @@ struct alignas(8) FSMEdge {
     kEpsilon = -1,
     kRuleRef = -2,
     kEOS = -3,
+    kRepetition = -4,
   };
 
   inline static constexpr int kMaxChar = 255;
@@ -97,6 +98,11 @@ struct alignas(8) FSMEdge {
    * \brief Check if the edge is a rule reference.
    */
   bool IsRuleRef() const { return min == EdgeType::kRuleRef; }
+
+  /*!
+   * \brief Check if the edge is a repetition.
+   */
+  bool IsRepetition() const { return min == EdgeType::kRepetition; }
 
   /*!
    * \brief Check if the edge is an EOS transition.
