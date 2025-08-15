@@ -6,8 +6,10 @@
 #include "xgrammar/tokenizer_info.h"
 
 #include <picojson.h>
+#include <sys/types.h>
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stack>
@@ -19,6 +21,7 @@
 #include "support/encoding.h"
 #include "support/json_serializer.h"
 #include "support/logging.h"
+#include "support/utils.h"
 #include "tokenizer_info_impl.h"
 #include "xgrammar/exception.h"
 
@@ -274,15 +277,20 @@ TokenizerInfo::Impl::Impl(
       vocab_size_(vocab_size.value_or(encoded_vocab.size())),
       add_prefix_space_(add_prefix_space) {
   decoded_vocab_.reserve(encoded_vocab.size());
+  vocab_hash_ = 0;
   sorted_decoded_vocab_.reserve(encoded_vocab.size());
   for (int i = 0; i < static_cast<int>(encoded_vocab.size()); ++i) {
     const std::string& token = TokenDecoder::DecodeToken(encoded_vocab[i], vocab_type_);
     decoded_vocab_.push_back(token);
+    vocab_hash_ = HashCombine64Bits(vocab_hash_, std::hash<std::string>{}(token));
     if ((!stop_token_ids && DETECTION_STOP_TOKENS.count(token)) ||
         (stop_token_ids &&
          std::find(stop_token_ids->begin(), stop_token_ids->end(), i) != stop_token_ids->end())) {
+      vocab_hash_ = HashCombine64Bits(vocab_hash_, std::hash<std::string>{}(token));
       stop_token_ids_.push_back(i);
     } else if (IsSpecialToken(token)) {
+      vocab_hash_ = HashCombine64Bits(vocab_hash_, std::hash<std::string>{}(token));
+      vocab_hash_ = HashCombine64Bits(vocab_hash_, std::hash<std::string>{}(token));
       special_token_ids_.push_back(i);
     } else {
       sorted_decoded_vocab_.push_back({i, token});
@@ -456,6 +464,7 @@ TokenizerInfo::TokenizerInfo(
 int TokenizerInfo::GetVocabSize() const { return pimpl_->GetVocabSize(); }
 VocabType TokenizerInfo::GetVocabType() const { return pimpl_->GetVocabType(); }
 bool TokenizerInfo::GetAddPrefixSpace() const { return pimpl_->GetAddPrefixSpace(); }
+u_int64_t TokenizerInfo::GetTokenizerHash() const { return pimpl_->GetTokenizerHash(); }
 const std::vector<std::string>& TokenizerInfo::GetDecodedVocab() const {
   return pimpl_->GetDecodedVocab();
 }

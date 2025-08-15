@@ -28,6 +28,7 @@ class TokenizerInfo::Impl {
 
   VocabType GetVocabType() const { return vocab_type_; }
   bool GetAddPrefixSpace() const { return add_prefix_space_; }
+  uint64_t GetTokenizerHash() const { return vocab_hash_; }
   int GetVocabSize() const { return vocab_size_; }
   const std::vector<std::string>& GetDecodedVocab() { return decoded_vocab_; }
   const std::vector<int32_t>& GetStopTokenIds() const { return stop_token_ids_; }
@@ -59,7 +60,8 @@ class TokenizerInfo::Impl {
   int vocab_size_;
   /*! \brief Whether to add prefix space. */
   bool add_prefix_space_;
-
+  /*! \brief Store the hash value of the vocab. */
+  uint64_t vocab_hash_;
   /*! \brief The vocabulary. Special tokens are included. */
   std::vector<std::string> decoded_vocab_;
   /*! \brief All (id, token) pairs sorted in lexicographic order. This sorting is done to

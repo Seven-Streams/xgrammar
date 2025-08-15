@@ -14,7 +14,9 @@
 namespace xgrammar {
 
 std::string PrintTokenByIds(
-    const std::vector<int32_t>& token_ids, const TokenizerInfo& tokenizer_info, int max_print_num
+    const std::vector<int32_t>& token_ids,
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    int max_print_num
 );
 
 Grammar _EBNFToGrammarNoNormalization(

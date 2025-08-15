@@ -15,14 +15,20 @@
 namespace xgrammar {
 
 std::string PrintTokenByIds(
-    const std::vector<int32_t>& token_ids, const TokenizerInfo& tokenizer_info, int max_print_num
+    const std::vector<int32_t>& token_ids,
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    int max_print_num
 ) {
   std::stringstream ss;
-  const auto& sorted_decoded_vocab = tokenizer_info.GetDecodedVocab();
   ss << "[";
   int print_num = std::min(static_cast<int>(token_ids.size()), max_print_num);
   for (int i = 0; i < print_num; ++i) {
-    ss << "#" << token_ids[i] << " <" << EscapeString(sorted_decoded_vocab[token_ids[i]]) << ">";
+    ss << "#" << token_ids[i] << " <";
+    for (const auto& [id, str] : sorted_decoded_vocab) {
+      if (token_ids[i] == id) {
+        ss << EscapeString(str) << ">";
+      }
+    }
     if (i < print_num - 1) {
       ss << ", ";
     }
