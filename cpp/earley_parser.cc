@@ -781,5 +781,5 @@ void RepeatDetector::Clear() {
   }
   size_ = 0;
 }
-
+// TODO(Linzhang): Consider: a -rule1{3,4}-> b, a-"string"->b
 }  // namespace xgrammar
