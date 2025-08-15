@@ -359,7 +359,12 @@ void FSM::Impl::AddFSM(const FSM& fsm, std::unordered_map<int, int>* state_mappi
         special_configs_.push_back(fsm->special_configs_[edge.max]);
         special_configs_.push_back(fsm->special_configs_[edge.max + 1]);
         special_configs_.push_back(fsm->special_configs_[edge.max + 2]);
-        AddEdge(i + old_num_states, new_config_index, EdgeType::kRepetition, new_config_index);
+        AddEdge(
+            i + old_num_states,
+            edge.target + old_num_states,
+            EdgeType::kRepetition,
+            new_config_index
+        );
         continue;
       }
       AddEdge(i + old_num_states, edge.target + old_num_states, edge.min, edge.max);

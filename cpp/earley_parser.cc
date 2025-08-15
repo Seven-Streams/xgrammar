@@ -475,21 +475,6 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
              }}
         );
         const auto& ref_rule = grammar_->GetRule(ref_rule_id);
-        if (std::binary_search(
-                grammar_->allow_empty_rule_ids.begin(),
-                grammar_->allow_empty_rule_ids.end(),
-                ref_rule_id
-            )) {
-          Enqueue(ParserState{
-              state.rule_id,
-              state.sequence_id,
-              state.element_id,
-              state.rule_start_pos,
-              0,
-              state.repeat_count + 1
-          });
-          continue;
-        }
         if (ref_rule_id != -1 && grammar_->per_rule_fsms[ref_rule_id].has_value()) {
           Enqueue(ParserState{
               ref_rule_id,
@@ -503,14 +488,6 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
           for (const auto& sequence_id : ref_grammar_expr) {
             const auto& sequence = grammar_->GetGrammarExpr(sequence_id);
             if (sequence.type == GrammarExprType::kEmptyStr) {
-              Enqueue(ParserState{
-                  state.rule_id,
-                  state.sequence_id,
-                  state.rule_id,
-                  state.rule_start_pos,
-                  0,
-                  state.repeat_count + 1
-              });
               continue;
             }
             Enqueue(ParserState{
@@ -519,6 +496,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state) {
           }
         }
       };
+      continue;
     }
     if (!(edge.IsRuleRef())) {
       continue;

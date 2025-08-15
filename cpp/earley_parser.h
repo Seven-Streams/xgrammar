@@ -123,7 +123,8 @@ struct ParserState {
            ", sequence_id=" + std::to_string(sequence_id) +
            ", element_id=" + std::to_string(element_id) +
            ", rule_start_pos=" + std::to_string(rule_start_pos) +
-           ", sub_element_id=" + std::to_string(sub_element_id) + ")";
+           ", sub_element_id=" + std::to_string(sub_element_id) +
+           ", repeat_count=" + std::to_string(repeat_count) + ")";
   }
 };
 
