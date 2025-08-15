@@ -60,6 +60,8 @@ def test_serialize_grammar():
         "root_rule_id": 1,
         "complete_fsm": None,
         "per_rule_fsms": [],
+        "per_rule_fsm_hashes": [],
+        "per_rule_fsm_new_state_ids": [],
         "allow_empty_rule_ids": [],
         "__VERSION__": "v6",
     }

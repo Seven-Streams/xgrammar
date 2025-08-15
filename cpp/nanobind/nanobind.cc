@@ -165,6 +165,7 @@ NB_MODULE(xgrammar_bindings, m) {
       .def_prop_ro("tokenizer_info", &CompiledGrammar::GetTokenizerInfo)
       .def_prop_ro("memory_size_bytes", &CompiledGrammar::MemorySizeBytes)
       .def("serialize_json", &CompiledGrammar::SerializeJSON)
+      .def("print_cache", &CompiledGrammar::PrintCache)
       .def_static("deserialize_json", &CompiledGrammar_DeserializeJSON);
 
   auto pyGrammarCompiler = nb::class_<GrammarCompiler>(m, "GrammarCompiler");

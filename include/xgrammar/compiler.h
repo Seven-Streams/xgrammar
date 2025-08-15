@@ -39,6 +39,8 @@ class CompiledGrammar {
   /*! \brief Return the serialized JSON string of the compiled grammar. */
   std::string SerializeJSON() const;
 
+  void PrintCache() const;
+
   /*! \brief Deserialize a compiled grammar from a JSON string and tokenizer info. */
   static std::variant<CompiledGrammar, SerializationError> DeserializeJSON(
       const std::string& json_string, const TokenizerInfo& tokenizer_info
