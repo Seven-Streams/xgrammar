@@ -31,10 +31,8 @@ namespace xgrammar {
 /*! \brief The concrete implementation of GrammarMatcherNode. */
 class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
-  GrammarMatcherForTokenMaskCache(
-      const Grammar& grammar, const ParserState& init_state, const bool& need_expand = true
-  )
-      : EarleyParser(grammar, init_state),
+  GrammarMatcherForTokenMaskCache(const Grammar& grammar, const ParserState& init_state)
+      : EarleyParser(grammar, init_state, true, true),
         init_rule_id(init_state.rule_id),
         initial_state(init_state) {}
   /*!
@@ -93,6 +91,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   std::vector<int32_t> tmp_uncertain_indices_;
   std::vector<bool> tmp_can_reach_end_stack_;
   std::vector<bool> tmp_can_reach_end_prefix_or_stack_;
+  std::vector<bool> tmp_lookahead_can_reach_end_stack_;
+  std::vector<bool> tmp_lookahead_can_reach_end_prefix_or_stack_;
 };
 
 std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
@@ -377,6 +377,14 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
               tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
               tmp_can_reach_end_prefix_or_stack_.end()
           );
+          tmp_lookahead_can_reach_end_stack_.erase(
+              tmp_lookahead_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
+              tmp_lookahead_can_reach_end_stack_.end()
+          );
+          tmp_lookahead_can_reach_end_prefix_or_stack_.erase(
+              tmp_lookahead_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
+              tmp_lookahead_can_reach_end_prefix_or_stack_.end()
+          );
         }
         prev_matched_size = std::min(prev_matched_size, lcp_len);
       }
@@ -394,33 +402,31 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           tmp_can_reach_end_prefix_or_stack_.push_back(
               tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
           );
+          tmp_lookahead_can_reach_end_stack_.push_back(IsLookaheadCompleted());
+          tmp_lookahead_can_reach_end_prefix_or_stack_.push_back(
+              tmp_lookahead_can_reach_end_stack_.back() ||
+              tmp_lookahead_can_reach_end_prefix_or_stack_.back()
+          );
           prev_matched_size = j + 1;
+        }
+        if (tmp_lookahead_can_reach_end_prefix_or_stack_.back() && (!accepted) && !is_root_rule) {
+          for (int token_id = i; token_id < subtree_nodes_range[i]; token_id++) {
+            tmp_uncertain_indices_.push_back(token_id);
+          }
+          i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
+          continue;
         }
       }
 
-      bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
-
       if (accepted) {
-        tmp_accepted_indices_.push_back(i);
+        if (is_exact_lookahead) {
+          tmp_accepted_indices_.push_back(i);
+        } else {
+          tmp_uncertain_indices_.push_back(i);
+        }
       } else {
-        auto lookahead_result_pair = IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
-        if (can_reach_end && !is_root_rule && lookahead_result_pair.first &&
-            prev_matched_size > 0) {
-          // 1. If the current rule is the root rule (is_root_rule=true), there are no
-          // uncertain tokens. Not accepted tokens are just rejected.
-          // 2. If a token cannot pass the lookahead assertion, it is rejected.
-          if ((!lookahead_result_pair.second) && is_exact_lookahead) {
-            tmp_accepted_indices_.push_back(i);
-          } else {
-            tmp_uncertain_indices_.push_back(i);
-            // On the subtree, they are all uncertain tokens.
-            if (lookahead_result_pair.second) {
-              for (int j = i + 1; j < subtree_nodes_range[i]; ++j) {
-                tmp_uncertain_indices_.push_back(j);
-              }
-              i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
-            }
-          }
+        if (tmp_can_reach_end_prefix_or_stack_.back() && !is_exact_lookahead) {
+          tmp_uncertain_indices_.push_back(i);
         } else {
           tmp_rejected_indices_.push_back(i);
           last_rejected_range = subtree_nodes_range[i];
@@ -471,6 +477,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   // the rule when matching until this character. Store it in a stack for later rollback.
   tmp_can_reach_end_stack_.push_back(false);
   tmp_can_reach_end_prefix_or_stack_.push_back(false);
+  tmp_lookahead_can_reach_end_stack_.push_back(false);
+  tmp_lookahead_can_reach_end_prefix_or_stack_.push_back(false);
   std::bitset<256> first_character_mask;
   const auto& sequence = grammar_->GetGrammarExpr(initial_state.sequence_id);
   if (!grammar_->per_rule_fsms[init_rule_id].has_value()) {
@@ -606,7 +614,7 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
   }
 
   auto add_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
-    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state, false);
+    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),
         tokenizer_info_.GetSortedDecodedVocab(),

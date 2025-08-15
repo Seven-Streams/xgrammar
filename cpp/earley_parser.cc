@@ -27,6 +27,8 @@ using GrammarExpr = Grammar::Impl::GrammarExpr;
 
 bool EarleyParser::IsCompleted() const { return is_completed_.back(); }
 
+bool EarleyParser::IsLookaheadCompleted() const { return is_lookahead_completed_.back(); }
+
 void EarleyParser::PopLastStates(int32_t cnt) {
   if (stop_token_is_accepted_) {
     stop_token_is_accepted_ = false;
@@ -35,6 +37,7 @@ void EarleyParser::PopLastStates(int32_t cnt) {
     XGRAMMAR_LOG(FATAL) << "The number of states to be popped is larger than the size of states.";
   }
   rule_id_to_completable_states_.PopBack(cnt);
+  is_lookahead_completed_.erase(is_lookahead_completed_.end() - cnt, is_lookahead_completed_.end());
   is_completed_.erase(is_completed_.end() - cnt, is_completed_.end());
   scanable_state_history_.PopBack(cnt);
 }
@@ -43,7 +46,20 @@ void EarleyParser::Complete(const ParserState& state) {
   // Check if a rule is completed.
   if (state.rule_start_pos == ParserState::kNoPrevInputPos) {
     // assert: if a root rule can achieve here, then it must be completed.
-    tmp_accept_stop_token_ = true;
+    if (state.rule_id != -1) {
+      tmp_accept_stop_token_ = true;
+      if (lookahead_assertion_id_ != -1) {
+        auto lookahead_state = ParserState(
+            /*rule_id*/ -1, lookahead_assertion_id_, 0, ParserState::kNoPrevInputPos, 0
+        );
+        Enqueue(lookahead_state);
+      } else {
+        tmp_lookahead_completed_ = true;
+      }
+    } else {
+      // It's a finished lookahead.
+      tmp_lookahead_completed_ = true;
+    }
     return;
   }
   // Check all the possible parent states.
@@ -206,6 +222,7 @@ bool EarleyParser::Advance(const uint8_t ch) {
   tmp_states_visited_in_queue_.Clear();
   tmp_states_to_be_added_.clear();
   tmp_accept_stop_token_ = false;
+  tmp_lookahead_completed_ = false;
   const auto& latest_states = scanable_state_history_[scanable_state_history_.size() - 1];
   // Scan all the scanable states.
   for (const auto& state : latest_states) {
@@ -233,12 +250,16 @@ bool EarleyParser::Advance(const uint8_t ch) {
 
   // Check if the grammar is completed, and add the scannable states to the history.
   is_completed_.push_back(tmp_accept_stop_token_);
+  is_lookahead_completed_.push_back(tmp_lookahead_completed_);
   scanable_state_history_.PushBack(tmp_states_to_be_added_);
   return true;
 }
 
 EarleyParser::EarleyParser(
-    const Grammar& grammar, const ParserState& init_state, const bool need_expand
+    const Grammar& grammar,
+    const ParserState& init_state,
+    const bool need_expand,
+    const bool need_lookahead
 )
     : grammar_(grammar) {
   // Check if the initial state is valid. If invalid, then we choose the root state as default.
@@ -253,6 +274,9 @@ EarleyParser::EarleyParser(
     );
   } else {
     init = init_state;
+    if (need_lookahead) {
+      lookahead_assertion_id_ = grammar_->GetRule(init_state.rule_id).lookahead_assertion_id;
+    }
   }
 
   // If there is no need to expand the initial state, we only need to add it to the
@@ -260,6 +284,7 @@ EarleyParser::EarleyParser(
   if (!need_expand) {
     rule_id_to_completable_states_.PushBack(std::vector<std::pair<int32_t, ParserState>>());
     is_completed_.push_back(false);
+    is_lookahead_completed_.push_back(false);
     scanable_state_history_.PushBack({init});
     return;
   }
@@ -271,6 +296,7 @@ EarleyParser::EarleyParser(
 void EarleyParser::PushStateAndExpand(const ParserState& state) {
   tmp_states_visited_in_queue_.Clear();
   tmp_accept_stop_token_ = false;
+  tmp_lookahead_completed_ = false;
   tmp_states_to_be_added_.clear();
   // If the rule can't be expanded, we need to add it to the queue.
   if (!ExpandAndEnqueueUnexpandedState(state)) {
@@ -289,6 +315,7 @@ void EarleyParser::PushStateAndExpand(const ParserState& state) {
     }
   }
   is_completed_.push_back(tmp_accept_stop_token_);
+  is_lookahead_completed_.push_back(tmp_lookahead_completed_);
   scanable_state_history_.PushBack(tmp_states_to_be_added_);
 }
 
@@ -296,6 +323,7 @@ void EarleyParser::Reset() {
   rule_id_to_completable_states_.PopBack(rule_id_to_completable_states_.size());
   scanable_state_history_.PopBack(scanable_state_history_.size());
   is_completed_.clear();
+  is_lookahead_completed_.clear();
   stop_token_is_accepted_ = false;
   XGRAMMAR_DCHECK(tmp_process_state_queue_.empty());
   PushStateAndExpand(ParserState(

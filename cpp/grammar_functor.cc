@@ -577,6 +577,7 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
     if (root_grammar_expr.type == GrammarExprType::kTagDispatch) {
       return grammar;
     }
+    std::vector<int32_t> exact_lookahead;
     for (int i = 0; i < static_cast<int>(grammar->NumRules()); ++i) {
       auto rule = grammar->GetRule(i);
       if (i == grammar->GetRootRuleId()) {
@@ -588,11 +589,15 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
       }
       auto look_head_assertion_id = DetectLookaheadAssertion(i);
       if (look_head_assertion_id != -1) {
+        exact_lookahead.push_back(i);
         builder_->UpdateLookaheadAssertion(i, look_head_assertion_id);
         builder_->UpdateLookaheadExact(i);
       }
     }
-    return builder_->Get(grammar->GetRootRuleId());
+    auto return_grammar = builder_->Get(grammar->GetRootRuleId());
+    std::sort(exact_lookahead.begin(), exact_lookahead.end());
+    return_grammar->exact_lookahead = exact_lookahead;
+    return return_grammar;
   }
 
   bool IsExactLookaheadAssertion(int32_t rule_id) {
@@ -657,8 +662,7 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
           continue;
         }
         auto last_element = base_grammar_->GetGrammarExpr(sequence_expr.end()[-1]);
-        if (last_element.type == GrammarExprType::kRuleRef && last_element[0] == rule_id &&
-            i != rule_id) {
+        if (last_element.type == GrammarExprType::kRuleRef && last_element[0] == rule_id) {
           return -1;
         }
 
