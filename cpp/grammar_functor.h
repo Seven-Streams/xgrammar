@@ -9,6 +9,7 @@
 
 #include <xgrammar/xgrammar.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <list>
 #include <mutex>
@@ -17,6 +18,7 @@
 #include "compiled_grammar_impl.h"
 #include "grammar_builder.h"
 #include "grammar_impl.h"
+#include "support/logging.h"
 #include "xgrammar/grammar.h"
 
 namespace xgrammar {
@@ -388,8 +390,11 @@ class CrossingCacheManager {
   bool AddCache(
       const uint64_t& fsm_hash, int32_t fsm_new_node_id, const AdaptiveTokenMask& token_mask
   );
-  CrossingCacheManager(int32_t max_cache_size = 10000)
-      : crossing_cache_manager_impl_(max_cache_size) {}
+  bool AddCache(const uint64_t& fsm_hash, int32_t fsm_new_node_id, AdaptiveTokenMask&& token_mask);
+  CrossingCacheManager(size_t max_cache_size = 10000)
+      : crossing_cache_manager_impl_(max_cache_size) {
+    XGRAMMAR_CHECK(max_cache_size != 0);
+  }
 
  private:
   class CrossingCacheManagerImpl {
@@ -398,11 +403,14 @@ class CrossingCacheManager {
     bool AddCache(
         const uint64_t& fsm_hash, int32_t fsm_new_node_id, const AdaptiveTokenMask& token_mask
     );
-    CrossingCacheManagerImpl(int32_t max_cache_size = 10000) : max_cache_size_(max_cache_size) {}
+    bool AddCache(
+        const uint64_t& fsm_hash, int32_t fsm_new_node_id, AdaptiveTokenMask&& token_mask
+    );
+    CrossingCacheManagerImpl(size_t max_cache_size = 10000) : max_cache_size_(max_cache_size) {}
 
    private:
     std::mutex mutex_;
-    int32_t max_cache_size_;
+    const size_t max_cache_size_;
     std::list<std::pair<std::pair<uint64_t, int32_t>, AdaptiveTokenMask>> cache_list_;
     std::unordered_map<std::pair<uint64_t, int32_t>, decltype(cache_list_.begin())> cache_;
   };
