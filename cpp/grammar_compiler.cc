@@ -541,7 +541,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   std::bitset<256> first_character_mask;
   GetFirstCharacterMask(first_character_mask);
   bool crossing_cache_is_available = grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
-  std::optional<std::optional<AdaptiveTokenMask>> crossing_cache = std::nullopt;
+  std::optional<AdaptiveTokenMask> crossing_cache = std::nullopt;
   const auto& original_to_new_id = grammar_->per_rule_fsm_new_state_ids[init_rule_id_];
   uint64_t fsm_hash = -1;
   uint32_t new_state_id = -1;
@@ -588,7 +588,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
           tmp_rejected_by_lookahead_indices_.end(),
           std::back_inserter(rejected_indices_without_lookahead)
       );
-      crossing_cache_manager_.AddCache(
+      XGRAMMAR_LOG(INFO) << crossing_cache_manager_.AddCache(
           fsm_hash,
           new_state_id,
           tokenizer_hash_,
@@ -608,7 +608,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     );
     if (crossing_cache_is_available && crossing_cache == std::nullopt) {
       IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
-      crossing_cache_manager_.AddCache(
+      XGRAMMAR_LOG(INFO) << crossing_cache_manager_.AddCache(
           fsm_hash,
           new_state_id,
           tokenizer_hash_,

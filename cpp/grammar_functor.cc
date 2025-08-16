@@ -2167,8 +2167,7 @@ std::optional<AdaptiveTokenMask> CrossingCacheManager::CrossingCacheManagerImpl:
   }
   // Perform LRU.
   auto list_iterator = cache_[std::make_tuple(fsm_hash, fsm_new_node_id, tokenizer_hash)];
-  cache_list_.push_front(std::move(*list_iterator));
-  cache_list_.erase(list_iterator);
+  cache_list_.splice(cache_list_.begin(), cache_list_, list_iterator);
 
   // Return the cached token mask.
   return cache_list_.front().second;
@@ -2185,7 +2184,6 @@ bool CrossingCacheManager::CrossingCacheManagerImpl::AddCache(
     // The cache already exists.
     return false;
   }
-
   // Add the new cache.
   cache_list_.emplace_front(
       std::make_pair(std::make_tuple(fsm_hash, fsm_new_node_id, tokenizer_hash), token_mask)
@@ -2213,7 +2211,6 @@ bool CrossingCacheManager::CrossingCacheManagerImpl::AddCache(
     // The cache already exists.
     return false;
   }
-
   // Add the new cache.
   cache_list_.emplace_front(std::make_pair(
       std::make_tuple(fsm_hash, fsm_new_node_id, tokenizer_hash), std::move(token_mask)
