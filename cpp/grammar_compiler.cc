@@ -65,22 +65,6 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       bool is_root_rule
   );
 
-  /*!
-   * \brief Get the token mask for the given ParserState.
-   * \param sorted_decoded_vocab The sorted decoded vocabulary.
-   * \param first_char_mask The first character mask.
-   * \param is_root_rule Whether to consider the parent rule. If false, there will be
-   * no uncertain tokens. Useful for the root rule.
-   * \returns True if the rejected indices are filled as usual, False otherwise.
-   * It's used to determine which construction function will be used.
-   */
-  bool GetTokenMaskWithFirstCharacterCheck(
-      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-      const std::bitset<256>& first_char_mask,
-      const std::vector<int>& subtree_nodes_range,
-      bool is_root_rule
-  );
-
  private:
   /*! \brief Check if a token can pass the lookahead assertion. */
   std::pair</*acceptable*/ bool, /*can reach end*/ bool> IsTokenPassLookaheadAssertion(
@@ -97,6 +81,27 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab
   );
 
+  /*!
+   * \brief Get the first character mask.
+   */
+  void GetFirstCharacterMask(std::bitset<256>& first_character_mask);
+
+  /*!
+   * \brief Get the token mask for the given ParserState.
+   * \param sorted_decoded_vocab The sorted decoded vocabulary.
+   * \param first_char_mask The first character mask.
+   * \param is_root_rule Whether to consider the parent rule. If false, there will be
+   * no uncertain tokens. Useful for the root rule.
+   * \returns True if the rejected indices are filled as usual, False otherwise.
+   * It's used to determine which construction function will be used.
+   */
+  bool GetTokenMaskWithFirstCharacterCheck(
+      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+      const std::bitset<256>& first_char_mask,
+      const std::vector<int>& subtree_nodes_range,
+      bool is_root_rule
+  );
+
   // The id of the initial rule.
   int32_t init_rule_id;
 
@@ -109,6 +114,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   std::vector<int32_t> tmp_uncertain_indices_;
   std::vector<bool> tmp_can_reach_end_stack_;
   std::vector<bool> tmp_can_reach_end_prefix_or_stack_;
+
+  /*! \brief A static crossing cache manager, used for better efficiency. */
+  static CrossingCacheManager crossing_cache_manager_;
 };
 
 std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
@@ -466,20 +474,9 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   return fill_reject_indices;
 }
 
-AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
-    size_t vocab_size,
-    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-    const std::vector<int32_t>& subtree_nodes_range,
-    bool is_root_rule
+void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& first_character_mask
 ) {
-  tmp_accepted_indices_.clear();
-  tmp_rejected_indices_.clear();
-  tmp_uncertain_indices_.clear();
-  // For every character in the current token, stores whether it is possible to reach the end of
-  // the rule when matching until this character. Store it in a stack for later rollback.
-  tmp_can_reach_end_stack_.push_back(false);
-  tmp_can_reach_end_prefix_or_stack_.push_back(false);
-  std::bitset<256> first_character_mask;
+  first_character_mask.reset();
   const auto& sequence = grammar_->GetGrammarExpr(initial_state.sequence_id);
   if (!grammar_->per_rule_fsms[init_rule_id].has_value()) {
     const auto& sub_sequence = grammar_->GetGrammarExpr(sequence[initial_state.element_id]);
@@ -526,6 +523,23 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       }
     }
   }
+}
+
+AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
+    size_t vocab_size,
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    const std::vector<int32_t>& subtree_nodes_range,
+    bool is_root_rule
+) {
+  tmp_accepted_indices_.clear();
+  tmp_rejected_indices_.clear();
+  tmp_uncertain_indices_.clear();
+  // For every character in the current token, stores whether it is possible to reach the end of
+  // the rule when matching until this character. Store it in a stack for later rollback.
+  tmp_can_reach_end_stack_.push_back(false);
+  tmp_can_reach_end_prefix_or_stack_.push_back(false);
+  std::bitset<256> first_character_mask;
+  GetFirstCharacterMask(first_character_mask);
   bool rejected_indices_are_filled = GetTokenMaskWithFirstCharacterCheck(
       sorted_decoded_vocab, first_character_mask, subtree_nodes_range, is_root_rule
   );
