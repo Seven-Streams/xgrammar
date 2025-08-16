@@ -78,6 +78,15 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       const std::string& token, const std::vector<bool>& can_reach_end_stack
   );
 
+  /*! \brief Update the cache with lookahead information. */
+  void AdaptCacheWithLookahead(
+      AdaptiveTokenMask& cache,
+      size_t vocab_size,
+      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+      const std::vector<int32_t>& subtree_nodes_range,
+      bool is_root_rule
+  );
+
   /*!
    * \brief Check if speculative calculation will be applied.
    * \return first: whether speculative calculation is applicable.
@@ -530,6 +539,17 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     const std::vector<int32_t>& subtree_nodes_range,
     bool is_root_rule
 ) {
+  tmp_accepted_indices_.clear();
+  tmp_rejected_indices_.clear();
+  tmp_uncertain_indices_.clear();
+  tmp_rejected_by_lookahead_indices_.clear();
+  tmp_can_reach_end_prefix_or_stack_.clear();
+  tmp_can_reach_end_stack_.clear();
+  // For every character in the current token, stores whether it is possible to reach the end of
+  // the rule when matching until this character. Store it in a stack for later rollback.
+  tmp_can_reach_end_stack_.push_back(false);
+  tmp_can_reach_end_prefix_or_stack_.push_back(false);
+
   // Try to get the crossing cache.
   bool crossing_cache_is_available = grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
   std::optional<AdaptiveTokenMask> crossing_cache = std::nullopt;
@@ -549,22 +569,19 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     new_state_id = get_new_state_id->second;
     crossing_cache = crossing_cache_manager_.GetCache(fsm_hash, new_state_id, tokenizer_hash_);
     // If the rule doesn't have a lookahead, then it is exactly the same fsm.
-    if (grammar_->GetRule(init_rule_id_).lookahead_assertion_id == -1 &&
-        crossing_cache.has_value()) {
+    if (crossing_cache.has_value()) {
+      if (grammar_->GetRule(init_rule_id_).lookahead_assertion_id != -1) {
+        AdaptCacheWithLookahead(
+            crossing_cache.value(),
+            vocab_size,
+            sorted_decoded_vocab,
+            subtree_nodes_range,
+            is_root_rule
+        );
+      }
       return crossing_cache.value();
     }
   }
-
-  tmp_accepted_indices_.clear();
-  tmp_rejected_indices_.clear();
-  tmp_uncertain_indices_.clear();
-  tmp_rejected_by_lookahead_indices_.clear();
-  tmp_can_reach_end_prefix_or_stack_.clear();
-  tmp_can_reach_end_stack_.clear();
-  // For every character in the current token, stores whether it is possible to reach the end of
-  // the rule when matching until this character. Store it in a stack for later rollback.
-  tmp_can_reach_end_stack_.push_back(false);
-  tmp_can_reach_end_prefix_or_stack_.push_back(false);
   std::bitset<256> first_character_mask;
   GetFirstCharacterMask(first_character_mask);
 
@@ -630,6 +647,100 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       ;
     }
     return return_value;
+  }
+}
+
+void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
+    AdaptiveTokenMask& cache,
+    size_t vocab_size,
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    const std::vector<int32_t>& subtree_nodes_range,
+    bool is_root_rule
+) {
+  const std::string* prev_token = nullptr;
+  int prev_matched_size = 0;
+  for (const auto& uncertain_index : cache.uncertain_indices) {
+    const auto& token = sorted_decoded_vocab[uncertain_index].second;
+    // Many tokens may contain the same prefix, so we will avoid unnecessary matching
+    // by finding the longest common prefix with the previous token.
+    bool accepted = true;
+    if (prev_token != nullptr) {
+      int lcp_len =
+          std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end()).first -
+          token.begin();
+      if (lcp_len > prev_matched_size) {
+        // Case 1. The common prefix is rejected by the matcher in the last token. Reject
+        // directly.
+        accepted = false;
+      } else if (lcp_len < prev_matched_size) {
+        // Case 2. The common prefix is shorter than the previous matched size. Rollback
+        // the non-common part.
+        PopLastStates(prev_matched_size - lcp_len);
+        tmp_can_reach_end_stack_.erase(
+            tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
+            tmp_can_reach_end_stack_.end()
+        );
+        tmp_can_reach_end_prefix_or_stack_.erase(
+            tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
+            tmp_can_reach_end_prefix_or_stack_.end()
+        );
+      }
+      prev_matched_size = std::min(prev_matched_size, lcp_len);
+    }
+
+    prev_token = &token;
+
+    if (accepted) {
+      // Accept the rest chars one by one.
+      for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
+        if (!Advance(token[j])) {
+          accepted = false;
+          break;
+        }
+        tmp_can_reach_end_stack_.push_back(IsCompleted());
+        tmp_can_reach_end_prefix_or_stack_.push_back(
+            tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
+        );
+        prev_matched_size = j + 1;
+      }
+    }
+
+    bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+
+    // All the tokens are at least uncertain!
+    XGRAMMAR_CHECK(!accepted);
+
+    if (can_reach_end && !is_root_rule &&
+        IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) && prev_matched_size > 0) {
+      continue;
+    } else {
+      tmp_rejected_indices_.push_back(uncertain_index);
+    }
+  }
+
+  // Update the uncertain tokens.
+  tmp_uncertain_indices_.reserve(cache.uncertain_indices.size() - tmp_rejected_indices_.size());
+  std::set_difference(
+      cache.uncertain_indices.begin(),
+      cache.uncertain_indices.end(),
+      tmp_rejected_indices_.begin(),
+      tmp_rejected_indices_.end(),
+      std::back_inserter(tmp_uncertain_indices_)
+  );
+  cache.uncertain_indices = tmp_uncertain_indices_;
+
+  switch (cache.store_type) {
+    case AdaptiveTokenMask::StoreType::kAccepted:
+    case AdaptiveTokenMask::StoreType::kAcceptedBitset: {
+      break;
+    }
+    case AdaptiveTokenMask::StoreType::kRejected: {
+      IntsetUnion(&cache.rejected_indices, tmp_rejected_indices_);
+      break;
+    }
+    default: {
+      XGRAMMAR_LOG(FATAL) << "Unsupported store type: " << static_cast<int>(cache.store_type);
+    }
   }
 }
 
