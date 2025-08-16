@@ -20,6 +20,7 @@
 #include "fsm.h"
 #include "grammar_functor.h"
 #include "grammar_impl.h"
+#include "support/int_set.h"
 #include "support/logging.h"
 #include "support/thread_pool.h"
 #include "support/thread_safe_cache.h"
@@ -105,7 +106,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
       const std::bitset<256>& first_char_mask,
       const std::vector<int>& subtree_nodes_range,
-      bool is_root_rule
+      bool is_root_rule,
+      bool crossing_cache_is_available,
+      const std::optional<std::optional<AdaptiveTokenMask>>& crossing_cache
   );
 
   // The id of the initial rule.
@@ -308,34 +311,10 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::bitset<256>& first_char_mask,
     const std::vector<int>& subtree_nodes_range,
-    bool is_root_rule
+    bool is_root_rule,
+    bool crossing_cache_is_available,
+    const std::optional<std::optional<AdaptiveTokenMask>>& crossing_cache
 ) {
-  // Try to get the crossing cache.
-  bool crossing_cache_is_available = grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
-  std::optional<AdaptiveTokenMask> crossing_cache = std::nullopt;
-  int32_t new_fsm_node_id = -1;
-  if (crossing_cache_is_available) {
-    XGRAMMAR_DCHECK(
-        std::find_if(
-            grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->begin(),
-            grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->end(),
-            [&](const std::pair<int32_t, int32_t> old_id_to_new_id) {
-              return old_id_to_new_id.first == initial_state_.element_id;
-            }
-        ) != grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->end()
-    );
-    new_fsm_node_id = std::find_if(
-                          grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->begin(),
-                          grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->end(),
-                          [&](const std::pair<int32_t, int32_t> old_id_to_new_id) {
-                            return old_id_to_new_id.first == initial_state_.element_id;
-                          }
-    )->second;
-    crossing_cache = crossing_cache_manager_.GetCache(
-        grammar_->per_rule_fsm_hashes[init_rule_id_].value(), new_fsm_node_id, tokenizer_hash_
-    );
-  }
-
   // the pair (a, b) means [a, b). Intialize the possible intervals.
   std::vector<std::pair<int32_t, int32_t>> possible_intervals;
   int possible_token_num =
@@ -561,21 +540,84 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   tmp_can_reach_end_prefix_or_stack_.push_back(false);
   std::bitset<256> first_character_mask;
   GetFirstCharacterMask(first_character_mask);
+  bool crossing_cache_is_available = grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
+  std::optional<std::optional<AdaptiveTokenMask>> crossing_cache = std::nullopt;
+  const auto& original_to_new_id = grammar_->per_rule_fsm_new_state_ids[init_rule_id_];
+  uint64_t fsm_hash = -1;
+  uint32_t new_state_id = -1;
+  if (crossing_cache_is_available) {
+    fsm_hash = grammar_->per_rule_fsm_hashes[init_rule_id_].value();
+    auto get_new_state_id = std::find_if(
+        original_to_new_id->begin(),
+        original_to_new_id->end(),
+        [&](const auto& original_new_pair) { return original_new_pair.first == init_rule_id_; }
+    );
+    XGRAMMAR_DCHECK(get_new_state_id != original_to_new_id->end());
+    new_state_id = get_new_state_id->second;
+    crossing_cache = crossing_cache_manager_.GetCache(fsm_hash, new_state_id, tokenizer_hash_);
+  }
+
   bool rejected_indices_are_filled = GetTokenMaskWithFirstCharacterCheck(
-      sorted_decoded_vocab, first_character_mask, subtree_nodes_range, is_root_rule
+      sorted_decoded_vocab,
+      first_character_mask,
+      subtree_nodes_range,
+      is_root_rule,
+      crossing_cache_is_available,
+      crossing_cache
   );
   if (rejected_indices_are_filled) {
-    return AdaptiveTokenMask(
+    auto return_value = AdaptiveTokenMask(
         vocab_size,
         sorted_decoded_vocab,
         tmp_accepted_indices_,
         tmp_rejected_indices_,
         tmp_uncertain_indices_
     );
+    if (crossing_cache_is_available && crossing_cache == std::nullopt) {
+      // We can add a cache.
+      // All the tokens rejected by lookahead should be uncertain.
+      IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
+      std::vector<int32_t> rejected_indices_without_lookahead;
+      rejected_indices_without_lookahead.reserve(
+          tmp_rejected_indices_.size() - tmp_rejected_by_lookahead_indices_.size()
+      );
+      std::set_difference(
+          tmp_rejected_indices_.begin(),
+          tmp_rejected_indices_.end(),
+          tmp_rejected_by_lookahead_indices_.begin(),
+          tmp_rejected_by_lookahead_indices_.end(),
+          std::back_inserter(rejected_indices_without_lookahead)
+      );
+      crossing_cache_manager_.AddCache(
+          fsm_hash,
+          new_state_id,
+          tokenizer_hash_,
+          AdaptiveTokenMask(
+              vocab_size,
+              sorted_decoded_vocab,
+              tmp_accepted_indices_,
+              rejected_indices_without_lookahead,
+              tmp_uncertain_indices_
+          )
+      );
+    }
+    return return_value;
   } else {
-    return AdaptiveTokenMask(
+    auto return_value = AdaptiveTokenMask(
         vocab_size, sorted_decoded_vocab, tmp_accepted_indices_, tmp_uncertain_indices_
     );
+    if (crossing_cache_is_available && crossing_cache == std::nullopt) {
+      IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
+      crossing_cache_manager_.AddCache(
+          fsm_hash,
+          new_state_id,
+          tokenizer_hash_,
+          AdaptiveTokenMask(
+              vocab_size, sorted_decoded_vocab, tmp_accepted_indices_, tmp_uncertain_indices_
+          )
+      );
+    }
+    return return_value;
   }
 }
 
