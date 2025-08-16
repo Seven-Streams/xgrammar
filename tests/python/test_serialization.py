@@ -219,8 +219,11 @@ def test_serialize_compiled_grammar():
                 [{'data_': [[0, 47, 3], [58, 127, 3], [192, 223, 1], [224, 239, 4], [240, 247, 5], [128, 191, 3], [-2, 0, 2], [128, 191, 1], [128, 191, 4], [-2, 0, 8], [97, 97, 6]],
                 'indptr_': [0, 5, 6, 6, 7, 8, 9, 9, 10, 11]}, 7, [6], False]],
             # fmt: on
-            "per_rule_fsm_hashes": [],
-            "per_rule_fsm_new_state_ids": [],
+            "per_rule_fsm_hashes": [-3007482019848272666, -2918047934002088539],
+            "per_rule_fsm_new_state_ids": [
+                [[0, 0], [1, 2], [2, 5], [3, 1], [4, 3], [5, 4]],
+                [[6, 2], [7, 0], [8, 1]],
+            ],
             "exact_lookahead": [],
         },
         "tokenizer_metadata": {
