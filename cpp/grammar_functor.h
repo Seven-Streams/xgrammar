@@ -9,8 +9,12 @@
 
 #include <xgrammar/xgrammar.h>
 
+#include <cstdint>
+#include <list>
+#include <mutex>
 #include <string>
 
+#include "compiled_grammar_impl.h"
 #include "grammar_builder.h"
 #include "grammar_impl.h"
 #include "xgrammar/grammar.h"
@@ -371,6 +375,38 @@ class RepetitionNormalizer {
 class GrammarFSMHasher {
  public:
   static void Apply(Grammar* grammar);
+};
+
+/*!
+ * \brief Store the crossing cache for different grammars.
+ * \param max_cache_size The maximum size of the cache numbers.
+ * \details LRU algorithm is implemented.
+ */
+class CrossingCacheManager {
+ public:
+  std::optional<AdaptiveTokenMask> GetCache(const uint64_t& fsm_hash, int32_t fsm_new_node_id);
+  bool AddCache(
+      const uint64_t& fsm_hash, int32_t fsm_new_node_id, const AdaptiveTokenMask& token_mask
+  );
+  CrossingCacheManager(int32_t max_cache_size = 10000)
+      : crossing_cache_manager_impl_(max_cache_size) {}
+
+ private:
+  class CrossingCacheManagerImpl {
+   public:
+    std::optional<AdaptiveTokenMask> GetCache(const uint64_t& fsm_hash, int32_t fsm_new_node_id);
+    bool AddCache(
+        const uint64_t& fsm_hash, int32_t fsm_new_node_id, const AdaptiveTokenMask& token_mask
+    );
+    CrossingCacheManagerImpl(int32_t max_cache_size = 10000) : max_cache_size_(max_cache_size) {}
+
+   private:
+    std::mutex mutex_;
+    int32_t max_cache_size_;
+    std::list<std::pair<std::pair<uint64_t, int32_t>, AdaptiveTokenMask>> cache_list_;
+    std::unordered_map<std::pair<uint64_t, int32_t>, decltype(cache_list_.begin())> cache_;
+  };
+  CrossingCacheManagerImpl crossing_cache_manager_impl_;
 };
 
 }  // namespace xgrammar
