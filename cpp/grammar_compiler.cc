@@ -530,16 +530,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     const std::vector<int32_t>& subtree_nodes_range,
     bool is_root_rule
 ) {
-  tmp_accepted_indices_.clear();
-  tmp_rejected_indices_.clear();
-  tmp_uncertain_indices_.clear();
-  tmp_rejected_by_lookahead_indices_.clear();
-  // For every character in the current token, stores whether it is possible to reach the end of
-  // the rule when matching until this character. Store it in a stack for later rollback.
-  tmp_can_reach_end_stack_.push_back(false);
-  tmp_can_reach_end_prefix_or_stack_.push_back(false);
-  std::bitset<256> first_character_mask;
-  GetFirstCharacterMask(first_character_mask);
+  // Try to get the crossing cache.
   bool crossing_cache_is_available = grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
   std::optional<AdaptiveTokenMask> crossing_cache = std::nullopt;
   const auto& original_to_new_id = grammar_->per_rule_fsm_new_state_ids[init_rule_id_];
@@ -550,12 +541,32 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     auto get_new_state_id = std::find_if(
         original_to_new_id->begin(),
         original_to_new_id->end(),
-        [&](const auto& original_new_pair) { return original_new_pair.first == init_rule_id_; }
+        [&](const auto& original_new_pair) {
+          return original_new_pair.first == initial_state_.element_id;
+        }
     );
     XGRAMMAR_DCHECK(get_new_state_id != original_to_new_id->end());
     new_state_id = get_new_state_id->second;
     crossing_cache = crossing_cache_manager_.GetCache(fsm_hash, new_state_id, tokenizer_hash_);
+    // If the rule doesn't have a lookahead, then it is exactly the same fsm.
+    if (grammar_->GetRule(init_rule_id_).lookahead_assertion_id == -1 &&
+        crossing_cache.has_value()) {
+      return crossing_cache.value();
+    }
   }
+
+  tmp_accepted_indices_.clear();
+  tmp_rejected_indices_.clear();
+  tmp_uncertain_indices_.clear();
+  tmp_rejected_by_lookahead_indices_.clear();
+  tmp_can_reach_end_prefix_or_stack_.clear();
+  tmp_can_reach_end_stack_.clear();
+  // For every character in the current token, stores whether it is possible to reach the end of
+  // the rule when matching until this character. Store it in a stack for later rollback.
+  tmp_can_reach_end_stack_.push_back(false);
+  tmp_can_reach_end_prefix_or_stack_.push_back(false);
+  std::bitset<256> first_character_mask;
+  GetFirstCharacterMask(first_character_mask);
 
   bool rejected_indices_are_filled = GetTokenMaskWithFirstCharacterCheck(
       sorted_decoded_vocab,
@@ -588,7 +599,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
           tmp_rejected_by_lookahead_indices_.end(),
           std::back_inserter(rejected_indices_without_lookahead)
       );
-      XGRAMMAR_LOG(INFO) << crossing_cache_manager_.AddCache(
+      crossing_cache_manager_.AddCache(
           fsm_hash,
           new_state_id,
           tokenizer_hash_,
@@ -608,7 +619,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     );
     if (crossing_cache_is_available && crossing_cache == std::nullopt) {
       IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
-      XGRAMMAR_LOG(INFO) << crossing_cache_manager_.AddCache(
+      crossing_cache_manager_.AddCache(
           fsm_hash,
           new_state_id,
           tokenizer_hash_,
@@ -616,6 +627,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
               vocab_size, sorted_decoded_vocab, tmp_accepted_indices_, tmp_uncertain_indices_
           )
       );
+      ;
     }
     return return_value;
   }
