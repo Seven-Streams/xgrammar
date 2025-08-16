@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "compiled_grammar_impl.h"
 #include "fsm.h"
 #include "fsm_builder.h"
 #include "grammar_builder.h"
@@ -1946,6 +1947,21 @@ uint64_t GrammarFSMHasherImpl::HashFsm(int fsm_index) {
   return hash_result;
 }
 
+class CrossingCacheManagerImpl {
+ public:
+  std::optional<AdaptiveTokenMask> GetCache(const uint64_t& fsm_hash, int32_t fsm_new_node_id);
+  std::optional<AdaptiveTokenMask> AddCache(
+      const uint64_t& fsm_hash, int32_t fsm_new_node_id, const AdaptiveTokenMask& token_mask
+  );
+  CrossingCacheManagerImpl(int32_t max_cache_size = 10000) : max_cache_size_(max_cache_size) {}
+
+ private:
+  std::mutex mutex_;
+  int32_t max_cache_size_;
+  std::list<std::pair<std::pair<uint64_t, int32_t>, AdaptiveTokenMask>> cache_list_;
+  std::unordered_map<std::pair<uint64_t, int32_t>, decltype(cache_list_.begin())> cache_;
+};
+
 /*************************** Forward grammar functors to their impl ***************************/
 
 Grammar GrammarNormalizer::Apply(const Grammar& grammar) {
@@ -2028,5 +2044,17 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilder::TagDispatch(
 }
 
 void GrammarFSMHasher::Apply(Grammar* grammar) { GrammarFSMHasherImpl().Apply(grammar); }
+
+std::optional<AdaptiveTokenMask> CrossingCacheManager::GetCache(
+    const uint64_t& fsm_hash, int32_t fsm_new_node_id
+) {
+  return crossing_cache_manager_impl_.GetCache(fsm_hash, fsm_new_node_id);
+}
+
+bool CrossingCacheManager::AddCache(
+    const uint64_t& fsm_hash, int32_t fsm_new_node_id, const AdaptiveTokenMask& token_mask
+) {
+  return crossing_cache_manager_impl_.AddCache(fsm_hash, fsm_new_node_id, token_mask);
+}
 
 }  // namespace xgrammar
