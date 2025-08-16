@@ -579,7 +579,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
             is_root_rule
         );
       }
-      return crossing_cache.value();
+      return std::move(crossing_cache.value());
     }
   }
   std::bitset<256> first_character_mask;
@@ -659,7 +659,17 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
 ) {
   const std::string* prev_token = nullptr;
   int prev_matched_size = 0;
+  int last_reject_range = 0;
+  int last_uncertain_range = 0;
   for (const auto& uncertain_index : cache.uncertain_indices) {
+    if (uncertain_index < last_reject_range) {
+      tmp_rejected_indices_.push_back(uncertain_index);
+      continue;
+    }
+    if (uncertain_index < last_uncertain_range) {
+      // If the uncertain index is already processed, we can skip it.
+      continue;
+    }
     const auto& token = sorted_decoded_vocab[uncertain_index].second;
     // Many tokens may contain the same prefix, so we will avoid unnecessary matching
     // by finding the longest common prefix with the previous token.
@@ -712,9 +722,10 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
 
     if (can_reach_end && !is_root_rule &&
         IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) && prev_matched_size > 0) {
-      continue;
+      last_uncertain_range = subtree_nodes_range[uncertain_index] + 1;
     } else {
       tmp_rejected_indices_.push_back(uncertain_index);
+      last_reject_range = subtree_nodes_range[uncertain_index] + 1;
     }
   }
 
