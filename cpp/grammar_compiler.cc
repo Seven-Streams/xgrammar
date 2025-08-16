@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "support/thread_pool.h"
 #include "support/thread_safe_cache.h"
 #include "support/utils.h"
+#include "xgrammar/grammar.h"
 
 namespace std {
 
@@ -48,11 +50,15 @@ namespace xgrammar {
 class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
   GrammarMatcherForTokenMaskCache(
-      const Grammar& grammar, const ParserState& init_state, const bool& need_expand = true
+      const Grammar& grammar,
+      const ParserState& init_state,
+      const uint64_t& tokenizer_hash,
+      const bool& need_expand = true
   )
       : EarleyParser(grammar, init_state),
-        init_rule_id(init_state.rule_id),
-        initial_state(init_state) {}
+        init_rule_id_(init_state.rule_id),
+        initial_state_(init_state),
+        tokenizer_hash_(tokenizer_hash) {}
   /*!
    * \brief Get the adaptive token mask for the given ParserState.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
@@ -103,10 +109,13 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   );
 
   // The id of the initial rule.
-  int32_t init_rule_id;
+  int32_t init_rule_id_;
 
   // The initial state of the parser.
-  ParserState initial_state;
+  ParserState initial_state_;
+
+  // The hash value of the tokenizer, used for crossing caching.
+  uint64_t tokenizer_hash_;
 
   // Temporary data for GetAdaptiveTokenMask.
   std::vector<int32_t> tmp_accepted_indices_;
@@ -119,10 +128,12 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   static CrossingCacheManager crossing_cache_manager_;
 };
 
+CrossingCacheManager GrammarMatcherForTokenMaskCache::crossing_cache_manager_;
+
 std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
     const std::string& token, const std::vector<bool>& can_reach_end_stack
 ) {
-  auto lookahead_assertion_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
+  auto lookahead_assertion_id = grammar_->GetRule(init_rule_id_).lookahead_assertion_id;
   if (lookahead_assertion_id == -1) {
     return {true, true};
   }
@@ -234,23 +245,23 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
   using GrammarExprType = Grammar::Impl::GrammarExprType;
   // Check if the initial state is self-recursive-like. If the state is self-recursive-like,
   // and it covers a large part of the vocabulary, we will do speculative calculation in compiling.
-  if (!grammar_->per_rule_fsms[init_rule_id].has_value()) {
-    if (initial_state.sub_element_id == 0) {
-      const auto& sequence_expr = grammar_->GetGrammarExpr(initial_state.sequence_id);
+  if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
+    if (initial_state_.sub_element_id == 0) {
+      const auto& sequence_expr = grammar_->GetGrammarExpr(initial_state_.sequence_id);
       // A self-recursive-like rule must be a sequence.
       if (sequence_expr.type == GrammarExprType::kSequence) {
         const auto& current_element_expr =
-            grammar_->GetGrammarExpr(sequence_expr[initial_state.element_id]);
+            grammar_->GetGrammarExpr(sequence_expr[initial_state_.element_id]);
         // If the current element is a character class star, then it's self-recursive without doubt.
         if (current_element_expr.type == GrammarExprType::kCharacterClassStar) {
           return {true, {}};
           // If the current element is a character class, and the next element is a rule ref to
           // itself, and the rule only has 2 elements, then it's self-recursive-like.
         } else if (current_element_expr.type == GrammarExprType::kCharacterClass &&
-                   sequence_expr.size() == 2 && initial_state.element_id == 0) {
+                   sequence_expr.size() == 2 && initial_state_.element_id == 0) {
           const auto& end_element_expr = grammar_->GetGrammarExpr(sequence_expr[1]);
           if (end_element_expr.type == GrammarExprType::kRuleRef &&
-              end_element_expr[0] == initial_state.rule_id) {
+              end_element_expr[0] == initial_state_.rule_id) {
             return {true, {}};
           }
         }
@@ -261,12 +272,12 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
   // If the initial state is a FSM, we will check if the FSM is self-recursive-like.
   bool can_be_applied = false;
   std::bitset<256> speculative_mask;
-  const auto& fsm = grammar_->per_rule_fsms[init_rule_id].value();
-  XGRAMMAR_DCHECK(initial_state.element_id < fsm.NumStates());
-  for (const auto& edge : fsm.GetFsm().GetEdges(initial_state.element_id)) {
+  const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+  XGRAMMAR_DCHECK(initial_state_.element_id < fsm.NumStates());
+  for (const auto& edge : fsm.GetFsm().GetEdges(initial_state_.element_id)) {
     if (edge.IsCharRange()) {
       // Case A: The edge is towards itself.
-      if (edge.target == initial_state.element_id) {
+      if (edge.target == initial_state_.element_id) {
         can_be_applied = true;
         for (int ch = edge.min; ch <= edge.max; ++ch) {
           speculative_mask.set(ch);
@@ -276,9 +287,9 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
 
       // Case B: The state is the start state, and there's an edge to another state,
       // which calls the fsm itself.
-      if (fsm.GetStart() == initial_state.element_id) {
+      if (fsm.GetStart() == initial_state_.element_id) {
         for (const auto& next_edge : fsm.GetFsm().GetEdges(edge.target)) {
-          if (next_edge.IsRuleRef() && next_edge.GetRefRuleId() == init_rule_id) {
+          if (next_edge.IsRuleRef() && next_edge.GetRefRuleId() == init_rule_id_) {
             can_be_applied = true;
             for (int ch = edge.min; ch <= edge.max; ++ch) {
               speculative_mask.set(ch);
@@ -298,6 +309,33 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::vector<int>& subtree_nodes_range,
     bool is_root_rule
 ) {
+  // Try to get the crossing cache.
+  bool crossing_cache_is_available = grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
+  std::optional<AdaptiveTokenMask> crossing_cache = std::nullopt;
+  int32_t new_fsm_node_id = -1;
+  if (crossing_cache_is_available) {
+    XGRAMMAR_DCHECK(
+        std::find_if(
+            grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->begin(),
+            grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->end(),
+            [&](const std::pair<int32_t, int32_t> old_id_to_new_id) {
+              return old_id_to_new_id.first == initial_state_.element_id;
+            }
+        ) != grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->end()
+    );
+    new_fsm_node_id = std::find_if(
+                          grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->begin(),
+                          grammar_->per_rule_fsm_new_state_ids[init_rule_id_]->end(),
+                          [&](const std::pair<int32_t, int32_t> old_id_to_new_id) {
+                            return old_id_to_new_id.first == initial_state_.element_id;
+                          }
+    )->second;
+    crossing_cache = crossing_cache_manager_.GetCache(
+        grammar_->per_rule_fsm_hashes[init_rule_id_].value(), new_fsm_node_id, tokenizer_hash_
+    );
+    // TODO(Linzhang): Not good enough! consider different tokenizer!
+  }
+
   // the pair (a, b) means [a, b). Intialize the possible intervals.
   std::vector<std::pair<int32_t, int32_t>> possible_intervals;
   int possible_token_num =
@@ -318,7 +356,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   bool speculative_calculation = false;
   std::bitset<256> speculative_mask;
-  if (init_rule_id == -1 || !grammar_->per_rule_fsms[init_rule_id].has_value()) {
+  if (init_rule_id_ == -1 || !grammar_->per_rule_fsms[init_rule_id_].has_value()) {
     speculative_calculation =
         GetSpeculativeCalculation(sorted_decoded_vocab).first &&
         (possible_token_num >= static_cast<int>(sorted_decoded_vocab.size() / 4));
@@ -424,7 +462,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           // 2. If a token cannot pass the lookahead assertion, it is rejected.
           if ((!lookahead_result_pair.second) &&
               (std::binary_search(
-                  grammar_->exact_lookahead.begin(), grammar_->exact_lookahead.end(), init_rule_id
+                  grammar_->exact_lookahead.begin(), grammar_->exact_lookahead.end(), init_rule_id_
               ))) {
             tmp_accepted_indices_.push_back(i);
           } else {
@@ -477,17 +515,17 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& first_character_mask
 ) {
   first_character_mask.reset();
-  const auto& sequence = grammar_->GetGrammarExpr(initial_state.sequence_id);
-  if (!grammar_->per_rule_fsms[init_rule_id].has_value()) {
-    const auto& sub_sequence = grammar_->GetGrammarExpr(sequence[initial_state.element_id]);
+  const auto& sequence = grammar_->GetGrammarExpr(initial_state_.sequence_id);
+  if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
+    const auto& sub_sequence = grammar_->GetGrammarExpr(sequence[initial_state_.element_id]);
     switch (sub_sequence.type) {
       case Grammar::Impl::GrammarExprType::kByteString: {
-        first_character_mask[sub_sequence[initial_state.sub_element_id]] = true;
+        first_character_mask[sub_sequence[initial_state_.sub_element_id]] = true;
         break;
       }
       case xgrammar::Grammar::Impl::GrammarExprType::kCharacterClass:
       case xgrammar::Grammar::Impl::GrammarExprType::kCharacterClassStar: {
-        if (initial_state.sub_element_id == 0) {
+        if (initial_state_.sub_element_id == 0) {
           bool is_negative = sub_sequence[0];
           for (int i = 1; i < sub_sequence.size(); i += 2) {
             int left_char = static_cast<uint8_t>(sub_sequence[i]);
@@ -513,8 +551,8 @@ void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& fi
       }
     }
   } else {
-    const auto& fsm = grammar_->per_rule_fsms[init_rule_id].value();
-    const auto& edges = fsm.GetFsm().GetEdges(initial_state.element_id);
+    const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+    const auto& edges = fsm.GetFsm().GetEdges(initial_state_.element_id);
     for (const auto& edge : edges) {
       if (edge.IsCharRange()) {
         for (int c = edge.min; c <= edge.max; ++c) {
@@ -661,6 +699,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   grammar->allow_empty_rule_ids = AllowEmptyRuleAnalyzer::Apply(compiled_grammar_impl->grammar);
   RepetitionNormalizer::Apply(&compiled_grammar_impl->grammar);
   GrammarFSMBuilder::Apply(&compiled_grammar_impl->grammar);
+  GrammarFSMHasher::Apply(&compiled_grammar_impl->grammar);
   if (tokenizer_info_.GetVocabSize() == 0) {
     return CompiledGrammar(compiled_grammar_impl);
   }
@@ -682,7 +721,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   }
 
   auto add_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
-    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state, false);
+    auto grammar_matcher =
+        GrammarMatcherForTokenMaskCache(grammar, state, tokenizer_info_.GetTokenizerHash(), false);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),
         tokenizer_info_.GetSortedDecodedVocab(),
