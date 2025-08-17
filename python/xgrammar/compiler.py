@@ -52,6 +52,9 @@ class CompiledGrammar(XGRObject):
         """
         return self._handle.serialize_json()
 
+    def print_cache(self) -> None:
+        self._handle.print_cache()
+
     @staticmethod
     def deserialize_json(json_str: str, tokenizer_info: TokenizerInfo) -> "CompiledGrammar":
         """Deserialize the compiled grammar from a JSON string and associate it with the specified
