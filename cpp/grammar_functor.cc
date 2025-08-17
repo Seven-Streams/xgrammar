@@ -2227,6 +2227,12 @@ bool CrossingCacheManager::CrossingCacheManagerImpl::AddCache(
   return true;
 }
 
+void CrossingCacheManager::CrossingCacheManagerImpl::ClearCache() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  cache_.clear();
+  cache_list_.clear();
+}
+
 /*************************** Forward grammar functors to their impl ***************************/
 
 Grammar GrammarNormalizer::Apply(const Grammar& grammar) {

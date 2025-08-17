@@ -406,6 +406,8 @@ class CrossingCacheManager {
     XGRAMMAR_CHECK(max_cache_size != 0);
   }
 
+  void ClearCache() { crossing_cache_manager_impl_.ClearCache(); }
+
  private:
   class CrossingCacheManagerImpl {
    public:
@@ -425,6 +427,8 @@ class CrossingCacheManager {
         AdaptiveTokenMask&& token_mask
     );
     CrossingCacheManagerImpl(size_t max_cache_size = 10000) : max_cache_size_(max_cache_size) {}
+
+    void ClearCache();
 
    private:
     std::mutex mutex_;
