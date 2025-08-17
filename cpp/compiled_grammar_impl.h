@@ -17,6 +17,7 @@
 
 #include "earley_parser.h"
 #include "support/dynamic_bitset.h"
+#include "support/logging.h"
 #include "support/reflection.h"
 #include "xgrammar/compiler.h"
 #include "xgrammar/exception.h"
@@ -121,6 +122,12 @@ class CompiledGrammar::Impl {
   Grammar GetGrammar() const { return grammar; }
 
   TokenizerInfo GetTokenizerInfo() const { return tokenizer_info; }
+
+  void PrintCache() const {
+    for (const auto& [state, mask] : adaptive_token_mask_cache) {
+      XGRAMMAR_LOG(INFO) << "State: " << state << "\nMask: " << mask.Print(tokenizer_info) << "\n";
+    }
+  }
 
   friend struct member_trait<Impl>;
   friend picojson::value SerializeJSONValue(const Impl& impl);

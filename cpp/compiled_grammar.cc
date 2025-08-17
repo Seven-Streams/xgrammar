@@ -218,6 +218,8 @@ TokenizerInfo CompiledGrammar::GetTokenizerInfo() const { return pimpl_->GetToke
 /*! \brief Return the serialized JSON string of the compiled grammar. */
 std::string CompiledGrammar::SerializeJSON() const { return AutoSerializeJSON(*this, true); }
 
+void CompiledGrammar::PrintCache() const { pimpl_->PrintCache(); }
+
 /*! \brief Deserialize a compiled grammar from a JSON string and tokenizer info. */
 std::variant<CompiledGrammar, SerializationError> CompiledGrammar::DeserializeJSON(
     const std::string& json_string, const TokenizerInfo& tokenizer_info
