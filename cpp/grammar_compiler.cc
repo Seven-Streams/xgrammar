@@ -110,10 +110,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
    * \param first_char_mask The first character mask.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
    * no uncertain tokens. Useful for the root rule.
-   * \returns True if the rejected indices are filled as usual, False otherwise.
-   * It's used to determine which construction function will be used.
    */
-  bool GetTokenMaskWithFirstCharacterCheck(
+  void GetTokenMaskWithFirstCharacterCheck(
       const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
       const std::bitset<256>& first_char_mask,
       const std::vector<int>& subtree_nodes_range,
@@ -318,7 +316,7 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
   return {can_be_applied, speculative_mask};
 }
 
-bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
+void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::bitset<256>& first_char_mask,
     const std::vector<int>& subtree_nodes_range,
@@ -331,14 +329,10 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int possible_token_num =
       GetPossibleTokenIntervals(sorted_decoded_vocab, first_char_mask, possible_intervals);
 
-  // Check if the type of the mask can be krejected.
-  bool fill_reject_indices =
-      (sorted_decoded_vocab.size() - possible_token_num) < AdaptiveTokenMask::USE_BITSET_THRESHOLD;
-
   XGRAMMAR_DCHECK(possible_intervals.size() > 0)
       << "There should be at least one possible interval for the first character mask.";
 
-  if (possible_intervals[0].first != 0 && fill_reject_indices) {
+  if (possible_intervals[0].first != 0) {
     for (int i = 0; i < possible_intervals[0].first; ++i) {
       tmp_rejected_indices_.push_back(i);
     }
@@ -365,15 +359,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       // Check if the current token is in the rejected range. i.e. check if the current token
       // is on the subtree of the rejected token.
       if (i < last_rejected_range) {
-        if (fill_reject_indices) {
-          tmp_rejected_indices_.push_back(i);
-          fill_reject_indices =
-              tmp_rejected_indices_.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD
-                  ? false
-                  : fill_reject_indices;
-        } else {
-          i = last_rejected_range - 1;
-        }
+        tmp_rejected_indices_.push_back(i);
         continue;
       }
 
@@ -452,29 +438,21 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         }
       } else {
         tmp_rejected_indices_.push_back(i);
-        fill_reject_indices =
-            tmp_rejected_indices_.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD
-                ? false
-                : fill_reject_indices;
         last_rejected_range = subtree_nodes_range[i];
       }
     }
-    if (interval_idx != possible_intervals.size() - 1 && fill_reject_indices) {
+    if (interval_idx != possible_intervals.size() - 1) {
       const auto& next_interval = possible_intervals[interval_idx + 1];
       for (int i = interval.second; i < next_interval.first; ++i) {
         tmp_rejected_indices_.push_back(i);
       }
-      fill_reject_indices = tmp_rejected_indices_.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD
-                                ? false
-                                : fill_reject_indices;
     }
   }
 
   // Rollback the last matched part.
   PopLastStates(prev_matched_size);
 
-  if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size()) &&
-      fill_reject_indices) {
+  if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size())) {
     // If the last interval is not closed, we need to reject the rest tokens.
     for (int i = possible_intervals.back().second;
          i < static_cast<int>(sorted_decoded_vocab.size());
@@ -482,8 +460,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       tmp_rejected_indices_.push_back(i);
     }
   }
-
-  return fill_reject_indices;
 }
 
 void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& first_character_mask
@@ -589,7 +565,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   std::bitset<256> first_character_mask;
   GetFirstCharacterMask(first_character_mask);
 
-  bool rejected_indices_are_filled = GetTokenMaskWithFirstCharacterCheck(
+  GetTokenMaskWithFirstCharacterCheck(
       sorted_decoded_vocab,
       first_character_mask,
       subtree_nodes_range,
@@ -597,61 +573,43 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
       crossing_cache_is_available,
       crossing_cache
   );
-  if (rejected_indices_are_filled) {
-    auto return_value = AdaptiveTokenMask(
-        vocab_size,
-        sorted_decoded_vocab,
-        tmp_accepted_indices_,
-        tmp_rejected_indices_,
-        tmp_uncertain_indices_
+
+  auto return_value = AdaptiveTokenMask(
+      vocab_size,
+      sorted_decoded_vocab,
+      tmp_accepted_indices_,
+      tmp_rejected_indices_,
+      tmp_uncertain_indices_
+  );
+  if (crossing_cache_is_available && crossing_cache == std::nullopt) {
+    // We can add a cache.
+    // All the tokens rejected by lookahead should be uncertain.
+    IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
+    std::vector<int32_t> rejected_indices_without_lookahead;
+    rejected_indices_without_lookahead.reserve(
+        tmp_rejected_indices_.size() - tmp_rejected_by_lookahead_indices_.size()
     );
-    if (crossing_cache_is_available && crossing_cache == std::nullopt) {
-      // We can add a cache.
-      // All the tokens rejected by lookahead should be uncertain.
-      IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
-      std::vector<int32_t> rejected_indices_without_lookahead;
-      rejected_indices_without_lookahead.reserve(
-          tmp_rejected_indices_.size() - tmp_rejected_by_lookahead_indices_.size()
-      );
-      std::set_difference(
-          tmp_rejected_indices_.begin(),
-          tmp_rejected_indices_.end(),
-          tmp_rejected_by_lookahead_indices_.begin(),
-          tmp_rejected_by_lookahead_indices_.end(),
-          std::back_inserter(rejected_indices_without_lookahead)
-      );
-      crossing_cache_manager_.AddCache(
-          fsm_hash,
-          new_state_id,
-          tokenizer_hash_,
-          AdaptiveTokenMask(
-              vocab_size,
-              sorted_decoded_vocab,
-              tmp_accepted_indices_,
-              rejected_indices_without_lookahead,
-              tmp_uncertain_indices_
-          )
-      );
-    }
-    return return_value;
-  } else {
-    auto return_value = AdaptiveTokenMask(
-        vocab_size, sorted_decoded_vocab, tmp_accepted_indices_, tmp_uncertain_indices_
+    std::set_difference(
+        tmp_rejected_indices_.begin(),
+        tmp_rejected_indices_.end(),
+        tmp_rejected_by_lookahead_indices_.begin(),
+        tmp_rejected_by_lookahead_indices_.end(),
+        std::back_inserter(rejected_indices_without_lookahead)
     );
-    if (crossing_cache_is_available && crossing_cache == std::nullopt) {
-      IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
-      crossing_cache_manager_.AddCache(
-          fsm_hash,
-          new_state_id,
-          tokenizer_hash_,
-          AdaptiveTokenMask(
-              vocab_size, sorted_decoded_vocab, tmp_accepted_indices_, tmp_uncertain_indices_
-          )
-      );
-      ;
-    }
-    return return_value;
+    crossing_cache_manager_.AddCache(
+        fsm_hash,
+        new_state_id,
+        tokenizer_hash_,
+        AdaptiveTokenMask(
+            vocab_size,
+            sorted_decoded_vocab,
+            tmp_accepted_indices_,
+            rejected_indices_without_lookahead,
+            tmp_uncertain_indices_
+        )
+    );
   }
+  return return_value;
 }
 
 void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
@@ -664,15 +622,11 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
   const std::string* prev_token = nullptr;
   int prev_matched_size = 0;
   int last_rejected_range = 0;
-  int last_uncertain_range = 0;
   for (const auto& uncertain_index : cache.uncertain_indices) {
     const auto& token = sorted_decoded_vocab[uncertain_index].second;
     // Many tokens may contain the same prefix, so we will avoid unnecessary matching
     // by finding the longest common prefix with the previous token.
     bool accepted = true;
-    if (uncertain_index < last_uncertain_range) {
-      continue;
-    }
     if (uncertain_index < last_rejected_range) {
       tmp_rejected_indices_.push_back(uncertain_index);
       continue;
@@ -725,7 +679,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
 
     if (can_reach_end && !is_root_rule &&
         IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) && prev_matched_size > 0) {
-      last_uncertain_range = subtree_nodes_range[uncertain_index];
+      continue;
     } else {
       tmp_rejected_indices_.push_back(uncertain_index);
       last_rejected_range = subtree_nodes_range[uncertain_index];
@@ -741,15 +695,28 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
       tmp_rejected_indices_.end(),
       std::back_inserter(tmp_uncertain_indices_)
   );
-  cache.uncertain_indices = tmp_uncertain_indices_;
 
   switch (cache.store_type) {
-    case AdaptiveTokenMask::StoreType::kAccepted:
+    case AdaptiveTokenMask::StoreType::kAccepted: {
+      // Rejected tokens will be more. So it's still kAccepted.
+      cache.uncertain_indices = tmp_uncertain_indices_;
+      break;
+    }
     case AdaptiveTokenMask::StoreType::kAcceptedBitset: {
+      // Rejected tokens will be more. So it's still kAcceptedBitset.
+      cache.uncertain_indices = tmp_uncertain_indices_;
       break;
     }
     case AdaptiveTokenMask::StoreType::kRejected: {
+      // Thus, rejected tokens will be more. We need to re-check its type.
       IntsetUnion(&cache.rejected_indices, tmp_rejected_indices_);
+      cache = AdaptiveTokenMask(
+          vocab_size,
+          sorted_decoded_vocab,
+          std::move(cache.accepted_indices),
+          std::move(cache.rejected_indices),
+          tmp_uncertain_indices_
+      );
       break;
     }
     default: {
