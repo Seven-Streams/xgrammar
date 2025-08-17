@@ -72,6 +72,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       bool is_root_rule
   );
 
+  static void ClearCache() { crossing_cache_manager_.ClearCache(); }
+
  private:
   /*! \brief Check if a token can pass the lookahead assertion. */
   bool IsTokenPassLookaheadAssertion(
@@ -454,6 +456,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
             tmp_rejected_indices_.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD
                 ? false
                 : fill_reject_indices;
+        last_rejected_range = subtree_nodes_range[i];
       }
     }
     if (interval_idx != possible_intervals.size() - 1 && fill_reject_indices) {
@@ -660,17 +663,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
 ) {
   const std::string* prev_token = nullptr;
   int prev_matched_size = 0;
-  int last_reject_range = 0;
-  int last_uncertain_range = 0;
   for (const auto& uncertain_index : cache.uncertain_indices) {
-    if (uncertain_index < last_reject_range) {
-      tmp_rejected_indices_.push_back(uncertain_index);
-      continue;
-    }
-    if (uncertain_index < last_uncertain_range) {
-      // If the uncertain index is already processed, we can skip it.
-      continue;
-    }
     const auto& token = sorted_decoded_vocab[uncertain_index].second;
     // Many tokens may contain the same prefix, so we will avoid unnecessary matching
     // by finding the longest common prefix with the previous token.
@@ -723,10 +716,9 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
 
     if (can_reach_end && !is_root_rule &&
         IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) && prev_matched_size > 0) {
-      last_uncertain_range = subtree_nodes_range[uncertain_index] + 1;
+      continue;
     } else {
       tmp_rejected_indices_.push_back(uncertain_index);
-      last_reject_range = subtree_nodes_range[uncertain_index] + 1;
     }
   }
 
@@ -1050,6 +1042,7 @@ CompiledGrammar GrammarCompiler::Impl::CompileGrammar(const Grammar& grammar) {
 void GrammarCompiler::Impl::ClearCache() {
   compile_builtin_json_grammar_cache_.Clear();
   compile_cache_.Clear();
+  GrammarMatcherForTokenMaskCache::ClearCache();
 }
 
 long long GrammarCompiler::Impl::GetCacheSizeBytes() const {
