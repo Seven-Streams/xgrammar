@@ -2697,16 +2697,17 @@ Result<JSONSchemaConverter::ObjectSpec, SchemaError> JSONSchemaConverter::ParseO
     property_names_obj["type"] = picojson::value("string");
   }
 
-  if (schema.count("additionalProperties") && (!schema.at("additionalProperties").is<bool>() ||
-                                               schema.at("additionalProperties").get<bool>())) {
-    additional_properties_schema = schema.at("additionalProperties");
-    allow_additional_properties = true;
-  } else {
-    allow_additional_properties = false;
-  }
-
   if (schema.count("additionalProperties")) {
+    if ((!schema.at("additionalProperties").is<bool>() ||
+         schema.at("additionalProperties").get<bool>())) {
+      additional_properties_schema = schema.at("additionalProperties");
+      allow_additional_properties = true;
+    } else {
+      allow_additional_properties = false;
+    }
     allow_unevaluated_properties = allow_additional_properties;
+  } else {
+    additional_properties_schema = picojson::value(true);
   }
 
   // Here we ignore the effect of unevaluatedProperties after setting additionalProperties
