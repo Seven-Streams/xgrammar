@@ -441,14 +441,15 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
-      } else if (can_reach_end && !is_root_rule &&
-                 IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) &&
-                 prev_matched_size > 0) {
-        tmp_uncertain_indices_.push_back(i);
-
+      } else if (can_reach_end && !is_root_rule && prev_matched_size > 0) {
+        if (IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
+          tmp_uncertain_indices_.push_back(i);
+        } else {
+          tmp_rejected_indices_.push_back(i);
+          tmp_rejected_by_lookahead_indices_.push_back(i);
+        }
       } else {
         tmp_rejected_indices_.push_back(i);
-        tmp_rejected_by_lookahead_indices_.push_back(i);
         fill_reject_indices =
             tmp_rejected_indices_.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD
                 ? false
