@@ -533,6 +533,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   const auto& original_to_new_id = grammar_->per_rule_fsm_new_state_ids[init_rule_id_];
   uint64_t fsm_hash = -1;
   uint32_t new_state_id = -1;
+  int lookahead_id = grammar_->GetRule(initial_state_.rule_id).lookahead_assertion_id;
+  auto lookahead_hash = grammar_->HashSequence(lookahead_id);
   if (crossing_cache_is_available) {
     fsm_hash = grammar_->per_rule_fsm_hashes[init_rule_id_].value();
     auto get_new_state_id = std::find_if(
@@ -544,6 +546,17 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
     );
     XGRAMMAR_DCHECK(get_new_state_id != original_to_new_id->end());
     new_state_id = get_new_state_id->second;
+    if (lookahead_hash.has_value()) {
+      crossing_cache = crossing_cache_manager_.GetCache(
+          HashCombine64Bits(fsm_hash, lookahead_hash.value()),
+          new_state_id,
+          tokenizer_info_.GetTokenizerHash()
+      );
+      if (crossing_cache.has_value()) {
+        // A perfect match.
+        return crossing_cache.value();
+      }
+    }
     crossing_cache = crossing_cache_manager_.GetCache(
         fsm_hash, new_state_id, tokenizer_info_.GetTokenizerHash()
     );
@@ -569,7 +582,15 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
         tmp_uncertain_indices_
     );
     if (crossing_cache_is_available) {
-      // We can add a cache.
+      if (lookahead_id == -1 && !is_root_rule) {
+        // If the rule doesn't have a lookahead, then it is exactly the same fsm.
+        crossing_cache_manager_.AddCache(
+            fsm_hash, new_state_id, tokenizer_info_.GetTokenizerHash(), return_value
+        );
+        return return_value;
+      }
+
+      // We can add a cache for basic fsm, and a better one for lookahead.
       // All the tokens rejected by lookahead should be uncertain.
       IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
       std::vector<int32_t> rejected_indices_without_lookahead;
@@ -595,6 +616,14 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
               tmp_uncertain_indices_
           )
       );
+      if (lookahead_hash.has_value()) {
+        crossing_cache_manager_.AddCache(
+            HashCombine64Bits(fsm_hash, lookahead_hash.value()),
+            new_state_id,
+            tokenizer_info_.GetTokenizerHash(),
+            return_value
+        );
+      }
     }
     return return_value;
   } else {
@@ -607,6 +636,15 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
 
     if (crossing_cache_is_available) {
       // Prepare for cache.
+      if (lookahead_id == -1 && !is_root_rule) {
+        // If the rule doesn't have a lookahead, then it is exactly the same fsm.
+        crossing_cache_manager_.AddCache(
+            fsm_hash, new_state_id, tokenizer_info_.GetTokenizerHash(), return_value
+        );
+        return return_value;
+      }
+
+      // Add 2 caches.
       IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
       crossing_cache_manager_.AddCache(
           fsm_hash,
@@ -619,6 +657,15 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
               tmp_uncertain_indices_
           )
       );
+
+      if (lookahead_hash.has_value()) {
+        crossing_cache_manager_.AddCache(
+            HashCombine64Bits(fsm_hash, lookahead_hash.value()),
+            new_state_id,
+            tokenizer_info_.GetTokenizerHash(),
+            return_value
+        );
+      }
     }
     return return_value;
   }
@@ -633,74 +680,79 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   int last_uncertain_range = 0;
-  for (const auto& uncertain_index : cache.uncertain_indices) {
-    const auto& token = sorted_decoded_vocab[uncertain_index].second;
-    // Many tokens may contain the same prefix, so we will avoid unnecessary matching
-    // by finding the longest common prefix with the previous token.
-    bool accepted = true;
-    if (uncertain_index < last_rejected_range) {
-      tmp_rejected_indices_.push_back(uncertain_index);
-      continue;
-    }
-    if (uncertain_index < last_uncertain_range) {
-      // This token is already marked as uncertain.
-      continue;
-    }
-    if (prev_token != nullptr) {
-      int lcp_len =
-          std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end()).first -
-          token.begin();
-      if (lcp_len > prev_matched_size) {
-        // Case 1. The common prefix is rejected by the matcher in the last token. Reject
-        // directly.
-        accepted = false;
-      } else if (lcp_len < prev_matched_size) {
-        // Case 2. The common prefix is shorter than the previous matched size. Rollback
-        // the non-common part.
-        PopLastStates(prev_matched_size - lcp_len);
-        tmp_can_reach_end_stack_.erase(
-            tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
-            tmp_can_reach_end_stack_.end()
-        );
-        tmp_can_reach_end_prefix_or_stack_.erase(
-            tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
-            tmp_can_reach_end_prefix_or_stack_.end()
-        );
+  if (is_root_rule) {
+    tmp_rejected_indices_ = cache.uncertain_indices;
+  } else {
+    for (const auto& uncertain_index : cache.uncertain_indices) {
+      const auto& token = sorted_decoded_vocab[uncertain_index].second;
+      // Many tokens may contain the same prefix, so we will avoid unnecessary matching
+      // by finding the longest common prefix with the previous token.
+      bool accepted = true;
+      if (uncertain_index < last_rejected_range) {
+        tmp_rejected_indices_.push_back(uncertain_index);
+        continue;
       }
-      prev_matched_size = std::min(prev_matched_size, lcp_len);
-    }
-
-    prev_token = &token;
-
-    if (accepted) {
-      // Accept the rest chars one by one.
-      for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
-        if (!Advance(token[j])) {
+      if (uncertain_index < last_uncertain_range) {
+        // This token is already marked as uncertain.
+        continue;
+      }
+      if (prev_token != nullptr) {
+        int lcp_len =
+            std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
+                .first -
+            token.begin();
+        if (lcp_len > prev_matched_size) {
+          // Case 1. The common prefix is rejected by the matcher in the last token. Reject
+          // directly.
           accepted = false;
-          break;
+        } else if (lcp_len < prev_matched_size) {
+          // Case 2. The common prefix is shorter than the previous matched size. Rollback
+          // the non-common part.
+          PopLastStates(prev_matched_size - lcp_len);
+          tmp_can_reach_end_stack_.erase(
+              tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
+              tmp_can_reach_end_stack_.end()
+          );
+          tmp_can_reach_end_prefix_or_stack_.erase(
+              tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
+              tmp_can_reach_end_prefix_or_stack_.end()
+          );
         }
-        tmp_can_reach_end_stack_.push_back(IsCompleted());
-        tmp_can_reach_end_prefix_or_stack_.push_back(
-            tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
-        );
-        prev_matched_size = j + 1;
+        prev_matched_size = std::min(prev_matched_size, lcp_len);
       }
-    }
 
-    bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+      prev_token = &token;
 
-    // All the tokens are at least uncertain!
-    XGRAMMAR_CHECK(!accepted);
-    auto [lookahead_accepted, lookahead_completed] =
-        IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
-    if (can_reach_end && !is_root_rule && prev_matched_size > 0 && lookahead_accepted) {
-      if (lookahead_completed) {
-        last_uncertain_range = subtree_nodes_range[uncertain_index];
+      if (accepted) {
+        // Accept the rest chars one by one.
+        for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
+          if (!Advance(token[j])) {
+            accepted = false;
+            break;
+          }
+          tmp_can_reach_end_stack_.push_back(IsCompleted());
+          tmp_can_reach_end_prefix_or_stack_.push_back(
+              tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
+          );
+          prev_matched_size = j + 1;
+        }
       }
-      continue;
-    } else {
-      tmp_rejected_indices_.push_back(uncertain_index);
-      last_rejected_range = subtree_nodes_range[uncertain_index];
+
+      bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+
+      // All the tokens are at least uncertain!
+      XGRAMMAR_CHECK(!accepted);
+      auto [lookahead_accepted, lookahead_completed] =
+          IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
+      if (can_reach_end && !is_root_rule && prev_matched_size > 0 && lookahead_accepted) {
+        if (lookahead_completed) {
+          last_uncertain_range = subtree_nodes_range[uncertain_index];
+        }
+        continue;
+      } else {
+        tmp_rejected_indices_.push_back(uncertain_index);
+        last_rejected_range = subtree_nodes_range[uncertain_index];
+      }
     }
   }
 
