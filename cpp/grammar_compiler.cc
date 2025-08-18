@@ -27,6 +27,7 @@
 #include "support/thread_safe_cache.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
+#include "xgrammar/tokenizer_info.h"
 
 namespace std {
 
@@ -54,24 +55,19 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   GrammarMatcherForTokenMaskCache(
       const Grammar& grammar,
       const ParserState& init_state,
-      const uint64_t& tokenizer_hash,
+      const TokenizerInfo& tokenizer_info,
       const bool& need_expand = true
   )
       : EarleyParser(grammar, init_state),
         init_rule_id_(init_state.rule_id),
         initial_state_(init_state),
-        tokenizer_hash_(tokenizer_hash) {}
+        tokenizer_info_(tokenizer_info) {}
   /*!
    * \brief Get the adaptive token mask for the given ParserState.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
    * no uncertain tokens. Useful for the root rule.
    */
-  AdaptiveTokenMask GetAdaptiveTokenMask(
-      size_t vocab_size,
-      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-      const std::vector<int32_t>& subtree_nodes_range,
-      bool is_root_rule
-  );
+  AdaptiveTokenMask GetAdaptiveTokenMask(bool is_root_rule);
 
   static void ClearCache() { crossing_cache_manager_.ClearCache(); }
 
@@ -82,13 +78,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   );
 
   /*! \brief Update the cache with lookahead information. */
-  void AdaptCacheWithLookahead(
-      AdaptiveTokenMask& cache,
-      size_t vocab_size,
-      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-      const std::vector<int32_t>& subtree_nodes_range,
-      bool is_root_rule
-  );
+  void AdaptCacheWithLookahead(AdaptiveTokenMask& cache, bool is_root_rule);
 
   /*!
    * \brief Check if speculative calculation will be applied.
@@ -96,9 +86,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
    * \return second: part of the first character mask,
    * which can be used in speculative calculation.
    */
-  std::pair<bool, std::bitset<256>> GetSpeculativeCalculation(
-      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab
-  );
+  std::pair<bool, std::bitset<256>> GetSpeculativeCalculation();
 
   /*!
    * \brief Get the first character mask.
@@ -113,9 +101,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
    * no uncertain tokens. Useful for the root rule.
    */
   void GetTokenMaskWithFirstCharacterCheck(
-      const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
       const std::bitset<256>& first_char_mask,
-      const std::vector<int>& subtree_nodes_range,
       bool is_root_rule,
       bool crossing_cache_is_available,
       const std::optional<std::optional<AdaptiveTokenMask>>& crossing_cache
@@ -127,9 +113,6 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   // The initial state of the parser.
   ParserState initial_state_;
 
-  // The hash value of the tokenizer, used for crossing caching.
-  uint64_t tokenizer_hash_;
-
   // Temporary data for GetAdaptiveTokenMask.
   std::vector<int32_t> tmp_accepted_indices_;
   std::vector<int32_t> tmp_rejected_indices_;
@@ -137,6 +120,8 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   std::vector<int32_t> tmp_rejected_by_lookahead_indices_;
   std::vector<bool> tmp_can_reach_end_stack_;
   std::vector<bool> tmp_can_reach_end_prefix_or_stack_;
+
+  const TokenizerInfo& tokenizer_info_;
 
   /*! \brief A static crossing cache manager, used for better efficiency. */
   static CrossingCacheManager crossing_cache_manager_;
@@ -253,9 +238,7 @@ int GetPossibleTokenIntervals(
   return possible_token_num;
 }
 
-std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativeCalculation(
-    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab
-) {
+std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativeCalculation() {
   using GrammarExprType = Grammar::Impl::GrammarExprType;
   // Check if the initial state is self-recursive-like. If the state is self-recursive-like,
   // and it covers a large part of the vocabulary, we will do speculative calculation in compiling.
@@ -318,13 +301,13 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
 }
 
 void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
-    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
     const std::bitset<256>& first_char_mask,
-    const std::vector<int>& subtree_nodes_range,
     bool is_root_rule,
     bool crossing_cache_is_available,
     const std::optional<std::optional<AdaptiveTokenMask>>& crossing_cache
 ) {
+  const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
+  const auto& subtree_nodes_range = tokenizer_info_.GetTrieSubtreeNodesRange();
   // the pair (a, b) means [a, b). Intialize the possible intervals.
   std::vector<std::pair<int32_t, int32_t>> possible_intervals;
   int possible_token_num =
@@ -343,12 +326,11 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   std::bitset<256> speculative_mask;
   if (init_rule_id_ == -1 || !grammar_->per_rule_fsms[init_rule_id_].has_value()) {
     speculative_calculation =
-        GetSpeculativeCalculation(sorted_decoded_vocab).first &&
+        GetSpeculativeCalculation().first &&
         (possible_token_num >= static_cast<int>(sorted_decoded_vocab.size() / 4));
     speculative_mask = first_char_mask;
   } else {
-    std::tie(speculative_calculation, speculative_mask) =
-        GetSpeculativeCalculation(sorted_decoded_vocab);
+    std::tie(speculative_calculation, speculative_mask) = GetSpeculativeCalculation();
   }
 
   int prev_matched_size = 0;
@@ -514,12 +496,7 @@ void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& fi
   }
 }
 
-AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
-    size_t vocab_size,
-    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-    const std::vector<int32_t>& subtree_nodes_range,
-    bool is_root_rule
-) {
+AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_root_rule) {
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
@@ -548,17 +525,13 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     );
     XGRAMMAR_DCHECK(get_new_state_id != original_to_new_id->end());
     new_state_id = get_new_state_id->second;
-    crossing_cache = crossing_cache_manager_.GetCache(fsm_hash, new_state_id, tokenizer_hash_);
+    crossing_cache = crossing_cache_manager_.GetCache(
+        fsm_hash, new_state_id, tokenizer_info_.GetTokenizerHash()
+    );
     // If the rule doesn't have a lookahead, then it is exactly the same fsm.
     if (crossing_cache.has_value()) {
       if (grammar_->GetRule(init_rule_id_).lookahead_assertion_id != -1) {
-        AdaptCacheWithLookahead(
-            crossing_cache.value(),
-            vocab_size,
-            sorted_decoded_vocab,
-            subtree_nodes_range,
-            is_root_rule
-        );
+        AdaptCacheWithLookahead(crossing_cache.value(), is_root_rule);
       }
       return std::move(crossing_cache.value());
     }
@@ -567,17 +540,12 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   GetFirstCharacterMask(first_character_mask);
 
   GetTokenMaskWithFirstCharacterCheck(
-      sorted_decoded_vocab,
-      first_character_mask,
-      subtree_nodes_range,
-      is_root_rule,
-      crossing_cache_is_available,
-      crossing_cache
+      first_character_mask, is_root_rule, crossing_cache_is_available, crossing_cache
   );
 
   auto return_value = AdaptiveTokenMask(
-      vocab_size,
-      sorted_decoded_vocab,
+      tokenizer_info_.GetVocabSize(),
+      tokenizer_info_.GetSortedDecodedVocab(),
       tmp_accepted_indices_,
       tmp_rejected_indices_,
       tmp_uncertain_indices_
@@ -600,10 +568,10 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     crossing_cache_manager_.AddCache(
         fsm_hash,
         new_state_id,
-        tokenizer_hash_,
+        tokenizer_info_.GetTokenizerHash(),
         AdaptiveTokenMask(
-            vocab_size,
-            sorted_decoded_vocab,
+            tokenizer_info_.GetVocabSize(),
+            tokenizer_info_.GetSortedDecodedVocab(),
             tmp_accepted_indices_,
             rejected_indices_without_lookahead,
             tmp_uncertain_indices_
@@ -614,12 +582,10 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
 }
 
 void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
-    AdaptiveTokenMask& cache,
-    size_t vocab_size,
-    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
-    const std::vector<int32_t>& subtree_nodes_range,
-    bool is_root_rule
+    AdaptiveTokenMask& cache, bool is_root_rule
 ) {
+  const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
+  const auto& subtree_nodes_range = tokenizer_info_.GetTrieSubtreeNodesRange();
   const std::string* prev_token = nullptr;
   int prev_matched_size = 0;
   int last_rejected_range = 0;
@@ -711,13 +677,19 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
       if (cache.rejected_indices.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD) {
         // In this case, we need to switch to bitset representation.
         cache.store_type = AdaptiveTokenMask::StoreType::kAcceptedBitset;
-        cache.accepted_bitset = DynamicBitset(vocab_size);
+        cache.accepted_bitset = DynamicBitset(tokenizer_info_.GetVocabSize());
         cache.accepted_bitset.Set();
         for (const auto& reject_index : cache.rejected_indices) {
           cache.accepted_bitset.Reset(sorted_decoded_vocab[reject_index].first);
         }
         for (const auto& uncertain_index : cache.uncertain_indices) {
           cache.accepted_bitset.Reset(sorted_decoded_vocab[uncertain_index].first);
+        }
+        for (const auto& stop_id : tokenizer_info_.GetStopTokenIds()) {
+          cache.accepted_bitset.Reset(stop_id);
+        }
+        for (const auto& special_id : tokenizer_info_.GetSpecialTokenIds()) {
+          cache.accepted_bitset.Reset(special_id);
         }
         cache.rejected_indices.clear();
       }
@@ -854,14 +826,8 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   }
 
   auto add_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
-    auto grammar_matcher =
-        GrammarMatcherForTokenMaskCache(grammar, state, tokenizer_info_.GetTokenizerHash(), false);
-    auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
-        tokenizer_info_.GetVocabSize(),
-        tokenizer_info_.GetSortedDecodedVocab(),
-        tokenizer_info_.GetTrieSubtreeNodesRange(),
-        is_root_rule
-    );
+    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state, tokenizer_info_, false);
+    auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(is_root_rule);
     if (max_threads_ > 1) {
       std::lock_guard<std::mutex> lock(adaptive_token_mask_cache_mutex.value());
       compiled_grammar_impl->adaptive_token_mask_cache[state] = cur_adaptive_token_mask_cache;
