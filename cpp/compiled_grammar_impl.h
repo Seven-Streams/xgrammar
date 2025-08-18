@@ -80,6 +80,8 @@ struct AdaptiveTokenMask {
 
   std::string Print(const TokenizerInfo& tokenizer_info) const;
 
+  std::string Print(const std::vector<std::pair<int, std::string>>& sorted_decoded_vocab) const;
+
   friend std::size_t MemorySize(const AdaptiveTokenMask& mask) {
     return MemorySize(mask.uncertain_indices) + MemorySize(mask.accepted_indices) +
            MemorySize(mask.rejected_indices) + MemorySize(mask.accepted_bitset);

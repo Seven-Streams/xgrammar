@@ -20,6 +20,7 @@
 #include "fsm.h"
 #include "grammar_functor.h"
 #include "grammar_impl.h"
+#include "support/dynamic_bitset.h"
 #include "support/int_set.h"
 #include "support/logging.h"
 #include "support/thread_pool.h"
@@ -696,27 +697,30 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
       std::back_inserter(tmp_uncertain_indices_)
   );
 
+  cache.uncertain_indices = tmp_uncertain_indices_;
   switch (cache.store_type) {
-    case AdaptiveTokenMask::StoreType::kAccepted: {
-      // Rejected tokens will be more. So it's still kAccepted.
-      cache.uncertain_indices = tmp_uncertain_indices_;
-      break;
-    }
+    case AdaptiveTokenMask::StoreType::kAccepted:
     case AdaptiveTokenMask::StoreType::kAcceptedBitset: {
-      // Rejected tokens will be more. So it's still kAcceptedBitset.
-      cache.uncertain_indices = tmp_uncertain_indices_;
+      // Rejected tokens will be more. So it's still kAcceptedBitset or kAccept.
       break;
     }
     case AdaptiveTokenMask::StoreType::kRejected: {
       // Thus, rejected tokens will be more. We need to re-check its type.
       IntsetUnion(&cache.rejected_indices, tmp_rejected_indices_);
-      cache = AdaptiveTokenMask(
-          vocab_size,
-          sorted_decoded_vocab,
-          std::move(cache.accepted_indices),
-          std::move(cache.rejected_indices),
-          tmp_uncertain_indices_
-      );
+
+      if (cache.rejected_indices.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD) {
+        // In this case, we need to switch to bitset representation.
+        cache.store_type = AdaptiveTokenMask::StoreType::kAcceptedBitset;
+        cache.accepted_bitset = DynamicBitset(vocab_size);
+        cache.accepted_bitset.Set();
+        for (const auto& reject_index : cache.rejected_indices) {
+          cache.accepted_bitset.Reset(reject_index);
+        }
+        for (const auto& uncertain_index : cache.uncertain_indices) {
+          cache.accepted_bitset.Reset(uncertain_index);
+        }
+        cache.rejected_indices.clear();
+      }
       break;
     }
     default: {

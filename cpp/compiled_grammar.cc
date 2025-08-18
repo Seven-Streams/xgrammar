@@ -5,6 +5,9 @@
 
 #include <xgrammar/compiler.h>
 
+#include <utility>
+#include <vector>
+
 #include "compiled_grammar_impl.h"
 #include "support/json_serializer.h"
 #include "testing.h"
@@ -155,10 +158,116 @@ std::string AdaptiveTokenMask::Print(const TokenizerInfo& tokenizer_info) const 
   }
   std::sort(uncertain_token_ids.begin(), uncertain_token_ids.end());
 
-  ss << "accepted=" << PrintTokenByIds(accepted_token_ids, tokenizer_info, kMaxPrintTokens)
-     << ",\nrejected=" << PrintTokenByIds(rejected_token_ids, tokenizer_info, kMaxPrintTokens)
-     << ",\nuncertain=" << PrintTokenByIds(uncertain_token_ids, tokenizer_info, kMaxPrintTokens)
+  ss << "accepted="
+     << PrintTokenByIds(
+            accepted_token_ids, tokenizer_info->GetSortedDecodedVocab(), kMaxPrintTokens
+        )
+     << ",\nrejected="
+     << PrintTokenByIds(
+            rejected_token_ids, tokenizer_info->GetSortedDecodedVocab(), kMaxPrintTokens
+        )
+     << ",\nuncertain="
+     << PrintTokenByIds(
+            uncertain_token_ids, tokenizer_info->GetSortedDecodedVocab(), kMaxPrintTokens
+        )
      << "\n)";
+  return ss.str();
+}
+
+std::string AdaptiveTokenMask::Print(
+    const std::vector<std::pair<int, std::string>>& sorted_decoded_vocab
+) const {
+  constexpr int kMaxPrintTokens = 100;
+  std::stringstream ss;
+  std::vector<int32_t> accepted_indices;
+  std::vector<int32_t> rejected_indices;
+  std::unordered_set<int32_t> uncertain_indices_set(
+      uncertain_indices.begin(), uncertain_indices.end()
+  );
+
+  accepted_indices.reserve(sorted_decoded_vocab.size());
+  rejected_indices.reserve(sorted_decoded_vocab.size());
+
+  if (store_type == StoreType::kAcceptedBitset) {
+    for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
+      if (uncertain_indices_set.count(i)) {
+        continue;
+      }
+      if (accepted_bitset[i]) {
+        accepted_indices.push_back(i);
+      } else {
+        rejected_indices.push_back(i);
+      }
+    }
+  } else if (store_type == StoreType::kAccepted) {
+    accepted_indices = this->accepted_indices;
+    // Reject indices = [0, sorted_decoded_vocab.size()) \ accepted_indices \ uncertain_indices
+    int acc_ptr = 0;
+    for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
+      while (acc_ptr < static_cast<int>(accepted_indices.size()) && accepted_indices[acc_ptr] < i) {
+        ++acc_ptr;
+      }
+      if (acc_ptr < static_cast<int>(accepted_indices.size()) && accepted_indices[acc_ptr] == i) {
+        continue;
+      }
+      if (uncertain_indices_set.count(i)) {
+        continue;
+      }
+      rejected_indices.push_back(i);
+    }
+  } else {
+    XGRAMMAR_DCHECK(store_type == StoreType::kRejected);
+    rejected_indices = this->rejected_indices;
+    // Accepted indices = [0, sorted_decoded_vocab.size()) \ rejected_indices \ uncertain_indices
+    int rej_ptr = 0;
+    for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
+      while (rej_ptr < static_cast<int>(rejected_indices.size()) && rejected_indices[rej_ptr] < i) {
+        ++rej_ptr;
+      }
+      if (rej_ptr < static_cast<int>(rejected_indices.size()) && rejected_indices[rej_ptr] == i) {
+        continue;
+      }
+      if (uncertain_indices_set.count(i)) {
+        continue;
+      }
+      accepted_indices.push_back(i);
+    }
+  }
+
+  std::string storage_type_str = store_type == StoreType::kAcceptedBitset ? "AcceptedBitset"
+                                 : store_type == StoreType::kAccepted     ? "Accepted"
+                                                                          : "Rejected";
+
+  ss << "AdaptiveTokenMask(num_tokens=" << sorted_decoded_vocab.size()
+     << ", accepted_num=" << accepted_indices.size() << ", rejected_num=" << rejected_indices.size()
+     << ", uncertain_num=" << uncertain_indices.size() << ", storage_type=" << storage_type_str
+     << ",\n";
+
+  // Convert indices to token ids for printing
+  std::vector<int32_t> accepted_token_ids;
+  std::vector<int32_t> rejected_token_ids;
+  std::vector<int32_t> uncertain_token_ids;
+  accepted_token_ids.reserve(accepted_indices.size());
+  rejected_token_ids.reserve(rejected_indices.size());
+  uncertain_token_ids.reserve(uncertain_indices.size());
+
+  for (auto idx : accepted_indices) {
+    accepted_token_ids.push_back(sorted_decoded_vocab[idx].first);
+  }
+  std::sort(accepted_token_ids.begin(), accepted_token_ids.end());
+  for (auto idx : rejected_indices) {
+    rejected_token_ids.push_back(sorted_decoded_vocab[idx].first);
+  }
+  std::sort(rejected_token_ids.begin(), rejected_token_ids.end());
+  for (auto idx : uncertain_indices) {
+    uncertain_token_ids.push_back(sorted_decoded_vocab[idx].first);
+  }
+  std::sort(uncertain_token_ids.begin(), uncertain_token_ids.end());
+
+  ss << "accepted=" << PrintTokenByIds(accepted_token_ids, sorted_decoded_vocab, kMaxPrintTokens)
+     << ",\nrejected=" << PrintTokenByIds(rejected_token_ids, sorted_decoded_vocab, kMaxPrintTokens)
+     << ",\nuncertain="
+     << PrintTokenByIds(uncertain_token_ids, sorted_decoded_vocab, kMaxPrintTokens) << "\n)";
   return ss.str();
 }
 
