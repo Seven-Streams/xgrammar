@@ -412,8 +412,8 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
-      } else if (can_reach_end && !is_root_rule && prev_matched_size > 0) {
-        if (IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
+      } else if (can_reach_end && prev_matched_size > 0) {
+        if ((!is_root_rule) && IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
           tmp_uncertain_indices_.push_back(i);
         } else {
           tmp_rejected_indices_.push_back(i);
@@ -530,9 +530,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
     );
     // If the rule doesn't have a lookahead, then it is exactly the same fsm.
     if (crossing_cache.has_value()) {
-      if (grammar_->GetRule(init_rule_id_).lookahead_assertion_id != -1) {
-        AdaptCacheWithLookahead(crossing_cache.value(), is_root_rule);
-      }
+      AdaptCacheWithLookahead(crossing_cache.value(), is_root_rule);
       return std::move(crossing_cache.value());
     }
   }

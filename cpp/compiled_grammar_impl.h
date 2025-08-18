@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -126,7 +127,11 @@ class CompiledGrammar::Impl {
   TokenizerInfo GetTokenizerInfo() const { return tokenizer_info; }
 
   void PrintCache() const {
+    std::map<ParserState, AdaptiveTokenMask> output_map;
     for (const auto& [state, mask] : adaptive_token_mask_cache) {
+      output_map[state] = mask;
+    }
+    for (const auto& [state, mask] : output_map) {
       XGRAMMAR_LOG(INFO) << "State: " << state << "\nMask: " << mask.Print(tokenizer_info) << "\n";
     }
   }
