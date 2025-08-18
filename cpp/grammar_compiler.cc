@@ -714,10 +714,10 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
         cache.accepted_bitset = DynamicBitset(vocab_size);
         cache.accepted_bitset.Set();
         for (const auto& reject_index : cache.rejected_indices) {
-          cache.accepted_bitset.Reset(reject_index);
+          cache.accepted_bitset.Reset(sorted_decoded_vocab[reject_index].first);
         }
         for (const auto& uncertain_index : cache.uncertain_indices) {
-          cache.accepted_bitset.Reset(uncertain_index);
+          cache.accepted_bitset.Reset(sorted_decoded_vocab[uncertain_index].first);
         }
         cache.rejected_indices.clear();
       }
