@@ -47,6 +47,28 @@ AdaptiveTokenMask::AdaptiveTokenMask(
   this->uncertain_indices = uncertain_indices;
 }
 
+AdaptiveTokenMask::AdaptiveTokenMask(
+    size_t vocab_size,
+    const std::vector<std::pair<int32_t, std::string>>& sorted_decoded_vocab,
+    const std::vector<int32_t>& accepted_indices,
+    const std::vector<int32_t>& uncertain_indices
+) {
+  auto size_acc = accepted_indices.size();
+
+  store_type = size_acc >= USE_BITSET_THRESHOLD ? StoreType::kAcceptedBitset : StoreType::kAccepted;
+
+  if (store_type == StoreType::kAcceptedBitset) {
+    accepted_bitset = DynamicBitset(vocab_size);
+    for (auto idx : accepted_indices) {
+      accepted_bitset.Set(sorted_decoded_vocab[idx].first, true);
+    }
+  } else {
+    XGRAMMAR_DCHECK(store_type == StoreType::kAccepted);
+    this->accepted_indices = accepted_indices;
+  }
+  this->uncertain_indices = uncertain_indices;
+}
+
 std::string AdaptiveTokenMask::Print(const TokenizerInfo& tokenizer_info) const {
   constexpr int kMaxPrintTokens = 100;
   std::stringstream ss;

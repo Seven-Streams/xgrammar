@@ -73,7 +73,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 
  private:
   /*! \brief Check if a token can pass the lookahead assertion. */
-  bool IsTokenPassLookaheadAssertion(
+  std::pair</*acceptable*/ bool, /*can reach end*/ bool> IsTokenPassLookaheadAssertion(
       const std::string& token, const std::vector<bool>& can_reach_end_stack
   );
 
@@ -100,7 +100,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
    * no uncertain tokens. Useful for the root rule.
    */
-  void GetTokenMaskWithFirstCharacterCheck(
+  bool GetTokenMaskWithFirstCharacterCheck(
       const std::bitset<256>& first_char_mask, bool is_root_rule, bool crossing_cache_is_available
   );
 
@@ -126,12 +126,14 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 
 CrossingCacheManager GrammarMatcherForTokenMaskCache::crossing_cache_manager_;
 
-bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
+std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
     const std::string& token, const std::vector<bool>& can_reach_end_stack
 ) {
   auto lookahead_assertion_id = grammar_->GetRule(init_rule_id_).lookahead_assertion_id;
+  bool accepted_by_lookahead = true;
+  bool lookahead_complete = true;
   if (lookahead_assertion_id == -1) {
-    return true;
+    return {accepted_by_lookahead, lookahead_complete};
   }
   auto lookahead_state =
       ParserState(/*rule_id*/ -1, lookahead_assertion_id, 0, ParserState::kNoPrevInputPos, 0);
@@ -155,20 +157,22 @@ bool GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAssertion(
         // accepted chars: pos - i + 1
         // we need to rollback the pushed initial state as well
         PopLastStates(pos - i + 2);
-        return true;
+        return {accepted_by_lookahead, lookahead_complete};
       }
     }
     // Case 2. The whole token is accepted
     if (last_accept_pos == token_len - 1) {
       PopLastStates(last_accept_pos - i + 2);
-      return true;
+      lookahead_complete = false;
+      return {accepted_by_lookahead, lookahead_complete};
     }
     // Case 3. The token is not accepted. Check the next position.
     PopLastStates(last_accept_pos - i + 1);
   }
 
   PopLastStates(1);
-  return false;
+  accepted_by_lookahead = false;
+  return {accepted_by_lookahead, lookahead_complete};
 }
 
 // Comparator for std::pair<int32_t, std::string> based on the string value.
@@ -297,7 +301,7 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
   return {can_be_applied, speculative_mask};
 }
 
-void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
+bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::bitset<256>& first_char_mask, bool is_root_rule, bool crossing_cache_is_available
 ) {
   const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
@@ -307,15 +311,20 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int possible_token_num =
       GetPossibleTokenIntervals(sorted_decoded_vocab, first_char_mask, possible_intervals);
 
+  // Check if the type of the mask can be rejected.
+  tmp_accepted_indices_.reserve(possible_token_num);
+  tmp_uncertain_indices_.reserve(possible_token_num);
+  bool fill_reject_indices =
+      (sorted_decoded_vocab.size() - possible_token_num) < AdaptiveTokenMask::USE_BITSET_THRESHOLD;
+
   XGRAMMAR_DCHECK(possible_intervals.size() > 0)
       << "There should be at least one possible interval for the first character mask.";
 
-  if (possible_intervals[0].first != 0) {
+  if (possible_intervals[0].first != 0 && fill_reject_indices) {
     for (int i = 0; i < possible_intervals[0].first; ++i) {
       tmp_rejected_indices_.push_back(i);
     }
   }
-
   bool speculative_calculation = false;
   std::bitset<256> speculative_mask;
   if (init_rule_id_ == -1 || !grammar_->per_rule_fsms[init_rule_id_].has_value()) {
@@ -336,7 +345,9 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       // Check if the current token is in the rejected range. i.e. check if the current token
       // is on the subtree of the rejected token.
       if (i < last_rejected_range) {
-        tmp_rejected_indices_.push_back(i);
+        if (fill_reject_indices) {
+          tmp_rejected_indices_.push_back(i);
+        }
         continue;
       }
 
@@ -407,8 +418,16 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
       } else if (can_reach_end && prev_matched_size > 0) {
-        if ((!is_root_rule) && IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
+        auto [lookahead_accepted, lookahead_completed] =
+            IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
+        if ((!is_root_rule) && lookahead_accepted) {
           tmp_uncertain_indices_.push_back(i);
+          if (lookahead_completed) {
+            for (int j = i + 1; j < subtree_nodes_range[i]; j++) {
+              tmp_uncertain_indices_.push_back(j);
+            }
+            i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
+          }
         } else {
           for (int j = i; j < subtree_nodes_range[i]; j++) {
             tmp_rejected_indices_.push_back(j);
@@ -421,7 +440,7 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         last_rejected_range = subtree_nodes_range[i];
       }
     }
-    if (interval_idx != possible_intervals.size() - 1) {
+    if (interval_idx != possible_intervals.size() - 1 && fill_reject_indices) {
       const auto& next_interval = possible_intervals[interval_idx + 1];
       for (int i = interval.second; i < next_interval.first; ++i) {
         tmp_rejected_indices_.push_back(i);
@@ -432,7 +451,8 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   // Rollback the last matched part.
   PopLastStates(prev_matched_size);
 
-  if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size())) {
+  if (possible_intervals.back().second != static_cast<int>(sorted_decoded_vocab.size()) &&
+      fill_reject_indices) {
     // If the last interval is not closed, we need to reject the rest tokens.
     for (int i = possible_intervals.back().second;
          i < static_cast<int>(sorted_decoded_vocab.size());
@@ -440,6 +460,8 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       tmp_rejected_indices_.push_back(i);
     }
   }
+
+  return fill_reject_indices;
 }
 
 void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& first_character_mask
@@ -534,46 +556,72 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   std::bitset<256> first_character_mask;
   GetFirstCharacterMask(first_character_mask);
 
-  GetTokenMaskWithFirstCharacterCheck(
+  bool rejected_filled = GetTokenMaskWithFirstCharacterCheck(
       first_character_mask, is_root_rule, crossing_cache_is_available
   );
 
-  auto return_value = AdaptiveTokenMask(
-      tokenizer_info_.GetVocabSize(),
-      tokenizer_info_.GetSortedDecodedVocab(),
-      tmp_accepted_indices_,
-      tmp_rejected_indices_,
-      tmp_uncertain_indices_
-  );
-  if (crossing_cache_is_available && crossing_cache == std::nullopt) {
-    // We can add a cache.
-    // All the tokens rejected by lookahead should be uncertain.
-    IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
-    std::vector<int32_t> rejected_indices_without_lookahead;
-    rejected_indices_without_lookahead.reserve(
-        tmp_rejected_indices_.size() - tmp_rejected_by_lookahead_indices_.size()
+  if (rejected_filled) {
+    auto return_value = AdaptiveTokenMask(
+        tokenizer_info_.GetVocabSize(),
+        tokenizer_info_.GetSortedDecodedVocab(),
+        tmp_accepted_indices_,
+        tmp_rejected_indices_,
+        tmp_uncertain_indices_
     );
-    std::set_difference(
-        tmp_rejected_indices_.begin(),
-        tmp_rejected_indices_.end(),
-        tmp_rejected_by_lookahead_indices_.begin(),
-        tmp_rejected_by_lookahead_indices_.end(),
-        std::back_inserter(rejected_indices_without_lookahead)
+    if (crossing_cache_is_available) {
+      // We can add a cache.
+      // All the tokens rejected by lookahead should be uncertain.
+      IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
+      std::vector<int32_t> rejected_indices_without_lookahead;
+      rejected_indices_without_lookahead.reserve(
+          tmp_rejected_indices_.size() - tmp_rejected_by_lookahead_indices_.size()
+      );
+      std::set_difference(
+          tmp_rejected_indices_.begin(),
+          tmp_rejected_indices_.end(),
+          tmp_rejected_by_lookahead_indices_.begin(),
+          tmp_rejected_by_lookahead_indices_.end(),
+          std::back_inserter(rejected_indices_without_lookahead)
+      );
+      crossing_cache_manager_.AddCache(
+          fsm_hash,
+          new_state_id,
+          tokenizer_info_.GetTokenizerHash(),
+          AdaptiveTokenMask(
+              tokenizer_info_.GetVocabSize(),
+              tokenizer_info_.GetSortedDecodedVocab(),
+              tmp_accepted_indices_,
+              rejected_indices_without_lookahead,
+              tmp_uncertain_indices_
+          )
+      );
+    }
+    return return_value;
+  } else {
+    auto return_value = AdaptiveTokenMask(
+        tokenizer_info_.GetVocabSize(),
+        tokenizer_info_.GetSortedDecodedVocab(),
+        tmp_accepted_indices_,
+        tmp_uncertain_indices_
     );
-    crossing_cache_manager_.AddCache(
-        fsm_hash,
-        new_state_id,
-        tokenizer_info_.GetTokenizerHash(),
-        AdaptiveTokenMask(
-            tokenizer_info_.GetVocabSize(),
-            tokenizer_info_.GetSortedDecodedVocab(),
-            tmp_accepted_indices_,
-            rejected_indices_without_lookahead,
-            tmp_uncertain_indices_
-        )
-    );
+
+    if (crossing_cache_is_available) {
+      // Prepare for cache.
+      IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
+      crossing_cache_manager_.AddCache(
+          fsm_hash,
+          new_state_id,
+          tokenizer_info_.GetTokenizerHash(),
+          AdaptiveTokenMask(
+              tokenizer_info_.GetVocabSize(),
+              tokenizer_info_.GetSortedDecodedVocab(),
+              tmp_accepted_indices_,
+              tmp_uncertain_indices_
+          )
+      );
+    }
+    return return_value;
   }
-  return return_value;
 }
 
 void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
@@ -640,7 +688,8 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
     XGRAMMAR_CHECK(!accepted);
 
     if (can_reach_end && !is_root_rule &&
-        IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_) && prev_matched_size > 0) {
+        IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_).first &&
+        prev_matched_size > 0) {
       continue;
     } else {
       tmp_rejected_indices_.push_back(uncertain_index);
