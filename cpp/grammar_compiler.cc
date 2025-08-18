@@ -632,6 +632,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
   const std::string* prev_token = nullptr;
   int prev_matched_size = 0;
   int last_rejected_range = 0;
+  int last_uncertain_range = 0;
   for (const auto& uncertain_index : cache.uncertain_indices) {
     const auto& token = sorted_decoded_vocab[uncertain_index].second;
     // Many tokens may contain the same prefix, so we will avoid unnecessary matching
@@ -639,6 +640,10 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
     bool accepted = true;
     if (uncertain_index < last_rejected_range) {
       tmp_rejected_indices_.push_back(uncertain_index);
+      continue;
+    }
+    if (uncertain_index < last_uncertain_range) {
+      // This token is already marked as uncertain.
       continue;
     }
     if (prev_token != nullptr) {
@@ -686,10 +691,12 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
 
     // All the tokens are at least uncertain!
     XGRAMMAR_CHECK(!accepted);
-
-    if (can_reach_end && !is_root_rule &&
-        IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_).first &&
-        prev_matched_size > 0) {
+    auto [lookahead_accepted, lookahead_completed] =
+        IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
+    if (can_reach_end && !is_root_rule && prev_matched_size > 0 && lookahead_accepted) {
+      if (lookahead_completed) {
+        last_uncertain_range = subtree_nodes_range[uncertain_index];
+      }
       continue;
     } else {
       tmp_rejected_indices_.push_back(uncertain_index);
