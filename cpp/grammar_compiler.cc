@@ -416,8 +416,11 @@ void GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         if ((!is_root_rule) && IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_)) {
           tmp_uncertain_indices_.push_back(i);
         } else {
-          tmp_rejected_indices_.push_back(i);
-          tmp_rejected_by_lookahead_indices_.push_back(i);
+          for (int j = i; j < subtree_nodes_range[i]; j++) {
+            tmp_rejected_indices_.push_back(j);
+            tmp_rejected_by_lookahead_indices_.push_back(j);
+          }
+          i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
         }
       } else {
         tmp_rejected_indices_.push_back(i);
