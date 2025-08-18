@@ -671,8 +671,10 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
     case AdaptiveTokenMask::StoreType::kRejected: {
       // Thus, rejected tokens will be more. We need to re-check its type.
       IntsetUnion(&cache.rejected_indices, tmp_rejected_indices_);
-
-      if (cache.rejected_indices.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD) {
+      int accepted_token_size = sorted_decoded_vocab.size() - cache.rejected_indices.size() -
+                                cache.uncertain_indices.size();
+      if (cache.rejected_indices.size() >= AdaptiveTokenMask::USE_BITSET_THRESHOLD &&
+          accepted_token_size >= AdaptiveTokenMask::USE_BITSET_THRESHOLD) {
         // In this case, we need to switch to bitset representation.
         cache.store_type = AdaptiveTokenMask::StoreType::kAcceptedBitset;
         cache.accepted_bitset = DynamicBitset(tokenizer_info_.GetVocabSize());
@@ -690,6 +692,28 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
           cache.accepted_bitset.Reset(special_id);
         }
         cache.rejected_indices.clear();
+      } else {
+        if (accepted_token_size < static_cast<int>(cache.rejected_indices.size())) {
+          // Switch to kAccepted.
+          cache.store_type = AdaptiveTokenMask::StoreType::kAccepted;
+
+          // Use a dynamicBitset to reset the state.
+          DynamicBitset bit_set(sorted_decoded_vocab.size());
+          for (const auto& reject_index : cache.rejected_indices) {
+            bit_set.Set(reject_index);
+          }
+          for (const auto& uncertain_index : cache.uncertain_indices) {
+            bit_set.Set(uncertain_index);
+          }
+          for (int i = 0; i < static_cast<int>(sorted_decoded_vocab.size()); ++i) {
+            if (!bit_set[i]) {
+              cache.accepted_indices.push_back(i);
+            }
+          }
+          cache.rejected_indices.clear();
+        } else {
+          // Just keep kRejected.
+        }
       }
       break;
     }
