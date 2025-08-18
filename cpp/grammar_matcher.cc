@@ -484,8 +484,11 @@ std::string GrammarMatcher::Impl::PrintBitmask(
   std::stringstream ss;
   ss << "TokenBitmask(num_tokens=" << tokenizer_info.GetVocabSize()
      << ", accepted_num=" << accepted_ids.size() << ", rejected_num=" << rejected_ids.size()
-     << ",\naccepted_ids=" << PrintTokenByIds(accepted_ids, tokenizer_info, kMaxPrintTokens)
-     << ",\nrejected_ids=" << PrintTokenByIds(rejected_ids, tokenizer_info, kMaxPrintTokens) << ")";
+     << ",\naccepted_ids="
+     << PrintTokenByIds(accepted_ids, tokenizer_info.GetSortedDecodedVocab(), kMaxPrintTokens)
+     << ",\nrejected_ids="
+     << PrintTokenByIds(rejected_ids, tokenizer_info.GetSortedDecodedVocab(), kMaxPrintTokens)
+     << ")";
   return ss.str();
 }
 
