@@ -235,7 +235,10 @@ bool EarleyParser::Advance(const uint8_t ch) {
 }
 
 EarleyParser::EarleyParser(
-    const Grammar& grammar, const ParserState& init_state, const bool need_expand
+    const Grammar& grammar,
+    const ParserState& init_state,
+    const bool need_expand,
+    const bool need_lookahead
 )
     : grammar_(grammar) {
   // Check if the initial state is valid. If invalid, then we choose the root state as default.
@@ -250,6 +253,9 @@ EarleyParser::EarleyParser(
     );
   } else {
     init = init_state;
+    if (need_lookahead) {
+      lookahead_assertion_id = grammar_->GetRule(init_state.rule_id).lookahead_assertion_id;
+    }
   }
 
   // If there is no need to expand the initial state, we only need to add it to the

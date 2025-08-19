@@ -233,8 +233,17 @@ class EarleyParser {
   /*! \brief In this round of advancing, check if the stop token can be accepted. */
   bool tmp_accept_stop_token_ = false;
 
-  /*! \brief store when accepting i characters, if the stop token can be accepted. */
+  /*! \brief Store when accepting i characters, if the stop token can be accepted. */
   std::vector<bool> is_completed_;
+
+  /*! \brief In this round of advancing, Store if the lookahead assertion is completed. */
+  bool tmp_lookahead_completed_ = false;
+
+  /*! \brief Store if the lookahead assertion is completed. */
+  std::vector<bool> is_lookahead_completed_;
+
+  /*! \brief Store the sequence id of the lookahead assertion. */
+  int lookahead_assertion_id = -1;
 
   /*!
    * \brief rule_id_to_completable_states[i][j] is the i pos j rule_id states. Earley
@@ -393,7 +402,10 @@ class EarleyParser {
    * \param initial_state The initial state to be pushed into the parser.
    */
   EarleyParser(
-      const Grammar& grammar, const ParserState& initial_state, const bool need_expand = true
+      const Grammar& grammar,
+      const ParserState& initial_state,
+      const bool need_expand = true,
+      const bool need_lookahead = false
   );
 
   /*!

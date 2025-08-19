@@ -47,10 +47,8 @@ namespace xgrammar {
 /*! \brief The concrete implementation of GrammarMatcherNode. */
 class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
-  GrammarMatcherForTokenMaskCache(
-      const Grammar& grammar, const ParserState& init_state, const bool& need_expand = true
-  )
-      : EarleyParser(grammar, init_state),
+  GrammarMatcherForTokenMaskCache(const Grammar& grammar, const ParserState& init_state)
+      : EarleyParser(grammar, init_state, true, true),
         init_rule_id(init_state.rule_id),
         initial_state(init_state) {}
   /*!
@@ -673,7 +671,7 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   }
 
   auto add_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
-    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state, false);
+    auto grammar_matcher = GrammarMatcherForTokenMaskCache(grammar, state);
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),
         tokenizer_info_.GetSortedDecodedVocab(),
