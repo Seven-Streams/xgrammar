@@ -683,6 +683,10 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
   if (is_root_rule) {
     tmp_rejected_indices_ = cache.uncertain_indices;
   } else {
+    const auto& lookahead_id = grammar_->GetRule(init_rule_id_).lookahead_assertion_id;
+    if (lookahead_id == -1) {
+      return;
+    }
     for (const auto& uncertain_index : cache.uncertain_indices) {
       const auto& token = sorted_decoded_vocab[uncertain_index].second;
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
