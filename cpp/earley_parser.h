@@ -468,6 +468,7 @@ class EarleyParser {
   void PushOneStateToCheck(const ParserState& state) {
     rule_id_to_completable_states_.PushBack(std::vector<std::pair<int32_t, ParserState>>());
     is_completed_.push_back(is_completed_.back());
+    is_lookahead_completed_.push_back(is_lookahead_completed_.back());
     scanable_state_history_.PushBack(&state, 1);
     return;
   }
