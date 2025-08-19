@@ -243,7 +243,7 @@ class EarleyParser {
   std::vector<bool> is_lookahead_completed_;
 
   /*! \brief Store the sequence id of the lookahead assertion. */
-  int lookahead_assertion_id = -1;
+  int lookahead_assertion_id_ = -1;
 
   /*!
    * \brief rule_id_to_completable_states[i][j] is the i pos j rule_id states. Earley
@@ -429,6 +429,12 @@ class EarleyParser {
    * \return True if the root rule is completed, false otherwise.
    */
   bool IsCompleted() const;
+
+  /*!
+   * \brief Check whether the lookahead has been completed.
+   * \return True if the lookahead is completed, false otherwise.
+   */
+  bool IsLookaheadCompleted() const;
 
   /*!
    * \brief Push the initial state into the Earley parser.
