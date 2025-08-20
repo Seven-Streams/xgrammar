@@ -386,6 +386,11 @@ class GrammarFSMHasher {
  */
 class CrossingCacheManager {
  public:
+  ~CrossingCacheManager() {
+    XGRAMMAR_LOG(INFO) << "Cache request count: " << cache_request_count_
+                       << ", hit count: " << cache_hit_count_;
+  }
+
   std::optional<AdaptiveTokenMask> GetCache(
       const uint64_t& fsm_hash, int32_t fsm_new_node_id, const uint64_t& tokenizer_hash
   );
@@ -409,6 +414,8 @@ class CrossingCacheManager {
   void ClearCache() { crossing_cache_manager_impl_.ClearCache(); }
 
  private:
+  long long cache_request_count_ = 0;
+  long long cache_hit_count_ = 0;
   class CrossingCacheManagerImpl {
    public:
     std::optional<AdaptiveTokenMask> GetCache(

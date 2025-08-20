@@ -656,6 +656,12 @@ class RuleInlinerImpl {
    */
   bool CheckIfRuleCanBeInlined(int32_t rule_id, Grammar::Impl* base_grammar_) {
     auto rule = base_grammar_->GetRule(rule_id);
+    const std::string& rule_name = rule.name;
+    static const std::string kNotInlinedPrefix = "not_inlined_";
+    if (rule_name.size() >= kNotInlinedPrefix.size() &&
+        rule_name.substr(0, kNotInlinedPrefix.size()) == kNotInlinedPrefix) {
+      return false;  // This rule is marked as not inlined.
+    }
     auto grammar_expr = base_grammar_->GetGrammarExpr(rule.body_expr_id);
     if (grammar_expr.type != GrammarExprType::kChoices) {
       return false;
@@ -2317,7 +2323,12 @@ void GrammarFSMHasher::Apply(Grammar* grammar) { GrammarFSMHasherImpl().Apply(gr
 std::optional<AdaptiveTokenMask> CrossingCacheManager::GetCache(
     const uint64_t& fsm_hash, int32_t fsm_new_node_id, const uint64_t& tokenizer_hash
 ) {
-  return crossing_cache_manager_impl_.GetCache(fsm_hash, fsm_new_node_id, tokenizer_hash);
+  cache_request_count_++;
+  auto result = crossing_cache_manager_impl_.GetCache(fsm_hash, fsm_new_node_id, tokenizer_hash);
+  if (result.has_value()) {
+    cache_hit_count_++;
+  }
+  return result;
 }
 
 bool CrossingCacheManager::AddCache(
