@@ -579,6 +579,7 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
     InitBuilder(grammar);
     auto root_rule = grammar->GetRootRule();
     auto root_grammar_expr = base_grammar_->GetGrammarExpr(root_rule.body_expr_id);
+    std::vector<std::pair<int32_t, int32_t>> lookahead_referee_referrer;
     if (root_grammar_expr.type == GrammarExprType::kTagDispatch) {
       return grammar;
     }
@@ -587,16 +588,33 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
       if (i == grammar->GetRootRuleId() || rule.lookahead_assertion_id != -1) {
         continue;
       }
-      auto look_head_assertion_id = DetectLookaheadAssertion(i);
-      if (look_head_assertion_id != -1) {
-        builder_->UpdateLookaheadAssertion(i, look_head_assertion_id);
+      auto [lookahead_assertion_id, referrer_id] = DetectLookaheadAssertion(i);
+      if (lookahead_assertion_id != -1) {
+        builder_->UpdateLookaheadAssertion(i, lookahead_assertion_id);
+        lookahead_referee_referrer.emplace_back(i, referrer_id);
       }
+    }
+    for (const auto& [referee_id, referrer_id] : lookahead_referee_referrer) {
+      const auto& referrer_rule = builder_->GetRule(referrer_id);
+      if (referrer_rule.lookahead_assertion_id == -1) {
+        continue;
+      }
+      const auto& referee_rule = builder_->GetRule(referee_id);
+      std::vector<int32_t> new_lookahead_id;
+      for (const auto& element : builder_->GetGrammarExpr(referee_rule.lookahead_assertion_id)) {
+        new_lookahead_id.push_back(element);
+      }
+      for (const auto& element : builder_->GetGrammarExpr(referrer_rule.lookahead_assertion_id)) {
+        new_lookahead_id.push_back(element);
+      }
+      builder_->UpdateLookaheadAssertion(referee_id, builder_->AddSequence(new_lookahead_id));
     }
     return builder_->Get(grammar->GetRootRuleId());
   }
 
-  int32_t DetectLookaheadAssertion(int32_t rule_id) {
+  std::pair<int32_t, int32_t> DetectLookaheadAssertion(int32_t rule_id) {
     std::vector<int32_t> found_sequence;  // Element ids
+    int referrer_id = -1;
     bool found = false;
     for (int i = 0; i < static_cast<int>(base_grammar_->NumRules()); ++i) {
       auto rule = base_grammar_->GetRule(i);
@@ -604,7 +622,7 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
       if (grammar_expr.type == GrammarExprType::kTagDispatch) {
         for (int j = 1; j < grammar_expr.size() - 3; j += 2) {
           if (grammar_expr[j] == rule_id) {
-            return -1;
+            return {-1, referrer_id};
           }
         }
         continue;
@@ -618,7 +636,7 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
         auto last_element = base_grammar_->GetGrammarExpr(sequence_expr.end()[-1]);
         if (last_element.type == GrammarExprType::kRuleRef && last_element[0] == rule_id &&
             i != rule_id) {
-          return -1;
+          return {-1, referrer_id};
         }
 
         for (int j = 0; j < sequence_expr.size() - 1; ++j) {
@@ -627,9 +645,10 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
             continue;
           }
           if (found) {
-            return -1;
+            return {-1, referrer_id};
           }
           found = true;
+          referrer_id = i;
           for (int k = j + 1; k < sequence_expr.size(); ++k) {
             found_sequence.push_back(sequence_expr[k]);
           }
@@ -638,9 +657,9 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
     }
 
     if (!found) {
-      return -1;
+      return {-1, referrer_id};
     }
-    return builder_->AddSequence(found_sequence);
+    return {builder_->AddSequence(found_sequence), referrer_id};
   }
 };
 
