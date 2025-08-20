@@ -475,6 +475,21 @@ class JSONSchemaConverter {
   bool any_whitespace_;
   // The cache for URI to rule. Mapping from the URI to the rule name.
   std::unordered_map<std::string, std::string> uri_to_rule_cache_;
+
+  std::optional<std::string> email_format_rule_name_ = std::nullopt;
+  std::optional<std::string> date_format_rule_name_ = std::nullopt;
+  std::optional<std::string> time_format_rule_name_ = std::nullopt;
+  std::optional<std::string> date_time_format_rule_name_ = std::nullopt;
+  std::optional<std::string> duration_format_rule_name_ = std::nullopt;
+  std::optional<std::string> ipv4_format_rule_name_ = std::nullopt;
+  std::optional<std::string> ipv6_format_rule_name_ = std::nullopt;
+  std::optional<std::string> hostname_format_rule_name_ = std::nullopt;
+  std::optional<std::string> uuid_format_rule_name_ = std::nullopt;
+  std::optional<std::string> uri_format_rule_name_ = std::nullopt;
+  std::optional<std::string> uri_reference_format_rule_name_ = std::nullopt;
+  std::optional<std::string> uri_template_format_rule_name_ = std::nullopt;
+  std::optional<std::string> json_pointer_format_rule_name_ = std::nullopt;
+  std::optional<std::string> relative_json_pointer_format_rule_name_ = std::nullopt;
 };
 
 JSONSchemaConverter::JSONSchemaConverter(
@@ -506,6 +521,21 @@ JSONSchemaConverter::JSONSchemaConverter(
 }
 
 std::string JSONSchemaConverter::Convert() {
+  email_format_rule_name_ = std::nullopt;
+  date_format_rule_name_ = std::nullopt;
+  time_format_rule_name_ = std::nullopt;
+  date_time_format_rule_name_ = std::nullopt;
+  duration_format_rule_name_ = std::nullopt;
+  ipv4_format_rule_name_ = std::nullopt;
+  ipv6_format_rule_name_ = std::nullopt;
+  hostname_format_rule_name_ = std::nullopt;
+  uuid_format_rule_name_ = std::nullopt;
+  uri_format_rule_name_ = std::nullopt;
+  uri_reference_format_rule_name_ = std::nullopt;
+  uri_template_format_rule_name_ = std::nullopt;
+  json_pointer_format_rule_name_ = std::nullopt;
+  relative_json_pointer_format_rule_name_ = std::nullopt;
+
   CreateRuleFromSchema(json_schema_, kRootRuleName);
   return ebnf_script_creator_.GetScript();
 }
@@ -1781,170 +1811,236 @@ std::string JSONSchemaConverter::VisitString(
   if (schema.count("format")) {
     std::string format = schema.at("format").get<std::string>();
     if (format == "email") {
-      // refer to RFC 5321 and RFC 5322, but skipping `address-literal` at
-      // RFC 5321 section 4.1.2 currently
-      std::string atext = "[\\w!#$%&'*+/=?^`{|}~-]";
-      std::string dot_string = "(" + atext + "+(\\." + atext + "+)*)";
-      std::string quoted_string =
-          "\\\\\"(\\\\[\\x20-\\x7E]|[\\x20\\x21\\x23-\\x5B\\x5D-\\x7E])*\\\\\"";
-      std::string domain =
-          "([A-Za-z0-9]([\\-A-Za-z0-9]*[A-Za-z0-9])?)((\\.[A-Za-z0-9][\\-A-Za-z0-9]*[A-Za-z0-9])*)";
-      std::string email_regex_pattern =
-          "^(" + dot_string + "|" + quoted_string + ")@" + domain + "$";
-      std::string email_ebnf = RegexToEBNF(email_regex_pattern, false);
-      return "\"\\\"\" " + email_ebnf + " \"\\\"\"";
+      if (!email_format_rule_name_.has_value()) {
+        // refer to RFC 5321 and RFC 5322, but skipping `address-literal` at
+        // RFC 5321 section 4.1.2 currently
+        std::string atext = "[\\w!#$%&'*+/=?^`{|}~-]";
+        std::string dot_string = "(" + atext + "+(\\." + atext + "+)*)";
+        std::string quoted_string =
+            "\\\\\"(\\\\[\\x20-\\x7E]|[\\x20\\x21\\x23-\\x5B\\x5D-\\x7E])*\\\\\"";
+        std::string domain =
+            "([A-Za-z0-9]([\\-A-Za-z0-9]*[A-Za-z0-9])?)((\\.[A-Za-z0-9][\\-A-Za-z0-9]*[A-Za-z0-9])*"
+            ")";
+        std::string email_regex_pattern =
+            "^(" + dot_string + "|" + quoted_string + ")@" + domain + "$";
+        std::string email_ebnf = RegexToEBNF(email_regex_pattern, false);
+        std::string email_rule_name = ebnf_script_creator_.AddRule("not_inlined_email", email_ebnf);
+        email_format_rule_name_ = email_rule_name;
+      }
+      return "\"\\\"\" " + email_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "date") {
       // refer to RFC 3339, section 5.6
-      std::string date_regex_pattern = "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2]\\d|3[01]))$";
-      std::string date_ebnf = RegexToEBNF(date_regex_pattern, false);
-      return "\"\\\"\" " + date_ebnf + " \"\\\"\"";
+      if (!date_format_rule_name_.has_value()) {
+        std::string date_regex_pattern = "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2]\\d|3[01]))$";
+        std::string date_ebnf = RegexToEBNF(date_regex_pattern, false);
+        std::string date_rule_name = ebnf_script_creator_.AddRule("not_inlined_date", date_ebnf);
+        date_format_rule_name_ = date_rule_name;
+      }
+      return "\"\\\"\" " + date_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "time") {
       // refer to RFC 3339, section 5.6
-      std::string time_regex_pattern =
-          "^([01]\\d|2[0-3]):[0-5]\\d:([0-5]\\d|60)(\\.\\d+)?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$";
-      std::string time_ebnf = RegexToEBNF(time_regex_pattern, false);
-      return "\"\\\"\" " + time_ebnf + " \"\\\"\"";
+      if (!time_format_rule_name_.has_value()) {
+        std::string time_regex_pattern =
+            "^([01]\\d|2[0-3]):[0-5]\\d:([0-5]\\d|60)(\\.\\d+)?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$";
+        std::string time_ebnf = RegexToEBNF(time_regex_pattern, false);
+        std::string time_rule_name = ebnf_script_creator_.AddRule("not_inlined_time", time_ebnf);
+        time_format_rule_name_ = time_rule_name;
+      }
+      return "\"\\\"\" " + time_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "date-time") {
       // refer to RFC 3339, section 5.6
-      std::string date_time_regex_pattern =
-          "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2]\\d|3[01]))T([01]\\d|2[0-3]):([0-5]\\d|60):["
-          "0-5]\\d(\\.\\d+)?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$";
-      std::string date_time_ebnf = RegexToEBNF(date_time_regex_pattern, false);
-      return "\"\\\"\" " + date_time_ebnf + " \"\\\"\"";
+      if (!date_time_format_rule_name_.has_value()) {
+        std::string date_time_regex_pattern =
+            "^(\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2]\\d|3[01]))T([01]\\d|2[0-3]):([0-5]\\d|60):["
+            "0-5]\\d(\\.\\d+)?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$";
+        std::string date_time_ebnf = RegexToEBNF(date_time_regex_pattern, false);
+        std::string date_time_rule_name =
+            ebnf_script_creator_.AddRule("not_inlined_date_time", date_time_ebnf);
+        date_time_format_rule_name_ = date_time_rule_name;
+      }
+      return "\"\\\"\" " + date_time_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "duration") {
       // refer to RFC 3339, Appendix A
-      std::string duration_regex_pattern =
-          "^P((\\d+D|\\d+M(\\d+D)?|\\d+Y(\\d+M(\\d+D)?)?)(T(\\d+S|\\d+M(\\d+S)?|\\d+H(\\d+M(\\d+S)?"
-          ")?))?|T(\\d+S|\\d+M(\\d+S)?|\\d+H(\\d+M(\\d+S)?)?)|\\d+W)$";
-      std::string duration_ebnf = RegexToEBNF(duration_regex_pattern, false);
-      return "\"\\\"\" " + duration_ebnf + " \"\\\"\"";
+      if (!duration_format_rule_name_.has_value()) {
+        std::string duration_regex_pattern =
+            "^P((\\d+D|\\d+M(\\d+D)?|\\d+Y(\\d+M(\\d+D)?)?)(T(\\d+S|\\d+M(\\d+S)?|\\d+H(\\d+M(\\d+"
+            "S)?"
+            ")?))?|T(\\d+S|\\d+M(\\d+S)?|\\d+H(\\d+M(\\d+S)?)?)|\\d+W)$";
+        std::string duration_ebnf = RegexToEBNF(duration_regex_pattern, false);
+        std::string duration_rule_name =
+            ebnf_script_creator_.AddRule("not_inlined_duration", duration_ebnf);
+        duration_format_rule_name_ = duration_rule_name;
+      }
+      return "\"\\\"\" " + duration_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "ipv4") {
       // refer to RFC 2673, section 3.2
-      std::string decbyte = "(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)";
-      std::string ipv4_regex_pattern = "^(" + decbyte + "\\.){3}" + decbyte + "$";
-      std::string ipv4_ebnf = RegexToEBNF(ipv4_regex_pattern, false);
-      return "\"\\\"\" " + ipv4_ebnf + " \"\\\"\"";
+      if (!ipv4_format_rule_name_.has_value()) {
+        std::string decbyte = "(25[0-5]|2[0-4]\\d|[0-1]?\\d?\\d)";
+        std::string ipv4_regex_pattern = "^(" + decbyte + "\\.){3}" + decbyte + "$";
+        std::string ipv4_ebnf = RegexToEBNF(ipv4_regex_pattern, false);
+        std::string ipv4_rule_name = ebnf_script_creator_.AddRule("not_inlined_ipv4", ipv4_ebnf);
+        ipv4_format_rule_name_ = ipv4_rule_name;
+      }
+      return "\"\\\"\" " + ipv4_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "ipv6") {
       // refer to RFC 3986, section 3.3.2
-      std::string ipv6_regex_pattern =
-          "("
-          "([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|"  // 1:2:3:4:5:6:7:8
-          "([0-9a-fA-F]{1,4}:){1,7}:|"  // 1::                              1:2:3:4:5:6:7::
-          "([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|"         // 1::8             1:2:3:4:5:6::8
-                                                               // 1:2:3:4:5:6::8
-          "([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|"  // 1::7:8           1:2:3:4:5::7:8
-                                                               // 1:2:3:4:5::8
-          "([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|"  // 1::6:7:8         1:2:3:4::6:7:8
-                                                               // 1:2:3:4::8
-          "([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|"  // 1::5:6:7:8       1:2:3::5:6:7:8
-                                                               // 1:2:3::8
-          "([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|"  // 1::4:5:6:7:8     1:2::4:5:6:7:8
-                                                               // 1:2::8
-          "[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|"  // 1::3:4:5:6:7:8   1::3:4:5:6:7:8  1::8
-          ":((:[0-9a-fA-F]{1,4}){1,7}|:)|"  // ::2:3:4:5:6:7:8  ::2:3:4:5:6:7:8 ::8       ::
-          "::(ffff(:0{1,4}){0,1}:){0,1}"
-          "((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}"
-          "(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|"  // ::255.255.255.255   ::ffff:255.255.255.255
-                                                       // ::ffff:0:255.255.255.255  (IPv4-mapped
-                                                       // IPv6 addresses and IPv4-translated
-                                                       // addresses)
-          "([0-9a-fA-F]{1,4}:){1,4}:"
-          "((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}"
-          "(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])"  // 2001:db8:3:4::192.0.2.33
-                                                      // 64:ff9b::192.0.2.33 (IPv4-Embedded IPv6
-                                                      // Address)
-          ")";
+      if (!ipv6_format_rule_name_.has_value()) {
+        std::string ipv6_regex_pattern =
+            "("
+            "([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|"  // 1:2:3:4:5:6:7:8
+            "([0-9a-fA-F]{1,4}:){1,7}:|"  // 1::                              1:2:3:4:5:6:7::
+            "([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|"         // 1::8             1:2:3:4:5:6::8
+                                                                 // 1:2:3:4:5:6::8
+            "([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|"  // 1::7:8           1:2:3:4:5::7:8
+                                                                 // 1:2:3:4:5::8
+            "([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|"  // 1::6:7:8         1:2:3:4::6:7:8
+                                                                 // 1:2:3:4::8
+            "([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|"  // 1::5:6:7:8       1:2:3::5:6:7:8
+                                                                 // 1:2:3::8
+            "([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|"  // 1::4:5:6:7:8     1:2::4:5:6:7:8
+                                                                 // 1:2::8
+            "[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|"  // 1::3:4:5:6:7:8   1::3:4:5:6:7:8  1::8
+            ":((:[0-9a-fA-F]{1,4}){1,7}|:)|"  // ::2:3:4:5:6:7:8  ::2:3:4:5:6:7:8 ::8       ::
+            "::(ffff(:0{1,4}){0,1}:){0,1}"
+            "((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}"
+            "(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|"  // ::255.255.255.255 ::ffff:255.255.255.255
+                                                         // ::ffff:0:255.255.255.255  (IPv4-mapped
+                                                         // IPv6 addresses and IPv4-translated
+                                                         // addresses)
+            "([0-9a-fA-F]{1,4}:){1,4}:"
+            "((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}"
+            "(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])"  // 2001:db8:3:4::192.0.2.33
+                                                        // 64:ff9b::192.0.2.33 (IPv4-Embedded IPv6
+                                                        // Address)
+            ")";
 
-      std::string ipv6_ebnf = RegexToEBNF(ipv6_regex_pattern, false);
-      return "\"\\\"\" " + ipv6_ebnf + " \"\\\"\"";
+        std::string ipv6_ebnf = RegexToEBNF(ipv6_regex_pattern, false);
+        std::string ipv6_rule_name = ebnf_script_creator_.AddRule("not_inlined_ipv6", ipv6_ebnf);
+        ipv6_format_rule_name_ = ipv6_rule_name;
+      }
+      return "\"\\\"\" " + ipv6_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "hostname") {
       // refer to RFC 1123, section 2.1
-      std::string hostname_regex_pattern =
-          "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
-      std::string hostname_ebnf = RegexToEBNF(hostname_regex_pattern, false);
-      return "\"\\\"\" " + hostname_ebnf + " \"\\\"\"";
+      if (!hostname_format_rule_name_.has_value()) {
+        std::string hostname_regex_pattern =
+            "^([a-z0-9]([a-z0-9-]*[a-z0-9])?)(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$";
+        std::string hostname_ebnf = RegexToEBNF(hostname_regex_pattern, false);
+        std::string hostname_rule_name =
+            ebnf_script_creator_.AddRule("not_inlined_hostname", hostname_ebnf);
+        hostname_format_rule_name_ = hostname_rule_name;
+      }
+      return "\"\\\"\" " + hostname_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "uuid") {
       // refer to RFC 4122, section 3
-      std::string uuid_regex_pattern =
-          "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$";
-      std::string uuid_ebnf = RegexToEBNF(uuid_regex_pattern, false);
-      return "\"\\\"\" " + uuid_ebnf + " \"\\\"\"";
+      if (!uuid_format_rule_name_.has_value()) {
+        std::string uuid_regex_pattern =
+            "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$";
+        std::string uuid_ebnf = RegexToEBNF(uuid_regex_pattern, false);
+        std::string uuid_rule_name = ebnf_script_creator_.AddRule("not_inlined_uuid", uuid_ebnf);
+        uuid_format_rule_name_ = uuid_rule_name;
+      }
+      return "\"\\\"\" " + uuid_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "uri") {
       // refer to RFC 3986, Appendix A, but skipping IP-literal and IPv4address currently
-      std::string schema = "[a-zA-Z][a-zA-Z+\\.-]*";
-      std::string pchar = "([\\w\\.~!$&'()*+,;=:@-]|%[0-9A-Fa-f][0-9A-Fa-f])";
-      std::string query_fragment_char = "([\\w\\.~!$&'()*+,;=:@/\\?-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
-      std::string query = "(\\?" + query_fragment_char + ")?";
-      std::string fragment = "(#" + query_fragment_char + ")?";
-      std::string path_abempty = "(/" + pchar + "*)*";
-      std::string path_absolute_rootless_empty = "/?(" + pchar + "+(/" + pchar + "*)*)?";
-      std::string userinfo = "([\\w\\.~!$&'()*+,;=:-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
-      std::string host = "([\\w\\.~!$&'()*+,;=-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
-      std::string authority = "(" + userinfo + "@)?" + host + "(:\\d*)?";
-      std::string hier_part =
-          "(//" + authority + path_abempty + "|" + path_absolute_rootless_empty + ")";
-      std::string uri_regex_pattern = "^" + schema + ":" + hier_part + query + fragment + "$";
-      std::string uri_ebnf = RegexToEBNF(uri_regex_pattern, false);
-      return "\"\\\"\" " + uri_ebnf + " \"\\\"\"";
+      if (!uri_format_rule_name_.has_value()) {
+        std::string schema = "[a-zA-Z][a-zA-Z+\\.-]*";
+        std::string pchar = "([\\w\\.~!$&'()*+,;=:@-]|%[0-9A-Fa-f][0-9A-Fa-f])";
+        std::string query_fragment_char = "([\\w\\.~!$&'()*+,;=:@/\\?-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
+        std::string query = "(\\?" + query_fragment_char + ")?";
+        std::string fragment = "(#" + query_fragment_char + ")?";
+        std::string path_abempty = "(/" + pchar + "*)*";
+        std::string path_absolute_rootless_empty = "/?(" + pchar + "+(/" + pchar + "*)*)?";
+        std::string userinfo = "([\\w\\.~!$&'()*+,;=:-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
+        std::string host = "([\\w\\.~!$&'()*+,;=-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
+        std::string authority = "(" + userinfo + "@)?" + host + "(:\\d*)?";
+        std::string hier_part =
+            "(//" + authority + path_abempty + "|" + path_absolute_rootless_empty + ")";
+        std::string uri_regex_pattern = "^" + schema + ":" + hier_part + query + fragment + "$";
+        std::string uri_ebnf = RegexToEBNF(uri_regex_pattern, false);
+        std::string uri_rule_name = ebnf_script_creator_.AddRule("not_inlined_uri", uri_ebnf);
+        uri_format_rule_name_ = uri_rule_name;
+      }
+      return "\"\\\"\" " + uri_format_rule_name_.value() + " \"\\\"\"";
     }
 
     if (format == "uri-reference") {
       // refer to RFC 3986, Appendix A, but skipping IP-literal and IPv4address currently
-      std::string pchar = "([\\w\\.~!$&'()*+,;=:@-]|%[0-9A-Fa-f][0-9A-Fa-f])";
-      std::string query_fragment_char = "([\\w\\.~!$&'()*+,;=:@/\\?-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
-      std::string query = "(\\?" + query_fragment_char + ")?";
-      std::string fragment = "(#" + query_fragment_char + ")?";
-      std::string path_abempty = "(/" + pchar + "*)*";
-      std::string path_absolute = "/(" + pchar + "+(/" + pchar + "*)*)?";
-      std::string segment_nz_nc = "([\\w\\.~!$&'()*+,;=@-]|%[0-9A-Fa-f][0-9A-Fa-f])+";
-      std::string path_noscheme = segment_nz_nc + "(/" + pchar + "*)*";
-      std::string userinfo = "([\\w\\.~!$&'()*+,;=:-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
-      std::string host = "([\\w\\.~!$&'()*+,;=-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
-      std::string authority = "(" + userinfo + "@)?" + host + "(:\\d*)?";
-      std::string relative_part =
-          "(//" + authority + path_abempty + "|" + path_absolute + "|" + path_noscheme + ")?";
-      std::string uri_reference_regex_pattern = "^" + relative_part + query + fragment + "$";
-      std::string uri_reference_ebnf = RegexToEBNF(uri_reference_regex_pattern, false);
-      return "\"\\\"\" " + uri_reference_ebnf + " \"\\\"\"";
+      if (!uri_reference_format_rule_name_.has_value()) {
+        std::string pchar = "([\\w\\.~!$&'()*+,;=:@-]|%[0-9A-Fa-f][0-9A-Fa-f])";
+        std::string query_fragment_char = "([\\w\\.~!$&'()*+,;=:@/\\?-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
+        std::string query = "(\\?" + query_fragment_char + ")?";
+        std::string fragment = "(#" + query_fragment_char + ")?";
+        std::string path_abempty = "(/" + pchar + "*)*";
+        std::string path_absolute = "/(" + pchar + "+(/" + pchar + "*)*)?";
+        std::string segment_nz_nc = "([\\w\\.~!$&'()*+,;=@-]|%[0-9A-Fa-f][0-9A-Fa-f])+";
+        std::string path_noscheme = segment_nz_nc + "(/" + pchar + "*)*";
+        std::string userinfo = "([\\w\\.~!$&'()*+,;=:-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
+        std::string host = "([\\w\\.~!$&'()*+,;=-]|%[0-9A-Fa-f][0-9A-Fa-f])*";
+        std::string authority = "(" + userinfo + "@)?" + host + "(:\\d*)?";
+        std::string relative_part =
+            "(//" + authority + path_abempty + "|" + path_absolute + "|" + path_noscheme + ")?";
+        std::string uri_reference_regex_pattern = "^" + relative_part + query + fragment + "$";
+        std::string uri_reference_ebnf = RegexToEBNF(uri_reference_regex_pattern, false);
+        std::string uri_reference_rule_name =
+            ebnf_script_creator_.AddRule("not_inlined_uri_reference", uri_reference_ebnf);
+        uri_reference_format_rule_name_ = uri_reference_rule_name;
+      }
+      return "\"\\\"\" " + uri_reference_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "uri-template") {
       // refer to RFC 6570, section 2
-      std::string literals =
-          "([\\x21\\x23-\\x24\\x26\\x28-\\x3B\\x3D\\x3F-\\x5B\\x5D\\x5F\\x61-\\x7A\\x7E]"
-          "|%[0-9A-Fa-f][0-9A-Fa-f])";
-      std::string op = "[+#\\./;\\?&=,!@|]";
-      std::string varchar = "(\\w|%[0-9A-Fa-f][0-9A-Fa-f])";
-      std::string varname = varchar + "(\\.?" + varchar + ")*";
-      std::string varspec = varname + "(:[1-9]\\d?\\d?\\d?|\\*)?";
-      std::string variable_list = varspec + "(," + varspec + ")*";
-      std::string expression = "\\{(" + op + ")?" + variable_list + "\\}";
-      std::string uri_template_regex_pattern = "^(" + literals + "|" + expression + ")*$";
-      std::string uri_template_ebnf = RegexToEBNF(uri_template_regex_pattern, false);
-      return "\"\\\"\" " + uri_template_ebnf + " \"\\\"\"";
+      if (!uri_template_format_rule_name_.has_value()) {
+        std::string literals =
+            "([\\x21\\x23-\\x24\\x26\\x28-\\x3B\\x3D\\x3F-\\x5B\\x5D\\x5F\\x61-\\x7A\\x7E]"
+            "|%[0-9A-Fa-f][0-9A-Fa-f])";
+        std::string op = "[+#\\./;\\?&=,!@|]";
+        std::string varchar = "(\\w|%[0-9A-Fa-f][0-9A-Fa-f])";
+        std::string varname = varchar + "(\\.?" + varchar + ")*";
+        std::string varspec = varname + "(:[1-9]\\d?\\d?\\d?|\\*)?";
+        std::string variable_list = varspec + "(," + varspec + ")*";
+        std::string expression = "\\{(" + op + ")?" + variable_list + "\\}";
+        std::string uri_template_regex_pattern = "^(" + literals + "|" + expression + ")*$";
+        std::string uri_template_ebnf = RegexToEBNF(uri_template_regex_pattern, false);
+        std::string uri_template_rule_name =
+            ebnf_script_creator_.AddRule("not_inlined_uri_template", uri_template_ebnf);
+        uri_template_format_rule_name_ = uri_template_rule_name;
+      }
+      return "\"\\\"\" " + uri_template_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "json-pointer") {
       // refer to RFC 6901, section 3
-      std::string json_pointer_regex_pattern =
-          "^(/([\\x00-\\x2E]|[\\x30-\\x7D]|[\\x7F-\\U0010FFFF]|~[01])*)*$";
-      std::string json_pointer_ebnf = RegexToEBNF(json_pointer_regex_pattern, false);
-      return "\"\\\"\" " + json_pointer_ebnf + " \"\\\"\"";
+      if (!json_pointer_format_rule_name_.has_value()) {
+        std::string json_pointer_regex_pattern =
+            "^(/([\\x00-\\x2E]|[\\x30-\\x7D]|[\\x7F-\\U0010FFFF]|~[01])*)*$";
+        std::string json_pointer_ebnf = RegexToEBNF(json_pointer_regex_pattern, false);
+        std::string json_pointer_rule_name =
+            ebnf_script_creator_.AddRule("not_inlined_json_pointer", json_pointer_ebnf);
+        json_pointer_format_rule_name_ = json_pointer_rule_name;
+      }
+      return "\"\\\"\" " + json_pointer_format_rule_name_.value() + " \"\\\"\"";
     }
     if (format == "relative-json-pointer") {
       // refer to draft-handrews-relative-json-pointer-01, section 3
-      std::string relative_json_pointer_regex_pattern =
-          "^(0|[1-9][0-9]*)(#|(/([\\x00-\\x2E]|[\\x30-\\x7D]|[\\x7F-\\U0010FFFF]|~[01])*)*)$";
-      std::string relative_json_pointer_ebnf =
-          RegexToEBNF(relative_json_pointer_regex_pattern, false);
-      return "\"\\\"\" " + relative_json_pointer_ebnf + " \"\\\"\"";
+      if (!relative_json_pointer_format_rule_name_.has_value()) {
+        std::string relative_json_pointer_regex_pattern =
+            "^(0|[1-9][0-9]*)(#|(/([\\x00-\\x2E]|[\\x30-\\x7D]|[\\x7F-\\U0010FFFF]|~[01])*)*)$";
+        std::string relative_json_pointer_ebnf =
+            RegexToEBNF(relative_json_pointer_regex_pattern, false);
+        std::string relative_json_pointer_rule_name = ebnf_script_creator_.AddRule(
+            "not_inlined_relative_json_pointer", relative_json_pointer_ebnf
+        );
+        relative_json_pointer_format_rule_name_ = relative_json_pointer_rule_name;
+      }
+      return "\"\\\"\" " + relative_json_pointer_format_rule_name_.value() + " \"\\\"\"";
     }
   }
   if (schema.count("pattern")) {
@@ -2265,8 +2361,9 @@ std::string JSONSchemaConverter::GetPropertyPattern(
   // the outer quote is for the string in EBNF grammar, and the inner quote is for
   // the string in JSON
   std::string key = "\"\\\"" + prop_name + "\\\"\"";
+  std::string key_rule = ebnf_script_creator_.AddRule("not_inlined_key", key);
   std::string value = CreateRuleFromSchema(prop_schema, rule_name + "_prop_" + std::to_string(idx));
-  return key + " " + colon_pattern_ + " " + value;
+  return key_rule + " " + colon_pattern_ + " " + value;
 }
 
 std::string JSONSchemaConverter::GetOtherPropertyPattern(
