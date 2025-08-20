@@ -690,7 +690,7 @@ class GrammarNormalizerImpl : public GrammarMutator {
     std::vector<std::unique_ptr<GrammarMutator>> normalizer_mutators;
     normalizer_mutators.emplace_back(std::make_unique<StructureNormalizerImpl>());
     normalizer_mutators.emplace_back(std::make_unique<ByteStringFuserImpl>());
-    // normalizer_mutators.emplace_back(std::make_unique<RuleInlinerImpl>());
+    normalizer_mutators.emplace_back(std::make_unique<RuleInlinerImpl>());
     normalizer_mutators.emplace_back(std::make_unique<DeadCodeEliminatorImpl>());
     normalizer_mutators.emplace_back(std::make_unique<LookaheadAssertionAnalyzerImpl>());
     return normalizer_mutators;
