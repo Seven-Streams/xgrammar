@@ -595,7 +595,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
       // We can add a cache for basic fsm, and a better one for lookahead.
       // All the tokens rejected by lookahead should be uncertain.
       IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
-      IntsetUnion(&tmp_accepted_indices_, tmp_accepted_by_lookahead_indices_);
+      IntsetUnion(&tmp_uncertain_indices_, tmp_accepted_by_lookahead_indices_);
       std::vector<int32_t> rejected_indices_without_lookahead;
       std::vector<int32_t> accepted_indices_without_lookahead;
       rejected_indices_without_lookahead.reserve(
