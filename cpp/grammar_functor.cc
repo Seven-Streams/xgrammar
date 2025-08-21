@@ -37,45 +37,189 @@ using ExprType = Grammar::Impl::GrammarExprType;
  * \example `A ::= sequence("a")` --> `A ::= "a"` (the body is a string)
  * \example `A ::= [a-a]` --> `A ::= "a"` (the body is a string)
  */
-class SingleElementExprEliminator : public GrammarMutator {
+class SingleElementExprEliminator {
  public:
-  using GrammarMutator::Apply;
-  using GrammarMutator::GrammarMutator;
+  using ExprType = Grammar::Impl::GrammarExprType;
+  void Apply(Grammar* grammar) {
+    auto& grammar_impl = *grammar->ImplPtr();
+    for (int i = 0; i < grammar_impl.NumRules(); i++) {
+      const auto& rule = grammar_impl.GetRule(i);
+      const auto& rule_expr = grammar_impl.GetGrammarExpr(rule.body_expr_id);
+      int32_t new_body_expr_id = kNotModify;
+      switch (rule_expr.type) {
+        case ExprType::kChoices:
+          new_body_expr_id = VisitChoice(rule.body_expr_id, grammar_impl);
+          break;
+        case ExprType::kSequence:
+          new_body_expr_id = VisitSequence(rule.body_expr_id, grammar_impl);
+          break;
+        case ExprType::kCharacterClass:
+          new_body_expr_id = VisitCharacterClass(rule.body_expr_id, grammar_impl);
+          break;
+        default:
+          break;
+      }
+      if (new_body_expr_id != kNotModify) {
+        grammar_impl.UpdateRuleBody(i, new_body_expr_id);
+      }
+      if (rule.lookahead_assertion_id != -1) {
+        const auto& lookahead_expr = grammar_impl.GetGrammarExpr(rule.lookahead_assertion_id);
+        int32_t new_lookahead_expr_id = kNotModify;
+        switch (lookahead_expr.type) {
+          case ExprType::kChoices:
+            new_lookahead_expr_id = VisitChoice(rule.lookahead_assertion_id, grammar_impl);
+            break;
+          case ExprType::kSequence:
+            new_lookahead_expr_id = VisitSequence(rule.lookahead_assertion_id, grammar_impl);
+            break;
+          case ExprType::kCharacterClass:
+            new_lookahead_expr_id = VisitCharacterClass(rule.lookahead_assertion_id, grammar_impl);
+            break;
+          default:
+            break;
+        }
+        if (new_lookahead_expr_id != kNotModify) {
+          grammar_impl.UpdateLookaheadAssertion(i, new_lookahead_expr_id);
+        }
+      }
+    }
+  }
 
  private:
-  int32_t VisitSequence(const GrammarExpr& grammar_expr) final {
-    std::vector<int32_t> sequence_ids;
-    for (int32_t i : grammar_expr) {
-      sequence_ids.push_back(VisitExpr(i));
+  const int32_t kNotModify = -1;
+  int32_t VisitChoice(int32_t expr_id, Grammar::Impl& grammar_impl) {
+    std::vector<int32_t> choice_id;
+    bool updated = false;
+    const auto& choice_expr = grammar_impl.GetGrammarExpr(expr_id);
+    XGRAMMAR_DCHECK(choice_expr.type == ExprType::kChoices);
+    for (const auto& choice_element : choice_expr) {
+      const auto& element_expr = grammar_impl.GetGrammarExpr(choice_element);
+      switch (element_expr.type) {
+        case ExprType::kChoices: {
+          int32_t new_id = VisitChoice(choice_element, grammar_impl);
+          if (new_id == kNotModify) {
+            choice_id.push_back(choice_element);
+          } else {
+            updated = true;
+            choice_id.push_back(new_id);
+          }
+          break;
+        }
+        case ExprType::kSequence: {
+          int32_t new_id = VisitSequence(choice_element, grammar_impl);
+          if (new_id == kNotModify) {
+            choice_id.push_back(choice_element);
+          } else {
+            updated = true;
+            choice_id.push_back(new_id);
+          }
+          break;
+        }
+        case ExprType::kCharacterClass: {
+          int32_t new_id = VisitCharacterClass(choice_element, grammar_impl);
+          if (new_id == kNotModify) {
+            choice_id.push_back(choice_element);
+          } else {
+            updated = true;
+            choice_id.push_back(new_id);
+          }
+          break;
+        }
+        default:
+          choice_id.push_back(choice_element);
+          break;
+      }
     }
-    if (sequence_ids.size() == 1) {
-      return sequence_ids[0];
+
+    if (choice_id.size() == 1) {
+      return choice_id[0];
     }
-    return builder_->AddSequence(sequence_ids);
+
+    if (!updated) {
+      return kNotModify;
+    }
+
+    GrammarExpr new_choice_expr =
+        GrammarExpr{ExprType::kChoices, choice_id.data(), static_cast<int32_t>(choice_id.size())};
+
+    return grammar_impl.AddGrammarExpr(new_choice_expr);
   }
 
-  int32_t VisitChoices(const GrammarExpr& grammar_expr) final {
-    std::vector<int32_t> choice_ids;
-    for (int32_t i : grammar_expr) {
-      choice_ids.push_back(VisitExpr(i));
+  int32_t VisitSequence(int32_t expr_id, Grammar::Impl& grammar_impl) {
+    std::vector<int32_t> sequence_id;
+    bool updated = false;
+    const auto& sequence_expr = grammar_impl.GetGrammarExpr(expr_id);
+    XGRAMMAR_DCHECK(sequence_expr.type == ExprType::kSequence);
+    for (const auto& choice_element : sequence_expr) {
+      const auto& element_expr = grammar_impl.GetGrammarExpr(choice_element);
+      switch (element_expr.type) {
+        case ExprType::kChoices: {
+          int32_t new_id = VisitChoice(choice_element, grammar_impl);
+          if (new_id == kNotModify) {
+            sequence_id.push_back(choice_element);
+          } else {
+            updated = true;
+            sequence_id.push_back(new_id);
+          }
+          break;
+        }
+        case ExprType::kSequence: {
+          int32_t new_id = VisitSequence(choice_element, grammar_impl);
+          if (new_id == kNotModify) {
+            sequence_id.push_back(choice_element);
+          } else {
+            updated = true;
+            sequence_id.push_back(new_id);
+          }
+          break;
+        }
+        case ExprType::kCharacterClass: {
+          int32_t new_id = VisitCharacterClass(choice_element, grammar_impl);
+          if (new_id == kNotModify) {
+            sequence_id.push_back(choice_element);
+          } else {
+            updated = true;
+            sequence_id.push_back(new_id);
+          }
+          break;
+        }
+        default:
+          sequence_id.push_back(choice_element);
+          break;
+      }
     }
-    if (choice_ids.size() == 1) {
-      return choice_ids[0];
+
+    if (sequence_id.size() == 1) {
+      return sequence_id[0];
     }
-    return builder_->AddChoices(choice_ids);
+
+    if (!updated) {
+      return kNotModify;
+    }
+
+    GrammarExpr new_sequence_expr = GrammarExpr{
+        ExprType::kSequence, sequence_id.data(), static_cast<int32_t>(sequence_id.size())
+    };
+
+    return grammar_impl.AddGrammarExpr(new_sequence_expr);
   }
 
-  int32_t VisitCharacterClass(const GrammarExpr& grammar_expr) final {
-    if (grammar_expr.data_len == 3 && grammar_expr[0] == 0 && grammar_expr[1] == grammar_expr[2]) {
-      std::string str = CharToUTF8(grammar_expr[1]);
+  int32_t VisitCharacterClass(int32_t expr_id, Grammar::Impl& grammar_impl) {
+    const auto& char_class_expr = grammar_impl.GetGrammarExpr(expr_id);
+    XGRAMMAR_DCHECK(char_class_expr.type == ExprType::kCharacterClass);
+    if (char_class_expr.size() == 3 && !char_class_expr[0] &&
+        char_class_expr[1] == char_class_expr[2]) {
+      // Convert to byte string.
+      std::string str = CharToUTF8(char_class_expr[1]);
       std::vector<int32_t> bytes;
-      bytes.reserve(str.size());
       for (char c : str) {
         bytes.push_back(static_cast<int32_t>(c));
       }
-      return builder_->AddByteString(bytes);
+      GrammarExpr new_byte_string_expr =
+          GrammarExpr{ExprType::kByteString, bytes.data(), static_cast<int32_t>(bytes.size())};
+      return grammar_impl.AddGrammarExpr(new_byte_string_expr);
     }
-    return builder_->AddGrammarExpr(grammar_expr);
+    return kNotModify;
   }
 };
 
@@ -339,8 +483,8 @@ class StructureNormalizerImpl : public GrammarMutator {
   using GrammarMutator::GrammarMutator;
 
   Grammar Apply(const Grammar& grammar) final {
-    auto grammar_new = SingleElementExprEliminator().Apply(grammar);
-    return StructureNormalizerSub().Apply(grammar_new);
+    SingleElementExprEliminator().Apply((const_cast<Grammar*>(&grammar)));
+    return StructureNormalizerSub().Apply(grammar);
   }
 };
 
