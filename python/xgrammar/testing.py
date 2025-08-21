@@ -333,9 +333,9 @@ class GrammarFunctor:
         )
 
     @staticmethod
-    def byte_string_fuser(grammar: Grammar) -> Grammar:
+    def byte_string_fuser(grammar: Grammar) -> None:
         """Fuse the byte string elements in the grammar."""
-        return Grammar._create_from_handle(
+        Grammar._create_from_handle(
             _core.testing.grammar_functor.byte_string_fuser(grammar._handle)
         )
 

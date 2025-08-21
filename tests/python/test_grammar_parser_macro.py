@@ -85,7 +85,7 @@ rule5 ::= ("" | ("g" rule5 "h"))
 
     grammar = _ebnf_to_grammar_no_normalization(before)
     grammar = GrammarFunctor.structure_normalizer(grammar)
-    grammar = GrammarFunctor.byte_string_fuser(grammar)
+    GrammarFunctor.byte_string_fuser(grammar)
     grammar = GrammarFunctor.lookahead_assertion_analyzer(grammar)
     after = str(grammar)
     assert after == expected
