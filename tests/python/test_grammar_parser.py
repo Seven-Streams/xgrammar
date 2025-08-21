@@ -483,7 +483,7 @@ rule4 ::= (("") | ("e" rule4 "f")) (=("f"))
 rule5 ::= (("") | ("g" rule5 "h"))
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.lookahead_assertion_analyzer(grammar)
+    GrammarFunctor.lookahead_assertion_analyzer(grammar)
     after = str(grammar)
     assert after == expected
 
