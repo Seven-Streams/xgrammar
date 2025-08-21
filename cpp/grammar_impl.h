@@ -160,6 +160,21 @@ class Grammar::Impl {
     return {type, data_ptr, data_len};
   }
 
+  int32_t AddGrammarExpr(const GrammarExpr& grammar_expr) {
+    grammar_expr_indptr_.push_back(grammar_expr_data_.size());
+    grammar_expr_data_.push_back(static_cast<int32_t>(grammar_expr.type));
+    grammar_expr_data_.push_back(grammar_expr.data_len);
+    grammar_expr_data_.insert(
+        grammar_expr_data_.end(), grammar_expr.data, grammar_expr.data + grammar_expr.data_len
+    );
+    return static_cast<int32_t>(grammar_expr_indptr_.size()) - 1;
+  }
+
+  void UpdateRuleBody(int32_t rule_id, int32_t body_expr_id) {
+    XGRAMMAR_CHECK(rule_id < static_cast<int32_t>(rules_.size()))
+        << "Rule id " << rule_id << " is out of range.";
+    rules_[rule_id].body_expr_id = body_expr_id;
+  }
   /******************* GrammarExpr Getters *******************/
 
   /*! \brief Get the string of the byte string grammar expr. */

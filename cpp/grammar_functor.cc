@@ -344,36 +344,85 @@ class StructureNormalizerImpl : public GrammarMutator {
   }
 };
 
-class ByteStringFuserImpl : public GrammarMutator {
+class ByteStringFuserImpl {
  public:
-  using GrammarMutator::Apply;
-  using GrammarMutator::GrammarMutator;
+  void Apply(Grammar* grammar) {
+    using ExprType = Grammar::Impl::GrammarExprType;
+    auto& grammar_impl = *grammar->ImplPtr();
 
- private:
-  /*!
-   * \brief Visit a GrammarExpr containing a sequence.
-   * \returns A list of new sequence GrammarExpr ids.
-   */
-  int32_t VisitSequence(const GrammarExpr& grammar_expr) final {
-    std::vector<int32_t> new_sequence_ids;
-    std::vector<int32_t> cur_byte_string;
-    for (auto i : grammar_expr) {
-      auto element_expr = base_grammar_->GetGrammarExpr(i);
-      if (element_expr.type == GrammarExprType::kByteString) {
-        cur_byte_string.insert(cur_byte_string.end(), element_expr.begin(), element_expr.end());
+    // Visit all the rules.
+    for (int i = 0; i < grammar_impl.NumRules(); i++) {
+      const auto& rule = grammar_impl.GetRule(i);
+      const auto& rule_expr = grammar_impl.GetGrammarExpr(rule.body_expr_id);
+      if (rule_expr.type != ExprType::kChoices) {
         continue;
-      } else {
-        if (!cur_byte_string.empty()) {
-          new_sequence_ids.push_back(builder_->AddByteString(cur_byte_string));
-          cur_byte_string.clear();
+      }
+
+      // Visit all the choices(sequence) of the current rule.
+      std::vector<int32_t> new_choices;
+      bool choice_updated = false;
+      for (int choice_id = 0; choice_id < rule_expr.size(); choice_id++) {
+        const auto& choice_expr = grammar_impl.GetGrammarExpr(rule_expr[choice_id]);
+        if (choice_expr.type != ExprType::kSequence) {
+          new_choices.push_back(rule_expr[choice_id]);
+          continue;
         }
-        new_sequence_ids.push_back(builder_->AddGrammarExpr(element_expr));
+        std::vector<int32_t> new_sequence;
+        bool sequence_updated = false;
+
+        // Visit each choice, and check if there are strings can be fused.
+        for (int element_id = 0; element_id < choice_expr.size(); element_id++) {
+          const auto& element_expr = grammar_impl.GetGrammarExpr(choice_expr[element_id]);
+          if (element_expr.type != ExprType::kByteString) {
+            new_sequence.push_back(choice_expr[element_id]);
+            continue;
+          }
+          std::vector<int32_t> cur_byte_string;
+          bool current_updated = false;
+          cur_byte_string.insert(cur_byte_string.end(), element_expr.begin(), element_expr.end());
+          if (element_id != choice_expr.size() - 1) {
+            for (element_id += 1; element_id < choice_expr.size(); element_id++) {
+              const auto& next_element_expr = grammar_impl.GetGrammarExpr(choice_expr[element_id]);
+              if (next_element_expr.type != ExprType::kByteString) {
+                element_id--;
+                break;
+              }
+              sequence_updated = true;
+              current_updated = true;
+              choice_updated = true;
+              cur_byte_string.insert(
+                  cur_byte_string.end(), next_element_expr.begin(), next_element_expr.end()
+              );
+            }
+          }
+          if (current_updated) {
+            // A string is fused. we need to add a new expression.
+            GrammarExpr fused_string = GrammarExpr{
+                ExprType::kByteString,
+                cur_byte_string.data(),
+                static_cast<int32_t>(cur_byte_string.size())
+            };
+            new_sequence.push_back(grammar_impl.AddGrammarExpr(fused_string));
+          } else {
+            new_sequence.push_back(choice_expr[element_id]);
+          }
+        }
+        if (sequence_updated) {
+          GrammarExpr new_sequence_expr = GrammarExpr{
+              ExprType::kSequence, new_sequence.data(), static_cast<int32_t>(new_sequence.size())
+          };
+          new_choices.push_back(grammar_impl.AddGrammarExpr(new_sequence_expr));
+        } else {
+          new_choices.push_back(rule_expr[choice_id]);
+        }
+      }
+      if (choice_updated) {
+        GrammarExpr new_choices_expr = GrammarExpr{
+            ExprType::kChoices, new_choices.data(), static_cast<int32_t>(new_choices.size())
+        };
+        grammar_impl.UpdateRuleBody(i, grammar_impl.AddGrammarExpr(new_choices_expr));
       }
     }
-    if (!cur_byte_string.empty()) {
-      new_sequence_ids.push_back(builder_->AddByteString(cur_byte_string));
-    }
-    return builder_->AddSequence(new_sequence_ids);
   }
 };
 
@@ -651,6 +700,8 @@ class GrammarNormalizerImpl : public GrammarMutator {
   Grammar Apply(const Grammar& grammar) final {
     std::vector<std::unique_ptr<GrammarMutator>> normalizer_mutators = GetNormalizerList();
     InitGrammar(grammar);
+    base_grammar_ = StructureNormalizerImpl().Apply(grammar);
+    ByteStringFuserImpl().Apply(&base_grammar_);
     for (auto& mutator : normalizer_mutators) {
       base_grammar_ = mutator->Apply(base_grammar_);
     }
@@ -661,8 +712,6 @@ class GrammarNormalizerImpl : public GrammarMutator {
   // Return the list of all normalizers in the class. The normalizers are applied one by one.
   std::vector<std::unique_ptr<GrammarMutator>> GetNormalizerList() {
     std::vector<std::unique_ptr<GrammarMutator>> normalizer_mutators;
-    normalizer_mutators.emplace_back(std::make_unique<StructureNormalizerImpl>());
-    normalizer_mutators.emplace_back(std::make_unique<ByteStringFuserImpl>());
     normalizer_mutators.emplace_back(std::make_unique<RuleInlinerImpl>());
     normalizer_mutators.emplace_back(std::make_unique<DeadCodeEliminatorImpl>());
     normalizer_mutators.emplace_back(std::make_unique<LookaheadAssertionAnalyzerImpl>());
@@ -1689,9 +1738,7 @@ Grammar StructuralTagGrammarCreator::Apply(
 
 Grammar RuleInliner::Apply(const Grammar& grammar) { return RuleInlinerImpl().Apply(grammar); }
 
-Grammar ByteStringFuser::Apply(const Grammar& grammar) {
-  return ByteStringFuserImpl().Apply(grammar);
-}
+void ByteStringFuser::Apply(Grammar* grammar) { ByteStringFuserImpl().Apply(grammar); }
 
 Grammar DeadCodeEliminator::Apply(const Grammar& grammar) {
   return DeadCodeEliminatorImpl().Apply(grammar);
