@@ -175,6 +175,12 @@ class Grammar::Impl {
         << "Rule id " << rule_id << " is out of range.";
     rules_[rule_id].body_expr_id = body_expr_id;
   }
+
+  void UpdateLookaheadAssertion(int32_t rule_id, int32_t lookahead_assertion_id) {
+    XGRAMMAR_CHECK(rule_id < static_cast<int32_t>(rules_.size()))
+        << "Rule id " << rule_id << " is out of range.";
+    rules_[rule_id].lookahead_assertion_id = lookahead_assertion_id;
+  }
   /******************* GrammarExpr Getters *******************/
 
   /*! \brief Get the string of the byte string grammar expr. */

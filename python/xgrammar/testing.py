@@ -334,8 +334,8 @@ class GrammarFunctor:
         )
 
     @staticmethod
-    def lookahead_assertion_analyzer(grammar: Grammar) -> Grammar:
+    def lookahead_assertion_analyzer(grammar: Grammar) -> None:
         """Analyze and add lookahead assertions in the grammar."""
-        return Grammar._create_from_handle(
+        Grammar._create_from_handle(
             _core.testing.grammar_functor.lookahead_assertion_analyzer(grammar._handle)
         )
