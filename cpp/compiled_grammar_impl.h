@@ -10,6 +10,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -17,6 +19,7 @@
 
 #include "earley_parser.h"
 #include "support/dynamic_bitset.h"
+#include "support/logging.h"
 #include "support/reflection.h"
 #include "xgrammar/compiler.h"
 #include "xgrammar/exception.h"
@@ -79,6 +82,8 @@ struct AdaptiveTokenMask {
 
   std::string Print(const TokenizerInfo& tokenizer_info) const;
 
+  std::string Print(const std::vector<std::pair<int, std::string>>& sorted_decoded_vocab) const;
+
   friend std::size_t MemorySize(const AdaptiveTokenMask& mask) {
     return MemorySize(mask.uncertain_indices) + MemorySize(mask.accepted_indices) +
            MemorySize(mask.rejected_indices) + MemorySize(mask.accepted_bitset);
@@ -121,6 +126,16 @@ class CompiledGrammar::Impl {
   Grammar GetGrammar() const { return grammar; }
 
   TokenizerInfo GetTokenizerInfo() const { return tokenizer_info; }
+
+  void PrintCache() const {
+    std::map<ParserState, AdaptiveTokenMask> output_map;
+    for (const auto& [state, mask] : adaptive_token_mask_cache) {
+      output_map[state] = mask;
+    }
+    for (const auto& [state, mask] : output_map) {
+      XGRAMMAR_LOG(INFO) << "State: " << state << "\nMask: " << mask.Print(tokenizer_info) << "\n";
+    }
+  }
 
   friend struct member_trait<Impl>;
   friend picojson::value SerializeJSONValue(const Impl& impl);

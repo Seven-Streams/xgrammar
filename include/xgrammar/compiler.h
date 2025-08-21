@@ -39,6 +39,8 @@ class CompiledGrammar {
   /*! \brief Return the serialized JSON string of the compiled grammar. */
   std::string SerializeJSON() const;
 
+  void PrintCache() const;
+
   /*! \brief Deserialize a compiled grammar from a JSON string and tokenizer info. */
   static std::variant<CompiledGrammar, SerializationError> DeserializeJSON(
       const std::string& json_string, const TokenizerInfo& tokenizer_info
@@ -63,12 +65,14 @@ class GrammarCompiler {
    * \param max_threads The maximum number of threads to use for compiling grammars.
    * \param cache_enabled Whether to enable the cache.
    * \param max_memory_bytes The maximum memory usage in bytes.
+   * \param is_jit If JIT mode.
    */
   GrammarCompiler(
       const TokenizerInfo& tokenizer_info,
       int max_threads = 8,
       bool cache_enabled = true,
-      int64_t max_memory_bytes = -1  // unlimited
+      int64_t max_memory_bytes = -1,  // unlimited
+      bool is_jit = false
   );
 
   /*! \brief Get the compiled grammar for a JSON schema string. */
