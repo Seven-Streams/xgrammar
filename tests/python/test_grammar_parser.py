@@ -538,8 +538,9 @@ rule2 ::= (("b") | ("c" [b-c]))
 @pytest.mark.parametrize("before, expected", before__expected__test_rule_inliner)
 def test_rule_inliner(before: str, expected: str):
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.rule_inliner(grammar)
+    GrammarFunctor.rule_inliner(grammar)
     after = str(grammar)
+    print(after)
     assert after == expected
 
 
