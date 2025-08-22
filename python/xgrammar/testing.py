@@ -331,11 +331,9 @@ class GrammarFunctor:
         )
 
     @staticmethod
-    def rule_inliner(grammar: Grammar) -> Grammar:
+    def rule_inliner(grammar: Grammar) -> None:
         """Inline some rule references in the grammar."""
-        return Grammar._create_from_handle(
-            _core.testing.grammar_functor.rule_inliner(grammar._handle)
-        )
+        Grammar._create_from_handle(_core.testing.grammar_functor.rule_inliner(grammar._handle))
 
     @staticmethod
     def byte_string_fuser(grammar: Grammar) -> None:

@@ -577,62 +577,76 @@ class ByteStringFuserImpl {
  * 1. at the beginning of a sequence
  * 2. The rule should be a sequence of choices, cannot be empty, cannot refer to other rules
  */
-class RuleInlinerImpl : public GrammarMutator {
+class RuleInlinerImpl {
  public:
-  using GrammarMutator::Apply;
-  using GrammarMutator::GrammarMutator;
-
- private:
-  int32_t VisitChoices(const GrammarExpr& grammar_expr) final {
-    std::vector<int32_t> new_choice_ids;
-    for (int i : grammar_expr) {
-      auto choice_expr = base_grammar_->GetGrammarExpr(i);
-      if (choice_expr.type == GrammarExprType::kEmptyStr) {
-        new_choice_ids.push_back(VisitExpr(i));
+  using GrammarExprType = Grammar::Impl::GrammarExprType;
+  void Apply(Grammar* grammar) {
+    auto& grammar_impl = *grammar->ImplPtr();
+    Grammar::Impl grammar_impl_copy = grammar_impl;
+    for (int i = 0; i < grammar_impl_copy.NumRules(); i++) {
+      const auto& rule = grammar_impl_copy.GetRule(i);
+      const auto& rule_expr = grammar_impl_copy.GetGrammarExpr(rule.body_expr_id);
+      if (rule_expr.type != GrammarExprType::kChoices) {
         continue;
       }
-      XGRAMMAR_ICHECK(choice_expr.type == GrammarExprType::kSequence);
-      auto first_element = base_grammar_->GetGrammarExpr(choice_expr[0]);
-      if (first_element.type != GrammarExprType::kRuleRef) {
-        new_choice_ids.push_back(VisitExpr(choice_expr));
-        continue;
-      }
-      auto rule_ref_id = first_element[0];
-      if (can_rule_be_inlined_.count(rule_ref_id) == 0) {
-        can_rule_be_inlined_[rule_ref_id] = CheckIfRuleCanBeInlined(rule_ref_id);
-      }
-      if (!can_rule_be_inlined_[rule_ref_id]) {
-        new_choice_ids.push_back(VisitExpr(choice_expr));
-        continue;
-      }
-
-      // Do inlining
-      std::vector<int32_t> other_elements;
-      for (int i = 1; i < choice_expr.size(); ++i) {
-        other_elements.push_back(VisitExpr(choice_expr[i]));
-      }
-
-      auto ref_rule = base_grammar_->GetRule(rule_ref_id);
-      auto ref_grammar_expr = base_grammar_->GetGrammarExpr(ref_rule.body_expr_id);
-
-      for (auto ref_choice_id : ref_grammar_expr) {
-        auto ref_choice_expr = base_grammar_->GetGrammarExpr(ref_choice_id);
-        XGRAMMAR_ICHECK(ref_choice_expr.type == GrammarExprType::kSequence);
-        std::vector<int32_t> choice_to_add;
-        for (auto ref_element_id : ref_choice_expr) {
-          choice_to_add.push_back(VisitExpr(ref_element_id));
+      std::vector<int32_t> new_choices;
+      bool choices_updated = false;
+      for (auto choice_id : rule_expr) {
+        const auto& choice_expr = grammar_impl_copy.GetGrammarExpr(choice_id);
+        if (choice_expr.type != GrammarExprType::kSequence) {
+          new_choices.push_back(choice_id);
+          continue;
         }
-        choice_to_add.insert(choice_to_add.end(), other_elements.begin(), other_elements.end());
-        new_choice_ids.push_back(builder_->AddSequence(choice_to_add));
+        if (choice_expr.size() == 0) {
+          new_choices.push_back(choice_id);
+          continue;
+        }
+        const auto& first_element_expr = grammar_impl_copy.GetGrammarExpr(choice_expr[0]);
+        if (first_element_expr.type != GrammarExprType::kRuleRef) {
+          new_choices.push_back(choice_id);
+          continue;
+        }
+        if (can_rule_be_inlined_.count(first_element_expr[0]) == 0) {
+          can_rule_be_inlined_[first_element_expr[0]] =
+              CheckIfRuleCanBeInlined(first_element_expr[0], &grammar_impl_copy);
+        }
+        if (can_rule_be_inlined_[first_element_expr[0]]) {
+          choices_updated = true;
+          const auto& inlined_rule = grammar_impl_copy.GetRule(first_element_expr[0]);
+          const auto& inlined_rule_body =
+              grammar_impl_copy.GetGrammarExpr(inlined_rule.body_expr_id);
+          for (const auto& sequence_id : inlined_rule_body) {
+            std::vector<int32_t> new_sequence;
+            const auto& sequence = grammar_impl_copy.GetGrammarExpr(sequence_id);
+            new_sequence.insert(new_sequence.end(), sequence.begin(), sequence.end());
+            new_sequence.insert(new_sequence.end(), choice_expr.begin() + 1, choice_expr.end());
+            GrammarExpr inlined_choice = GrammarExpr{
+                GrammarExprType::kSequence,
+                new_sequence.data(),
+                static_cast<int32_t>(new_sequence.size())
+            };
+            new_choices.push_back(grammar_impl.AddGrammarExpr(inlined_choice));
+          }
+        } else {
+          new_choices.push_back(choice_id);
+        }
       }
+
+      if (!choices_updated) {
+        continue;
+      }
+      // Otherwise, we should create a new choices.
+      GrammarExpr new_choices_expr = GrammarExpr{
+          GrammarExprType::kChoices, new_choices.data(), static_cast<int32_t>(new_choices.size())
+      };
+      grammar_impl.UpdateRuleBody(i, grammar_impl.AddGrammarExpr(new_choices_expr));
     }
-    return builder_->AddChoices(new_choice_ids);
   }
 
   /**
    * The rule should be: a sequence of choices, cannot be empty, cannot refer to other rules
    */
-  bool CheckIfRuleCanBeInlined(int32_t rule_id) {
+  bool CheckIfRuleCanBeInlined(int32_t rule_id, Grammar::Impl* base_grammar_) {
     auto rule = base_grammar_->GetRule(rule_id);
     auto grammar_expr = base_grammar_->GetGrammarExpr(rule.body_expr_id);
     if (grammar_expr.type != GrammarExprType::kChoices) {
@@ -937,6 +951,7 @@ class GrammarNormalizerImpl : public GrammarMutator {
     InitGrammar(grammar);
     base_grammar_ = StructureNormalizerImpl().Apply(grammar);
     ByteStringFuserImpl().Apply(&base_grammar_);
+    RuleInlinerImpl().Apply(&base_grammar_);
     for (auto& mutator : normalizer_mutators) {
       base_grammar_ = mutator->Apply(base_grammar_);
     }
@@ -948,7 +963,6 @@ class GrammarNormalizerImpl : public GrammarMutator {
   // Return the list of all normalizers in the class. The normalizers are applied one by one.
   std::vector<std::unique_ptr<GrammarMutator>> GetNormalizerList() {
     std::vector<std::unique_ptr<GrammarMutator>> normalizer_mutators;
-    normalizer_mutators.emplace_back(std::make_unique<RuleInlinerImpl>());
     normalizer_mutators.emplace_back(std::make_unique<DeadCodeEliminatorImpl>());
     return normalizer_mutators;
   }
@@ -1956,7 +1970,7 @@ Grammar StructuralTagGrammarCreator::Apply(
   return StructuralTagGrammarCreatorImpl().Apply(triggers, tag_groups);
 }
 
-Grammar RuleInliner::Apply(const Grammar& grammar) { return RuleInlinerImpl().Apply(grammar); }
+void RuleInliner::Apply(Grammar* grammar) { RuleInlinerImpl().Apply(grammar); }
 
 void ByteStringFuser::Apply(Grammar* grammar) { ByteStringFuserImpl().Apply(grammar); }
 
