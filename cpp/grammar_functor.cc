@@ -2130,7 +2130,12 @@ void GrammarFSMHasher::Apply(Grammar* grammar) { GrammarFSMHasherImpl().Apply(gr
 std::optional<AdaptiveTokenMask> CrossingCacheManager::GetCache(
     const uint64_t& fsm_hash, int32_t fsm_new_node_id, const uint64_t& tokenizer_hash
 ) {
-  return crossing_cache_manager_impl_.GetCache(fsm_hash, fsm_new_node_id, tokenizer_hash);
+  cache_request_count_++;
+  auto result = crossing_cache_manager_impl_.GetCache(fsm_hash, fsm_new_node_id, tokenizer_hash);
+  if (result.has_value()) {
+    cache_hit_count_++;
+  }
+  return result;
 }
 
 bool CrossingCacheManager::AddCache(
