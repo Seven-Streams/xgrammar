@@ -2411,10 +2411,6 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     return "";
   }
 
-  std::string first_sep = NextSeparator();
-  std::string mid_sep = NextSeparator();
-  std::string last_sep = NextSeparator(true);
-
   std::string res = "";
 
   std::vector<std::string> prop_patterns;
@@ -2436,7 +2432,9 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     if (allow_additional) {
       additional_prop_pattern =
           GetOtherPropertyPattern(kBasicString, additional, rule_name, additional_suffix);
-      std::string last_rule_body = "(" + mid_sep + " " + additional_prop_pattern + ")*";
+      std::string last_rule_body =
+          "(" + ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+          additional_prop_pattern + ")*";
       std::string last_rule_name =
           rule_name + "_part_" + std::to_string(static_cast<int>(properties.size()) - 1);
       last_rule_name = ebnf_script_creator_.AddRule(last_rule_name, last_rule_body);
@@ -2449,7 +2447,9 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     for (int i = properties.size() - 2; i >= 0; --i) {
       const std::string& prop_pattern = prop_patterns[i + 1];
       const std::string& last_rule_name = rule_names[i + 1];
-      std::string cur_rule_body = mid_sep + " " + prop_pattern + " " + last_rule_name;
+      std::string cur_rule_body =
+          ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+          prop_pattern + " " + last_rule_name;
       if (!required.count(properties[i + 1].first)) {
         cur_rule_body = last_rule_name + " | " + cur_rule_body;
       } else {
@@ -2479,7 +2479,8 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     }
 
     // add separators and the empty string option
-    res = first_sep + " (" + res + ") " + last_sep;
+    res = ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " (" + res +
+          ") " + ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator(true));
   } else if (max_properties == -1) {
     // Case 2. With constrain on the lower bound of the properties number
     int properties_size = static_cast<int>(properties.size());
@@ -2526,7 +2527,11 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
           GetOtherPropertyPattern(kBasicString, additional, rule_name, additional_suffix);
       for (int matched = key_matched_min.back(); matched <= properties_size; ++matched) {
         std::string last_rule_body = GetPropertyWithNumberConstrains(
-            mid_sep + " " + additional_prop_pattern, min_properties, max_properties, matched
+            ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+                additional_prop_pattern,
+            min_properties,
+            max_properties,
+            matched
         );
         std::string last_rule_name = rule_name + "_part_" +
                                      std::to_string(static_cast<int>(properties.size()) - 1) + "_" +
@@ -2547,12 +2552,14 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
       for (int matched = key_matched_min[i]; matched <= i + 1; ++matched) {
         std::string cur_rule_body = "";
         if (is_required[i + 1] || matched == key_matched_min[i + 1] - 1) {
-          cur_rule_body = mid_sep + " " + prop_pattern + " " +
-                          rule_names[i + 1][matched + 1 - key_matched_min[i + 1]];
+          cur_rule_body =
+              ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+              prop_pattern + " " + rule_names[i + 1][matched + 1 - key_matched_min[i + 1]];
         } else {
-          cur_rule_body = rule_names[i + 1][matched - key_matched_min[i + 1]] + " | " + mid_sep +
-                          " " + prop_pattern + " " +
-                          rule_names[i + 1][matched - key_matched_min[i + 1] + 1];
+          cur_rule_body =
+              rule_names[i + 1][matched - key_matched_min[i + 1]] + " | " +
+              ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+              prop_pattern + " " + rule_names[i + 1][matched - key_matched_min[i + 1] + 1];
         }
         std::string cur_rule_name =
             rule_name + "_part_" + std::to_string(i) + "_" + std::to_string(matched);
@@ -2584,13 +2591,18 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
       }
       res += "(" + additional_prop_pattern + " " +
              GetPropertyWithNumberConstrains(
-                 mid_sep + " " + additional_prop_pattern, min_properties, max_properties, 1
+                 ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+                     additional_prop_pattern,
+                 min_properties,
+                 max_properties,
+                 1
              ) +
              ")";
     }
 
     // add separators and the empty string option
-    res = first_sep + " (" + res + ") " + last_sep;
+    res = ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " (" + res +
+          ") " + ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator(true));
   } else {
     // Case 3. With constrains on the both lower & upper bound of the properties number
     int properties_size = static_cast<int>(properties.size());
@@ -2650,7 +2662,11 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
           GetOtherPropertyPattern(kBasicString, additional, rule_name, additional_suffix);
       for (int matched = key_matched_min.back(); matched <= key_matched_max.back(); ++matched) {
         std::string last_rule_body = GetPropertyWithNumberConstrains(
-            mid_sep + " " + additional_prop_pattern, min_properties, max_properties, matched
+            ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+                additional_prop_pattern,
+            min_properties,
+            max_properties,
+            matched
         );
         std::string last_rule_name = rule_name + "_part_" +
                                      std::to_string(static_cast<int>(properties.size()) - 1) + "_" +
@@ -2673,12 +2689,14 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
         if (matched == key_matched_max[i + 1]) {
           cur_rule_body = rule_names[i + 1][matched - key_matched_min[i + 1]];
         } else if (is_required[i + 1] || matched == key_matched_min[i + 1] - 1) {
-          cur_rule_body = mid_sep + " " + prop_pattern + " " +
-                          rule_names[i + 1][matched + 1 - key_matched_min[i + 1]];
+          cur_rule_body =
+              ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+              prop_pattern + " " + rule_names[i + 1][matched + 1 - key_matched_min[i + 1]];
         } else {
-          cur_rule_body = rule_names[i + 1][matched - key_matched_min[i + 1]] + " | " + mid_sep +
-                          " " + prop_pattern + " " +
-                          rule_names[i + 1][matched - key_matched_min[i + 1] + 1];
+          cur_rule_body =
+              rule_names[i + 1][matched - key_matched_min[i + 1]] + " | " +
+              ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+              prop_pattern + " " + rule_names[i + 1][matched - key_matched_min[i + 1] + 1];
         }
         std::string cur_rule_name =
             rule_name + "_part_" + std::to_string(i) + "_" + std::to_string(matched);
@@ -2713,13 +2731,18 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
       }
       res += "(" + additional_prop_pattern + " " +
              GetPropertyWithNumberConstrains(
-                 mid_sep + " " + additional_prop_pattern, min_properties, max_properties, 1
+                 ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+                     additional_prop_pattern,
+                 min_properties,
+                 max_properties,
+                 1
              ) +
              ")";
     }
 
     // add separators and the empty string option
-    res = first_sep + " (" + res + ") " + last_sep;
+    res = ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " (" + res +
+          ") " + ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator(true));
   }
   return res;
 }
@@ -2923,7 +2946,6 @@ std::string JSONSchemaConverter::VisitObject(
     // TODO: The coexistence of properties, required, etc. has not been addressed yet,
     // as it may cause schema conflicts
     // TODO: The situation of duplicate keys has not been resolved yet
-    std::string beg_seq = NextSeparator();
     std::string property_rule_body = "(";
     if (object_spec.max_properties != 0) {
       if (object_spec.pattern_properties.size() > 0) {
@@ -2936,25 +2958,29 @@ std::string JSONSchemaConverter::VisitObject(
           if (i != 0) {
             property_rule_body += " | ";
           }
-          property_rule_body += "(" + beg_seq + " " + property_pattern + ")";
+          property_rule_body +=
+              "(" + ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) +
+              " " + property_pattern + ")";
         }
         property_rule_body += ")";
       } else {
         auto key_pattern = CreateRuleFromSchema(object_spec.property_names, rule_name + "_name");
         property_rule_body +=
-            beg_seq + " " + key_pattern + " " + colon_pattern_ + " " + kBasicAny + ")";
+            ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) + " " +
+            key_pattern + " " + colon_pattern_ + " " + kBasicAny + ")";
       }
       // set the property rule
       auto prop_rule_name = ebnf_script_creator_.AllocateRuleName(rule_name + "_prop");
       ebnf_script_creator_.AddRuleWithAllocatedName(prop_rule_name, property_rule_body);
       result += " " + prop_rule_name + " " +
                 GetPropertyWithNumberConstrains(
-                    NextSeparator() + " " + prop_rule_name,
+                    ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) +
+                        " " + prop_rule_name,
                     object_spec.min_properties,
                     object_spec.max_properties,
                     1
                 ) +
-                NextSeparator(true);
+                ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator(true));
       could_be_empty = object_spec.min_properties == 0;
     }
   } else if (object_spec.properties.size() > 0) {
@@ -2975,15 +3001,18 @@ std::string JSONSchemaConverter::VisitObject(
     if (object_spec.max_properties != 0) {
       std::string other_property_pattern =
           GetOtherPropertyPattern(kBasicString, additional_property, rule_name, additional_suffix);
-      result += " " + NextSeparator() + " " + other_property_pattern + " ";
+      result += " " + ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) +
+                " " + other_property_pattern + " ";
       if (object_spec.max_properties != 0) {
         result += GetPropertyWithNumberConstrains(
-                      NextSeparator() + " " + other_property_pattern,
+                      ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator()) +
+                          " " + other_property_pattern,
                       object_spec.min_properties,
                       object_spec.max_properties,
                       1
                   ) +
-                  " " + NextSeparator(true);
+                  " " +
+                  ebnf_script_creator_.AddRule("not_inlined_next_separator", NextSeparator(true));
       }
     }
     could_be_empty = object_spec.min_properties == 0;
