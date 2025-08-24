@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <ratio>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -323,6 +324,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   const std::string* prev_token = nullptr;
+  std::chrono::duration<double, std::micro> total_time(0);
   for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
     const auto& interval = possible_intervals[interval_idx];
     for (int i = interval.first; i < interval.second; ++i) {
@@ -340,10 +342,11 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         }
         continue;
       }
-
       const auto& token = sorted_decoded_vocab[i].second;
       // This optimization is useful for simple self-recursive rules, like string content.
       if (speculative_calculation) {
+        std::chrono::high_resolution_clock::time_point start_time =
+            std::chrono::high_resolution_clock::now();
         bool all_accepted = true;
         for (char ch : token) {
           // If the first character is not the ascii character or can't be accepted by the
@@ -355,8 +358,30 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         }
         if (all_accepted) {
           tmp_accepted_indices_.push_back(i);
+          for (int j = i + 1; j < subtree_nodes_range[i]; j++) {
+            const auto& sub_token = sorted_decoded_vocab[j].second;
+            for (int index = token.size(); index < static_cast<int>(sub_token.size()); index++) {
+              if (isascii(sub_token[index]) == 0 ||
+                  !speculative_mask[static_cast<uint8_t>(sub_token[index])]) {
+                all_accepted = false;
+                break;
+              }
+            }
+            if (!all_accepted) {
+              i = j - 1;
+              break;
+            } else {
+              tmp_accepted_indices_.push_back(j);
+            }
+          }
+          if (all_accepted) {
+            i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
+          }
           continue;
         }
+        std::chrono::high_resolution_clock::time_point end_time =
+            std::chrono::high_resolution_clock::now();
+        total_time += end_time - start_time;
       }
       // Many tokens may contain the same prefix, so we will avoid unnecessary matching
       // by finding the longest common prefix with the previous token.
@@ -463,6 +488,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     }
   }
 
+  XGRAMMAR_LOG(INFO) << total_time.count() << " us";
   return fill_reject_indices;
 }
 
