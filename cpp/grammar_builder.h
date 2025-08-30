@@ -236,6 +236,10 @@ class GrammarBuilder {
     return AddRule({GetNewRuleName(name_hint), body_expr_id});
   }
 
+  void AddEmptyInfomation(int nullable_rule_id) {
+    grammar_->allow_empty_rule_ids.push_back(nullable_rule_id);
+  }
+
   int32_t NumRules() const { return grammar_->NumRules(); }
 
   /*! \brief Get the rule with the given id. */

@@ -1685,25 +1685,163 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::TagDispatch(
   }
 }
 
-class RepetitionNormalizerImpl {
+class RepetitionNormalizerImpl : public GrammarMutator {
  public:
-  void Apply(Grammar* grammar) {
-    for (int i = 0; i < (*grammar)->NumGrammarExprs(); ++i) {
-      auto expr = (*grammar)->GetGrammarExpr(i);
-      if (expr.type != Grammar::Impl::GrammarExprType::kRepeat) {
-        continue;
-      }
-      int repeat_rule_id = expr[0];
-      grammar->ImplPtr()->GetRule(repeat_rule_id).is_exact_lookahead = true;
-      if (std::binary_search(
-              (*grammar)->allow_empty_rule_ids.begin(),
-              (*grammar)->allow_empty_rule_ids.end(),
-              repeat_rule_id
-          )) {
-        // The repeated rule can be empty, so we need to normalize it.
-        expr.SetData(1, 0);  // Set min repeat to 0
-      }
+  using GrammarMutator::Apply;
+  using GrammarMutator::GrammarMutator;
+
+ private:
+  int32_t VisitRepeat(const GrammarExpr& expr) override {
+    XGRAMMAR_DCHECK(expr.type == ExprType::kRepeat);
+
+    // Step 1. Normalize the repetition times.
+    bool is_nullable = base_grammar_->allow_empty_rule_ids[expr[0]];
+    // If a repetition expression is nullable, its min_times can be
+    // reduced to 0.
+    const auto& repeated_rule_id = expr[0];
+    int32_t lower = is_nullable ? 0 : expr[1];
+    int32_t upper = expr[2];
+    bool repeated_grammar_expr_id_is_used = false;
+
+    // Step 2. Check if the repetition expression is bounded.
+    int32_t new_element;
+    if (upper == -1) {
+      const auto& unbounded_rule_id =
+          builder_->AddEmptyRule(builder_->GetNewRuleName(cur_rule_name_ + "_repeat_inf"));
+      int recursion_sequence = builder_->AddSequence(
+          {builder_->AddRuleRef(repeated_rule_id), builder_->AddRuleRef(unbounded_rule_id)}
+      );
+      int recursion_choice = builder_->AddChoices({builder_->AddEmptyStr(), recursion_sequence});
+      builder_->UpdateRuleBody(unbounded_rule_id, recursion_choice);
+      new_element = builder_->AddRuleRef(unbounded_rule_id);
+      upper = lower;
+      repeated_grammar_expr_id_is_used = true;
     }
+
+    // Step 3. Expand the left repetition expression.
+
+    // Initialize the original sequences.
+    std::vector<std::vector<GrammarExpr>> original_repeated_sequences;
+    const auto& original_rule = base_grammar_->GetRule(repeated_rule_id);
+    const auto& original_grammar_expr = base_grammar_->GetGrammarExpr(original_rule.body_expr_id);
+    XGRAMMAR_DCHECK(original_grammar_expr.type == ExprType::kChoices);
+    original_repeated_sequences.reserve(original_grammar_expr.size());
+    for (const auto& sequence_id : original_grammar_expr) {
+      original_repeated_sequences.emplace_back();
+      const auto& sequence = base_grammar_->GetGrammarExpr(sequence_id);
+      for (const auto& element : sequence) {
+        const auto& element_expr = base_grammar_->GetGrammarExpr(element);
+        original_repeated_sequences.back().push_back(element_expr);
+      }
+      XGRAMMAR_DCHECK(sequence.type == ExprType::kSequence);
+    }
+
+    std::vector<int32_t> elements;
+    const auto repeat_name = base_grammar_->GetRule(repeated_rule_id).name;
+    int splited_count = lower >= 4 ? 4 : lower;
+    int nullable_splited_count = 0;
+    if (splited_count != 4) {
+      nullable_splited_count =
+          (upper - lower) >= (4 - splited_count) ? 4 - splited_count : upper - lower;
+    }
+
+    // The repetition sentence.
+    if (upper != (splited_count + nullable_splited_count)) {
+      int new_rule_id;
+      if (repeated_grammar_expr_id_is_used) {
+        std::vector<int32_t> choices;
+        for (const auto& seq : original_repeated_sequences) {
+          std::vector<int32_t> seq_elements;
+          for (const auto& element : seq) {
+            int32_t new_element_id = builder_->AddGrammarExpr(element);
+            seq_elements.push_back(new_element_id);
+          }
+          choices.push_back(builder_->AddSequence(seq_elements));
+        }
+        new_rule_id = builder_->AddRuleWithHint(repeat_name, builder_->AddChoices(choices));
+        builder_->AddEmptyInfomation(new_rule_id);
+      } else {
+        new_rule_id = repeated_rule_id;
+        repeated_grammar_expr_id_is_used = true;
+      }
+      elements.push_back(builder_->AddRepeat(
+          new_rule_id, lower - splited_count, upper - splited_count - nullable_splited_count
+      ));
+    }
+
+    // The nullable exprs.
+    for (int i = 0; i < nullable_splited_count; i++) {
+      int new_rule_id;
+      if (repeated_grammar_expr_id_is_used) {
+        std::vector<int32_t> choices(builder_->AddEmptyStr());
+        for (const auto& seq : original_repeated_sequences) {
+          std::vector<int32_t> seq_elements;
+          for (const auto& element : seq) {
+            int32_t new_element_id = builder_->AddGrammarExpr(element);
+            seq_elements.push_back(new_element_id);
+          }
+          choices.push_back(builder_->AddSequence(seq_elements));
+        }
+        new_rule_id = builder_->AddRuleWithHint(repeat_name, builder_->AddChoices(choices));
+        builder_->AddEmptyInfomation(new_rule_id);
+      } else {
+        new_rule_id = builder_->AddRuleWithHint(
+            repeat_name,
+            builder_->AddChoices(
+                {builder_->AddEmptyStr(),
+                 builder_->AddSequence({builder_->AddRuleRef(repeated_rule_id)})}
+            )
+        );
+        builder_->AddEmptyInfomation(new_rule_id);
+        repeated_grammar_expr_id_is_used = true;
+      }
+      elements.push_back(builder_->AddRuleRef(new_rule_id));
+    }
+
+    // The last splited_count repetitions.
+    for (int i = 0; i < splited_count; i++) {
+      int new_rule_id;
+      if (repeated_grammar_expr_id_is_used) {
+        std::vector<int32_t> choices;
+        for (const auto& seq : original_repeated_sequences) {
+          std::vector<int32_t> seq_elements;
+          for (const auto& element : seq) {
+            int32_t new_element_id = builder_->AddGrammarExpr(element);
+            seq_elements.push_back(new_element_id);
+          }
+          choices.push_back(builder_->AddSequence(seq_elements));
+        }
+        new_rule_id = builder_->AddRuleWithHint(repeat_name, builder_->AddChoices(choices));
+        if (is_nullable) {
+          builder_->AddEmptyInfomation(new_rule_id);
+        }
+      } else {
+        new_rule_id = repeated_rule_id;
+        repeated_grammar_expr_id_is_used = true;
+      }
+      elements.push_back(builder_->AddRuleRef(new_rule_id));
+    }
+    if (upper == -1) {
+      elements.push_back(new_element);
+    }
+    // Add the lookahead elements
+    std::vector<int32_t> lookahead_elements = elements;
+    if (elements.empty()) {
+      return builder_->AddEmptyStr();
+    }
+    for (int64_t i = 0; i < static_cast<int64_t>(elements.size() - 1); i++) {
+      lookahead_elements.erase(lookahead_elements.begin());
+      builder_->UpdateLookaheadAssertion(
+          builder_->GetGrammarExpr(elements[i])[0], builder_->AddSequence(lookahead_elements)
+      );
+    }
+    int return_rule_id = builder_->AddRuleWithHint(
+        cur_rule_name_ + "repeat_body", builder_->AddChoices({builder_->AddSequence(elements)})
+    );
+    if (is_nullable || lower == 0) {
+      builder_->AddEmptyInfomation(return_rule_id);
+    }
+    return builder_->AddRuleRef(return_rule_id);
   }
 };
 
@@ -1756,7 +1894,9 @@ int32_t SubGrammarAdder::Apply(GrammarBuilder* builder, const Grammar& sub_gramm
 
 void GrammarFSMBuilder::Apply(Grammar* grammar) { GrammarFSMBuilderImpl().Apply(grammar); }
 
-void RepetitionNormalizer::Apply(Grammar* grammar) { RepetitionNormalizerImpl().Apply(grammar); }
+Grammar RepetitionNormalizer::Apply(const Grammar& grammar) {
+  return RepetitionNormalizerImpl().Apply(grammar);
+}
 
 std::optional<FSMWithStartEnd> GrammarFSMBuilder::RuleRef(const GrammarExpr& expr) {
   return GrammarFSMBuilderImpl::RuleRef(expr);

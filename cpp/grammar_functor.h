@@ -361,7 +361,7 @@ class SubGrammarAdder {
 
 class RepetitionNormalizer {
  public:
-  static void Apply(Grammar* grammar);
+  static Grammar Apply(const Grammar& grammar);
 };
 
 }  // namespace xgrammar
