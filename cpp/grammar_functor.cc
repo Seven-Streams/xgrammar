@@ -1520,7 +1520,6 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::Choices(
       nullable = true;
       continue;
     }
-    XGRAMMAR_LOG(INFO) << static_cast<int>(choice_expr.type);
     XGRAMMAR_DCHECK(choice_expr.type == ExprType::kSequence);
     auto fsm_result = Sequence(choice_expr, grammar);
     if (!fsm_result.has_value()) {
@@ -1731,7 +1730,6 @@ class RepetitionNormalizerImpl : public GrammarMutator {
     std::vector<std::vector<GrammarExpr>> original_repeated_sequences;
     bool nullable = false;
     const auto& original_rule = base_grammar_->GetRule(repeated_rule_id);
-    XGRAMMAR_LOG(INFO) << original_rule.name;
     const auto& original_grammar_expr = base_grammar_->GetGrammarExpr(original_rule.body_expr_id);
     XGRAMMAR_DCHECK(original_grammar_expr.type == ExprType::kChoices);
     original_repeated_sequences.reserve(original_grammar_expr.size());
@@ -1789,7 +1787,7 @@ class RepetitionNormalizerImpl : public GrammarMutator {
     for (int i = 0; i < nullable_splited_count; i++) {
       int new_rule_id;
       if (repeated_grammar_expr_id_is_used) {
-        std::vector<int32_t> choices(builder_->AddEmptyStr());
+        std::vector<int32_t> choices({builder_->AddEmptyStr()});
         for (const auto& seq : original_repeated_sequences) {
           std::vector<int32_t> seq_elements;
           for (const auto& element : seq) {
@@ -1822,18 +1820,14 @@ class RepetitionNormalizerImpl : public GrammarMutator {
         if (nullable) {
           choices.push_back(builder_->AddEmptyStr());
         }
-        XGRAMMAR_LOG(INFO) << original_repeated_sequences.size();
         for (const auto& seq : original_repeated_sequences) {
           std::vector<int32_t> seq_elements;
-          XGRAMMAR_LOG(INFO) << seq.size();
           for (const auto& element : seq) {
-            XGRAMMAR_LOG(INFO) << static_cast<int>(element.type);
             int32_t new_element_id = builder_->AddGrammarExpr(element);
             seq_elements.push_back(new_element_id);
           }
           choices.push_back(builder_->AddSequence(seq_elements));
         }
-        XGRAMMAR_LOG(INFO) << choices.size();
         new_rule_id = builder_->AddRuleWithHint(repeat_name, builder_->AddChoices(choices));
         if (is_nullable) {
           builder_->AddEmptyInfomation(new_rule_id);

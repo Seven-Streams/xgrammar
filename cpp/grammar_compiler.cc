@@ -654,7 +654,6 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   compiled_grammar_impl->grammar = grammar;
   compiled_grammar_impl->tokenizer_info = tokenizer_info_;
   grammar->allow_empty_rule_ids = AllowEmptyRuleAnalyzer::Apply(compiled_grammar_impl->grammar);
-  XGRAMMAR_LOG(INFO) << compiled_grammar_impl->grammar.ToString();
   compiled_grammar_impl->grammar = RepetitionNormalizer::Apply(compiled_grammar_impl->grammar);
   XGRAMMAR_LOG(INFO) << compiled_grammar_impl->grammar.ToString();
   GrammarFSMBuilder::Apply(&compiled_grammar_impl->grammar);
