@@ -520,7 +520,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
         break;
       }
       default: {
-        XGRAMMAR_LOG(FATAL) << "Unsupported grammar expr type: " << static_cast<int>(sequence.type);
+        XGRAMMAR_LOG(FATAL) << "Unsupported grammar expr type: "
+                            << static_cast<int>(sub_sequence.type);
       }
     }
   } else {
@@ -653,7 +654,9 @@ CompiledGrammar GrammarCompiler::Impl::MultiThreadCompileGrammar(Grammar grammar
   compiled_grammar_impl->grammar = grammar;
   compiled_grammar_impl->tokenizer_info = tokenizer_info_;
   grammar->allow_empty_rule_ids = AllowEmptyRuleAnalyzer::Apply(compiled_grammar_impl->grammar);
+  XGRAMMAR_LOG(INFO) << compiled_grammar_impl->grammar.ToString();
   compiled_grammar_impl->grammar = RepetitionNormalizer::Apply(compiled_grammar_impl->grammar);
+  XGRAMMAR_LOG(INFO) << compiled_grammar_impl->grammar.ToString();
   GrammarFSMBuilder::Apply(&compiled_grammar_impl->grammar);
   if (tokenizer_info_.GetVocabSize() == 0) {
     return CompiledGrammar(compiled_grammar_impl);

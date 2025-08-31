@@ -1520,6 +1520,7 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::Choices(
       nullable = true;
       continue;
     }
+    XGRAMMAR_LOG(INFO) << static_cast<int>(choice_expr.type);
     XGRAMMAR_DCHECK(choice_expr.type == ExprType::kSequence);
     auto fsm_result = Sequence(choice_expr, grammar);
     if (!fsm_result.has_value()) {
@@ -1728,18 +1729,24 @@ class RepetitionNormalizerImpl : public GrammarMutator {
 
     // Initialize the original sequences.
     std::vector<std::vector<GrammarExpr>> original_repeated_sequences;
+    bool nullable = false;
     const auto& original_rule = base_grammar_->GetRule(repeated_rule_id);
+    XGRAMMAR_LOG(INFO) << original_rule.name;
     const auto& original_grammar_expr = base_grammar_->GetGrammarExpr(original_rule.body_expr_id);
     XGRAMMAR_DCHECK(original_grammar_expr.type == ExprType::kChoices);
     original_repeated_sequences.reserve(original_grammar_expr.size());
     for (const auto& sequence_id : original_grammar_expr) {
-      original_repeated_sequences.emplace_back();
       const auto& sequence = base_grammar_->GetGrammarExpr(sequence_id);
+      if (sequence.type == ExprType::kEmptyStr) {
+        nullable = true;
+        continue;
+      }
+      original_repeated_sequences.emplace_back();
+      XGRAMMAR_DCHECK(sequence.type == ExprType::kSequence);
       for (const auto& element : sequence) {
         const auto& element_expr = base_grammar_->GetGrammarExpr(element);
         original_repeated_sequences.back().push_back(element_expr);
       }
-      XGRAMMAR_DCHECK(sequence.type == ExprType::kSequence);
     }
 
     std::vector<int32_t> elements;
@@ -1756,6 +1763,9 @@ class RepetitionNormalizerImpl : public GrammarMutator {
       int new_rule_id;
       if (repeated_grammar_expr_id_is_used) {
         std::vector<int32_t> choices;
+        if (nullable) {
+          choices.push_back(builder_->AddEmptyStr());
+        }
         for (const auto& seq : original_repeated_sequences) {
           std::vector<int32_t> seq_elements;
           for (const auto& element : seq) {
@@ -1809,14 +1819,21 @@ class RepetitionNormalizerImpl : public GrammarMutator {
       int new_rule_id;
       if (repeated_grammar_expr_id_is_used) {
         std::vector<int32_t> choices;
+        if (nullable) {
+          choices.push_back(builder_->AddEmptyStr());
+        }
+        XGRAMMAR_LOG(INFO) << original_repeated_sequences.size();
         for (const auto& seq : original_repeated_sequences) {
           std::vector<int32_t> seq_elements;
+          XGRAMMAR_LOG(INFO) << seq.size();
           for (const auto& element : seq) {
+            XGRAMMAR_LOG(INFO) << static_cast<int>(element.type);
             int32_t new_element_id = builder_->AddGrammarExpr(element);
             seq_elements.push_back(new_element_id);
           }
           choices.push_back(builder_->AddSequence(seq_elements));
         }
+        XGRAMMAR_LOG(INFO) << choices.size();
         new_rule_id = builder_->AddRuleWithHint(repeat_name, builder_->AddChoices(choices));
         if (is_nullable) {
           builder_->AddEmptyInfomation(new_rule_id);
@@ -1833,7 +1850,7 @@ class RepetitionNormalizerImpl : public GrammarMutator {
     // Add the lookahead elements
     std::vector<int32_t> lookahead_elements = elements;
     if (elements.empty()) {
-      return builder_->AddEmptyStr();
+      return builder_->AddByteString("");
     }
     for (int64_t i = 0; i < static_cast<int64_t>(elements.size() - 1); i++) {
       lookahead_elements.erase(lookahead_elements.begin());
