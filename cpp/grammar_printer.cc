@@ -154,7 +154,9 @@ std::string GrammarPrinter::PrintRepeat(const GrammarExpr& grammar_expr) {
   std::string result = grammar_->GetRule(grammar_expr[0]).name + "{";
   result += std::to_string(lower_bound);
   result += ", ";
-  result += std::to_string(upper_bound);
+  if (upper_bound != -1) {
+    result += std::to_string(upper_bound);
+  }
   result += "}";
   return result;
 }

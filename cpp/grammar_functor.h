@@ -87,6 +87,9 @@ class GrammarFunctor {
   virtual void InitBuilder() {
     owned_builder_ = GrammarBuilder();
     builder_ = &owned_builder_;
+    for (const auto& nullable_rule_id : base_grammar_->allow_empty_rule_ids) {
+      builder_->AddEmptyInfomation(nullable_rule_id);
+    }
   }
 
   virtual void InitBuilder(const Grammar& grammar) {

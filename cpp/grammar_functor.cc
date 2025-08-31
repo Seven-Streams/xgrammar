@@ -456,7 +456,8 @@ class RuleInlinerImpl : public GrammarMutator {
       XGRAMMAR_ICHECK(choice_expr.type == GrammarExprType::kSequence);
       for (auto element_id : choice_expr) {
         auto element_expr = base_grammar_->GetGrammarExpr(element_id);
-        if (element_expr.type == GrammarExprType::kRuleRef) {
+        if (element_expr.type == GrammarExprType::kRuleRef ||
+            element_expr.type == GrammarExprType::kRepeat) {
           return false;
         }
       }
@@ -1695,7 +1696,11 @@ class RepetitionNormalizerImpl : public GrammarMutator {
     XGRAMMAR_DCHECK(expr.type == ExprType::kRepeat);
 
     // Step 1. Normalize the repetition times.
-    bool is_nullable = base_grammar_->allow_empty_rule_ids[expr[0]];
+    bool is_nullable = std::binary_search(
+        base_grammar_->allow_empty_rule_ids.begin(),
+        base_grammar_->allow_empty_rule_ids.end(),
+        expr[0]
+    );
     // If a repetition expression is nullable, its min_times can be
     // reduced to 0.
     const auto& repeated_rule_id = expr[0];
@@ -1705,7 +1710,8 @@ class RepetitionNormalizerImpl : public GrammarMutator {
 
     // Step 2. Check if the repetition expression is bounded.
     int32_t new_element;
-    if (upper == -1) {
+    bool unbounded = upper == -1;
+    if (unbounded) {
       const auto& unbounded_rule_id =
           builder_->AddEmptyRule(builder_->GetNewRuleName(cur_rule_name_ + "_repeat_inf"));
       int recursion_sequence = builder_->AddSequence(
@@ -1821,7 +1827,7 @@ class RepetitionNormalizerImpl : public GrammarMutator {
       }
       elements.push_back(builder_->AddRuleRef(new_rule_id));
     }
-    if (upper == -1) {
+    if (unbounded) {
       elements.push_back(new_element);
     }
     // Add the lookahead elements
@@ -1836,7 +1842,7 @@ class RepetitionNormalizerImpl : public GrammarMutator {
       );
     }
     int return_rule_id = builder_->AddRuleWithHint(
-        cur_rule_name_ + "repeat_body", builder_->AddChoices({builder_->AddSequence(elements)})
+        cur_rule_name_ + "_repeat_body", builder_->AddChoices({builder_->AddSequence(elements)})
     );
     if (is_nullable || lower == 0) {
       builder_->AddEmptyInfomation(return_rule_id);
