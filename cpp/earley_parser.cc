@@ -87,6 +87,16 @@ void EarleyParser::Complete(const ParserState& state) {
             0
         });
       }
+
+      // If the rule is nullable, then the repeat should be normalized.
+      // We shouldn't enqueue the repeat state again.
+      if (std::binary_search(
+              grammar_->allow_empty_rule_ids.begin(), grammar_->allow_empty_rule_ids.end(), ref_id
+          ) &&
+          state.rule_start_pos == scanable_state_history_.size() - 1) {
+        continue;
+      }
+
       // If the repeat count is less than the max repeat count, we can continue to
       // visit the repeat state for another round.
       if (new_state.repeat_count < max_repeat_count) {
