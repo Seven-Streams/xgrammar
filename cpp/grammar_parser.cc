@@ -801,7 +801,6 @@ int32_t EBNFParser::HandleRepetitionRange(
         new_rule_id, lower - splited_count, upper - splited_count - nullable_splited_count
     ));
   }
-  // The last split_count exprs.
 
   // The nullable exprs.
   for (int i = 0; i < nullable_splited_count; i++) {
@@ -812,6 +811,7 @@ int32_t EBNFParser::HandleRepetitionRange(
     elements.push_back(builder_.AddRuleRef(new_rule_id));
   }
 
+  // The last split_count exprs.
   for (int i = 0; i < splited_count; i++) {
     auto new_grammar_expr_id = builder_.AddChoices({builder_.AddSequence({grammar_expr_id})});
     auto new_rule_id =

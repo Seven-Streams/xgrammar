@@ -99,20 +99,16 @@ std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAsser
     const std::string& token, const std::vector<bool>& can_reach_end_stack
 ) {
   bool accepted = true;
-  bool can_reach_end = true;
+  bool can_reach_end = false;
   auto lookahead_assertion_id = grammar_->GetRule(init_rule_id).lookahead_assertion_id;
   if (lookahead_assertion_id == -1) {
+    can_reach_end = true;
     return {accepted, can_reach_end};
   }
   auto lookahead_state =
       ParserState(/*rule_id*/ -1, lookahead_assertion_id, 0, ParserState::kNoPrevInputPos, 0);
   PushStateAndExpand(lookahead_state);
   int token_len = token.size();
-  if (IsCompleted()) {
-    // If the lookahead assertion is already completed, we can accept the token.
-    PopLastStates(1);
-    return {accepted, can_reach_end};
-  }
 
   // Find all positions that can come to and end. Then check if the suffix from that position
   // can be accepted by the lookahead assertion.
@@ -122,19 +118,16 @@ std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAsser
     }
     int last_accept_pos = i - 1;
     for (int pos = i; pos < token_len; ++pos) {
+      if (IsCompleted()) {
+        can_reach_end = true;
+      }
       if (!Advance(token[pos])) {
         break;
       }
       last_accept_pos = pos;
-      // Case 1. The whole rule is finished.
-      if (IsCompleted()) {
-        // accepted chars: pos - i + 1
-        // we need to rollback the pushed initial state as well
-        PopLastStates(pos - i + 2);
-        return {accepted, can_reach_end};
-      }
     }
-    // Case 2. The whole token is accepted
+    // Case 2. The whole token is accepted. Thus, the token is fully accepted
+    // by the lookahead.
     if (last_accept_pos == token_len - 1) {
       PopLastStates(last_accept_pos - i + 2);
       can_reach_end = false;
@@ -145,9 +138,14 @@ std::pair<bool, bool> GrammarMatcherForTokenMaskCache::IsTokenPassLookaheadAsser
   }
 
   PopLastStates(1);
-  can_reach_end = false;
-  accepted = false;
-  return {accepted, can_reach_end};
+  if (can_reach_end) {
+    // The token can reach the end, so it should at least be the uncertain token.
+    return {accepted, can_reach_end};
+  } else {
+    // The token is rejected by the lookahead assertion.
+    accepted = false;
+    return {accepted, can_reach_end};
+  }
 }
 
 // Comparator for std::pair<int32_t, std::string> based on the string value.
