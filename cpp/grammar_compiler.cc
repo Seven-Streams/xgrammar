@@ -419,13 +419,20 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       if (accepted) {
-        if (is_exact_lookahead) {
+        if (is_exact_lookahead || (!tmp_can_reach_end_prefix_or_stack_.back()) ||
+            lookahead_assertion_id_ == -1) {
+          // Case 1. The rule is exact lookahead, and it's accepted.
+          // Case 2. The rule's lookahead assertion is not exact, but the current token
+          // can not reach the end of the rule, so it's definitely accepted.
+          // Case 3. The rule has no lookahead assertion.
           tmp_accepted_indices_.push_back(i);
         } else {
           tmp_uncertain_indices_.push_back(i);
         }
       } else {
         if (tmp_can_reach_end_prefix_or_stack_.back() && !is_exact_lookahead) {
+          // When the lookahead assertion is exact, and the token can reach the end of the rule,
+          // we can't be sure if the token is accepted or not.
           tmp_uncertain_indices_.push_back(i);
         } else {
           tmp_rejected_indices_.push_back(i);
