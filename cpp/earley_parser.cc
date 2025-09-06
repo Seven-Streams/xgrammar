@@ -88,6 +88,17 @@ void EarleyParser::Complete(const ParserState& state) {
       }
       XGRAMMAR_DCHECK(element_expr.type == GrammarExprType::kRepeat);
       // The parent state is a repeat, we need to increase the repeat count.
+
+      // Check if the repeated rule is nullable. If it is nullable, then we should not
+      // increase the repeat count in this round.
+      bool nullable = std::binary_search(
+          grammar_->allow_empty_rule_ids.begin(),
+          grammar_->allow_empty_rule_ids.end(),
+          element_expr[0]
+      );
+      if (nullable && state.rule_start_pos == scanable_state_history_.size() - 1) {
+        continue;
+      }
       auto new_state = parent_state;
       const int32_t& min_repeat_count = element_expr[1];
       const int32_t& max_repeat_count = element_expr[2];

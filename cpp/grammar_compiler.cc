@@ -32,7 +32,7 @@ namespace xgrammar {
 class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
   GrammarMatcherForTokenMaskCache(const Grammar& grammar, const ParserState& init_state)
-      : EarleyParser(grammar, init_state, true, true),
+      : EarleyParser(grammar, init_state, false, true),
         init_rule_id(init_state.rule_id),
         initial_state(init_state) {}
   /*!
