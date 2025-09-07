@@ -63,7 +63,6 @@ def test_serialize_grammar():
         "__VERSION__": "v5",
     }
     # The fsms are the same one, but the start state and end states are different.
-    print(json.loads(serialized))
     assert json.loads(serialized) == expected_json
 
 
