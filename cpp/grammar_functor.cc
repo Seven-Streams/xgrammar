@@ -772,15 +772,17 @@ class DeadCodeEliminatorImpl : public GrammarMutator {
   std::unordered_map<int32_t, int32_t> rule_id_map_;
 };
 
-class LookaheadAssertionAnalyzerImpl {
+class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
  public:
-  void Apply(Grammar* grammar) {
-    using ExprType = Grammar::Impl::GrammarExprType;
-    auto& grammar_impl = *grammar->ImplPtr();
-    auto root_rule = grammar_impl.GetRootRule();
-    auto root_grammar_expr = grammar_impl.GetGrammarExpr(root_rule.body_expr_id);
-    if (root_grammar_expr.type == ExprType::kTagDispatch) {
-      return;
+  using GrammarMutator::GrammarMutator;
+
+  Grammar Apply(const Grammar& grammar) final {
+    InitGrammar(grammar);
+    InitBuilder(grammar);
+    auto root_rule = grammar->GetRootRule();
+    auto root_grammar_expr = base_grammar_->GetGrammarExpr(root_rule.body_expr_id);
+    if (root_grammar_expr.type == GrammarExprType::kTagDispatch) {
+      return grammar;
     }
     for (int i = 0; i < static_cast<int>(grammar->NumRules()); ++i) {
       auto rule = grammar->GetRule(i);
@@ -791,13 +793,13 @@ class LookaheadAssertionAnalyzerImpl {
         builder_->UpdateLookaheadExact(i, IsExactLookaheadAssertion(i));
         continue;
       }
-      auto look_head_assertion_id = DetectLookaheadAssertion(i, grammar_impl);
+      auto look_head_assertion_id = DetectLookaheadAssertion(i);
       if (look_head_assertion_id != -1) {
         builder_->UpdateLookaheadAssertion(i, look_head_assertion_id);
         builder_->UpdateLookaheadExact(i);
       }
     }
-    return;
+    return builder_->Get(grammar->GetRootRuleId());
   }
 
   bool IsExactLookaheadAssertion(int32_t rule_id) {
@@ -850,7 +852,7 @@ class LookaheadAssertionAnalyzerImpl {
       if (grammar_expr.type == GrammarExprType::kTagDispatch) {
         for (int j = 1; j < grammar_expr.size() - 3; j += 2) {
           if (grammar_expr[j] == rule_id) {
-            return false;
+            return -1;
           }
         }
         continue;
@@ -873,47 +875,6 @@ class LookaheadAssertionAnalyzerImpl {
             continue;
           }
           if (found) {
-            return false;
-          }
-          found = true;
-        }
-      }
-    }
-    return found;
-  }
-
-  int32_t DetectLookaheadAssertion(int32_t rule_id, Grammar::Impl& grammar_impl) {
-    using ExprType = Grammar::Impl::GrammarExprType;
-    std::vector<int32_t> found_sequence;  // Element ids
-    bool found = false;
-    for (int i = 0; i < static_cast<int>(grammar_impl.NumRules()); ++i) {
-      auto rule = grammar_impl.GetRule(i);
-      auto grammar_expr = grammar_impl.GetGrammarExpr(rule.body_expr_id);
-      if (grammar_expr.type == ExprType::kTagDispatch) {
-        for (int j = 1; j < grammar_expr.size() - 3; j += 2) {
-          if (grammar_expr[j] == rule_id) {
-            return -1;
-          }
-        }
-        continue;
-      }
-      XGRAMMAR_DCHECK(grammar_expr.type == ExprType::kChoices);
-      for (auto sequence_id : grammar_expr) {
-        auto sequence_expr = grammar_impl.GetGrammarExpr(sequence_id);
-        if (sequence_expr.type != ExprType::kSequence) {
-          continue;
-        }
-        auto last_element = grammar_impl.GetGrammarExpr(sequence_expr.end()[-1]);
-        if (last_element.type == ExprType::kRuleRef && last_element[0] == rule_id && i != rule_id) {
-          return -1;
-        }
-
-        for (int j = 0; j < sequence_expr.size() - 1; ++j) {
-          auto element_expr = grammar_impl.GetGrammarExpr(sequence_expr[j]);
-          if (element_expr.type != ExprType::kRuleRef || element_expr[0] != rule_id) {
-            continue;
-          }
-          if (found) {
             return -1;
           }
           found = true;
@@ -927,10 +888,7 @@ class LookaheadAssertionAnalyzerImpl {
     if (!found) {
       return -1;
     }
-    GrammarExpr found_sequence_expr = GrammarExpr{
-        ExprType::kSequence, found_sequence.data(), static_cast<int32_t>(found_sequence.size())
-    };
-    return grammar_impl.AddGrammarExpr(found_sequence_expr);
+    return builder_->AddSequence(found_sequence);
   }
 };
 
@@ -955,7 +913,7 @@ class GrammarNormalizerImpl : public GrammarMutator {
     for (auto& mutator : normalizer_mutators) {
       base_grammar_ = mutator->Apply(base_grammar_);
     }
-    LookaheadAssertionAnalyzerImpl().Apply(&base_grammar_);
+    base_grammar_ = LookaheadAssertionAnalyzerImpl().Apply(base_grammar_);
     return base_grammar_;
   }
 
@@ -1982,8 +1940,8 @@ Grammar StructureNormalizer::Apply(const Grammar& grammar) {
   return StructureNormalizerImpl().Apply(grammar);
 }
 
-void LookaheadAssertionAnalyzer::Apply(Grammar* grammar) {
-  LookaheadAssertionAnalyzerImpl().Apply(grammar);
+Grammar LookaheadAssertionAnalyzer::Apply(const Grammar& grammar) {
+  return LookaheadAssertionAnalyzerImpl().Apply(grammar);
 }
 
 int32_t SubGrammarAdder::Apply(GrammarBuilder* builder, const Grammar& sub_grammar) {

@@ -336,7 +336,7 @@ class DeadCodeEliminator {
  */
 class LookaheadAssertionAnalyzer {
  public:
-  static void Apply(Grammar* grammar);
+  static Grammar Apply(const Grammar& grammar);
 };
 
 /*!
