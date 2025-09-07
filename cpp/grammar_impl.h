@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "fsm.h"
@@ -165,6 +166,23 @@ class Grammar::Impl {
     auto data_ptr = start_ptr + 2;
     auto data_len = start_ptr[1];
     return {type, data_ptr, data_len};
+  }
+
+  /*! \brief Get the grammar_expr with the given id, and copy its data to the given container. */
+  GrammarExpr GetGrammarExprWithDataCopy(
+      int32_t grammar_expr_id, std::vector<int32_t>* data_copy_container
+  ) const {
+    XGRAMMAR_DCHECK(
+        grammar_expr_id >= 0 && grammar_expr_id < static_cast<int32_t>(grammar_expr_indptr_.size())
+    ) << "grammar_expr_id "
+      << grammar_expr_id << " is out of bound";
+    int start_index = grammar_expr_indptr_[grammar_expr_id];
+    auto start_ptr = grammar_expr_data_.data() + start_index;
+    auto type = static_cast<GrammarExprType>(start_ptr[0]);
+    auto data_ptr = start_ptr + 2;
+    auto data_len = start_ptr[1];
+    data_copy_container->assign(data_ptr, data_ptr + data_len);
+    return {type, data_copy_container->data(), data_len};
   }
 
   int32_t AddGrammarExpr(const GrammarExpr& grammar_expr) {
