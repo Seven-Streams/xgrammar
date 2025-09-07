@@ -500,7 +500,6 @@ class StructureNormalizerImpl {
  public:
   void Apply(Grammar* grammar) {
     SingleElementExprEliminator().Apply(grammar);
-    XGRAMMAR_LOG(INFO) << *grammar;
     StructureNormalizerSub().Apply(grammar);
   }
 };
@@ -936,17 +935,11 @@ class GrammarNormalizerImpl : public GrammarMutator {
 
   Grammar Apply(const Grammar& grammar) final {
     InitGrammar(grammar);
-    XGRAMMAR_LOG(INFO) << "Before normalization:\n" << base_grammar_;
     StructureNormalizerImpl().Apply(&base_grammar_);
-    XGRAMMAR_LOG(INFO) << base_grammar_;
     ByteStringFuserImpl().Apply(&base_grammar_);
-    XGRAMMAR_LOG(INFO) << base_grammar_;
     RuleInlinerImpl().Apply(&base_grammar_);
-    XGRAMMAR_LOG(INFO) << base_grammar_;
     base_grammar_ = DeadCodeEliminatorImpl().Apply(base_grammar_);
-    XGRAMMAR_LOG(INFO) << base_grammar_;
     LookaheadAssertionAnalyzerImpl().Apply(&base_grammar_);
-    XGRAMMAR_LOG(INFO) << base_grammar_;
     return base_grammar_;
   }
 };
