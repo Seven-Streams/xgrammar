@@ -177,6 +177,12 @@ class Grammar::Impl {
     return static_cast<int32_t>(grammar_expr_indptr_.size()) - 1;
   }
 
+  int32_t AddRule(const std::string& rule_name, int32_t body_expr_id) {
+    Rule rule{rule_name, body_expr_id, -1};
+    rules_.push_back(rule);
+    return static_cast<int32_t>(rules_.size()) - 1;
+  }
+
   void UpdateRuleBody(int32_t rule_id, int32_t body_expr_id) {
     XGRAMMAR_CHECK(rule_id < static_cast<int32_t>(rules_.size()))
         << "Rule id " << rule_id << " is out of range.";

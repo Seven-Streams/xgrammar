@@ -324,9 +324,9 @@ class GrammarFunctor:
     For test purposes."""
 
     @staticmethod
-    def structure_normalizer(grammar: Grammar) -> Grammar:
+    def structure_normalizer(grammar: Grammar) -> None:
         """Normalize the structure of the grammar."""
-        return Grammar._create_from_handle(
+        Grammar._create_from_handle(
             _core.testing.grammar_functor.structure_normalizer(grammar._handle)
         )
 
