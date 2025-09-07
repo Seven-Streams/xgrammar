@@ -772,17 +772,17 @@ class DeadCodeEliminatorImpl : public GrammarMutator {
   std::unordered_map<int32_t, int32_t> rule_id_map_;
 };
 
-class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
+class LookaheadAssertionAnalyzerImpl {
  public:
-  using GrammarMutator::GrammarMutator;
+  using GrammarExprType = Grammar::Impl::GrammarExprType;
+  using GrammarExpr = Grammar::Impl::GrammarExpr;
 
-  Grammar Apply(const Grammar& grammar) final {
-    InitGrammar(grammar);
-    InitBuilder(grammar);
+  void Apply(Grammar* grammar_ptr) {
+    Grammar& grammar = *grammar_ptr;
     auto root_rule = grammar->GetRootRule();
-    auto root_grammar_expr = base_grammar_->GetGrammarExpr(root_rule.body_expr_id);
+    auto root_grammar_expr = grammar->GetGrammarExpr(root_rule.body_expr_id);
     if (root_grammar_expr.type == GrammarExprType::kTagDispatch) {
-      return grammar;
+      return;
     }
     for (int i = 0; i < static_cast<int>(grammar->NumRules()); ++i) {
       auto rule = grammar->GetRule(i);
@@ -790,24 +790,25 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
         continue;
       }
       if (rule.lookahead_assertion_id != -1) {
-        builder_->UpdateLookaheadExact(i, IsExactLookaheadAssertion(i));
+        grammar->UpdateLookaheadExact(i, IsExactLookaheadAssertion(i, grammar_ptr));
         continue;
       }
-      auto look_head_assertion_id = DetectLookaheadAssertion(i);
+      auto look_head_assertion_id = DetectLookaheadAssertion(i, grammar_ptr);
       if (look_head_assertion_id != -1) {
-        builder_->UpdateLookaheadAssertion(i, look_head_assertion_id);
-        builder_->UpdateLookaheadExact(i);
+        grammar->UpdateLookaheadAssertion(i, look_head_assertion_id);
+        grammar->UpdateLookaheadExact(i);
       }
     }
-    return builder_->Get(grammar->GetRootRuleId());
+    return;
   }
 
-  bool IsExactLookaheadAssertion(int32_t rule_id) {
-    XGRAMMAR_DCHECK(base_grammar_->GetRule(rule_id).lookahead_assertion_id != -1);
+  bool IsExactLookaheadAssertion(int32_t rule_id, Grammar* grammar_ptr) {
+    Grammar& grammar = *grammar_ptr;
+    XGRAMMAR_DCHECK(grammar->GetRule(rule_id).lookahead_assertion_id != -1);
     bool found = false;
-    for (int i = 0; i < static_cast<int>(base_grammar_->NumRules()); ++i) {
-      auto rule = base_grammar_->GetRule(i);
-      auto grammar_expr = base_grammar_->GetGrammarExpr(rule.body_expr_id);
+    for (int i = 0; i < static_cast<int>(grammar->NumRules()); ++i) {
+      auto rule = grammar->GetRule(i);
+      auto grammar_expr = grammar->GetGrammarExpr(rule.body_expr_id);
       if (grammar_expr.type == GrammarExprType::kTagDispatch) {
         for (int j = 1; j < grammar_expr.size() - 3; j += 2) {
           if (grammar_expr[j] == rule_id) {
@@ -818,18 +819,18 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
       }
       XGRAMMAR_DCHECK(grammar_expr.type == GrammarExprType::kChoices);
       for (auto sequence_id : grammar_expr) {
-        auto sequence_expr = base_grammar_->GetGrammarExpr(sequence_id);
+        auto sequence_expr = grammar->GetGrammarExpr(sequence_id);
         if (sequence_expr.type != GrammarExprType::kSequence) {
           continue;
         }
-        auto last_element = base_grammar_->GetGrammarExpr(sequence_expr.end()[-1]);
+        auto last_element = grammar->GetGrammarExpr(sequence_expr.end()[-1]);
         if (last_element.type == GrammarExprType::kRuleRef && last_element[0] == rule_id &&
             i != rule_id) {
           return false;
         }
 
         for (int j = 0; j < sequence_expr.size() - 1; ++j) {
-          auto element_expr = base_grammar_->GetGrammarExpr(sequence_expr[j]);
+          auto element_expr = grammar->GetGrammarExpr(sequence_expr[j]);
           if (element_expr.type != GrammarExprType::kRuleRef || element_expr[0] != rule_id) {
             continue;
           }
@@ -843,12 +844,13 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
     return found;
   }
 
-  int32_t DetectLookaheadAssertion(int32_t rule_id) {
+  int32_t DetectLookaheadAssertion(int32_t rule_id, Grammar* grammar_ptr) {
+    Grammar& grammar = *grammar_ptr;
     std::vector<int32_t> found_sequence;  // Element ids
     bool found = false;
-    for (int i = 0; i < static_cast<int>(base_grammar_->NumRules()); ++i) {
-      auto rule = base_grammar_->GetRule(i);
-      auto grammar_expr = base_grammar_->GetGrammarExpr(rule.body_expr_id);
+    for (int i = 0; i < static_cast<int>(grammar->NumRules()); ++i) {
+      auto rule = grammar->GetRule(i);
+      auto grammar_expr = grammar->GetGrammarExpr(rule.body_expr_id);
       if (grammar_expr.type == GrammarExprType::kTagDispatch) {
         for (int j = 1; j < grammar_expr.size() - 3; j += 2) {
           if (grammar_expr[j] == rule_id) {
@@ -859,18 +861,18 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
       }
       XGRAMMAR_DCHECK(grammar_expr.type == GrammarExprType::kChoices);
       for (auto sequence_id : grammar_expr) {
-        auto sequence_expr = base_grammar_->GetGrammarExpr(sequence_id);
+        auto sequence_expr = grammar->GetGrammarExpr(sequence_id);
         if (sequence_expr.type != GrammarExprType::kSequence) {
           continue;
         }
-        auto last_element = base_grammar_->GetGrammarExpr(sequence_expr.end()[-1]);
+        auto last_element = grammar->GetGrammarExpr(sequence_expr.end()[-1]);
         if (last_element.type == GrammarExprType::kRuleRef && last_element[0] == rule_id &&
             i != rule_id) {
           return -1;
         }
 
         for (int j = 0; j < sequence_expr.size() - 1; ++j) {
-          auto element_expr = base_grammar_->GetGrammarExpr(sequence_expr[j]);
+          auto element_expr = grammar->GetGrammarExpr(sequence_expr[j]);
           if (element_expr.type != GrammarExprType::kRuleRef || element_expr[0] != rule_id) {
             continue;
           }
@@ -888,7 +890,14 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
     if (!found) {
       return -1;
     }
-    return builder_->AddSequence(found_sequence);
+
+    GrammarExpr lookahead_sequence_expr = GrammarExpr{
+        GrammarExprType::kSequence,
+        found_sequence.data(),
+        static_cast<int32_t>(found_sequence.size())
+    };
+
+    return grammar->AddGrammarExpr(lookahead_sequence_expr);
   }
 };
 
@@ -913,7 +922,7 @@ class GrammarNormalizerImpl : public GrammarMutator {
     for (auto& mutator : normalizer_mutators) {
       base_grammar_ = mutator->Apply(base_grammar_);
     }
-    base_grammar_ = LookaheadAssertionAnalyzerImpl().Apply(base_grammar_);
+    LookaheadAssertionAnalyzerImpl().Apply(&base_grammar_);
     return base_grammar_;
   }
 
@@ -1940,8 +1949,8 @@ Grammar StructureNormalizer::Apply(const Grammar& grammar) {
   return StructureNormalizerImpl().Apply(grammar);
 }
 
-Grammar LookaheadAssertionAnalyzer::Apply(const Grammar& grammar) {
-  return LookaheadAssertionAnalyzerImpl().Apply(grammar);
+void LookaheadAssertionAnalyzer::Apply(Grammar* grammar) {
+  LookaheadAssertionAnalyzerImpl().Apply(grammar);
 }
 
 int32_t SubGrammarAdder::Apply(GrammarBuilder* builder, const Grammar& sub_grammar) {
