@@ -321,7 +321,7 @@ d_1_1 ::= (("bcd") | ("pq"))
 """
 
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.structure_normalizer(grammar)
+    GrammarFunctor.structure_normalizer(grammar)
     GrammarFunctor.byte_string_fuser(grammar)
     after = str(grammar)
     assert after == expected
@@ -334,7 +334,7 @@ rule1 ::= [abc]* [def]*
 rule1 ::= (([abc]* [def]*))
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.structure_normalizer(grammar)
+    GrammarFunctor.structure_normalizer(grammar)
     GrammarFunctor.byte_string_fuser(grammar)
     after = str(grammar)
     assert after == expected
@@ -378,7 +378,7 @@ f_repeat_3 ::= (("f"))
 """
 
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.structure_normalizer(grammar)
+    GrammarFunctor.structure_normalizer(grammar)
     GrammarFunctor.byte_string_fuser(grammar)
     after = str(grammar)
     assert after == expected
@@ -398,7 +398,7 @@ d ::= (("ac") | ("b" d_choice)) (=("abc"))
 d_choice ::= (("e") | ("d"))
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.structure_normalizer(grammar)
+    GrammarFunctor.structure_normalizer(grammar)
     GrammarFunctor.byte_string_fuser(grammar)
     after = str(grammar)
     assert after == expected
@@ -415,7 +415,7 @@ rest1 ::= (("\?\"\'\u6d4b\u8bd5\u3042c\U0001f440ab"))
 """
     # Disable unwrap_nesting_rules to expose the result before unwrapping.
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.structure_normalizer(grammar)
+    GrammarFunctor.structure_normalizer(grammar)
     GrammarFunctor.byte_string_fuser(grammar)
     after = str(grammar)
     assert after == expected
@@ -505,7 +505,7 @@ empty_test ::= ("" | ("d") | ("a"))
 sequence_test_1 ::= (("c") | ("d"))
 """
     grammar = _ebnf_to_grammar_no_normalization(before)
-    grammar = GrammarFunctor.structure_normalizer(grammar)
+    GrammarFunctor.structure_normalizer(grammar)
     GrammarFunctor.byte_string_fuser(grammar)
     after = str(grammar)
     assert after == expected
