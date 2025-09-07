@@ -339,7 +339,7 @@ class StructureNormalizerSub {
     }
   }
   void NormalizeRule(int32_t rule_id, Grammar& grammar) {
-    const auto& rule = grammar->GetRule(rule_id);
+    const auto rule = grammar->GetRule(rule_id);
     const auto& rule_body = grammar->GetGrammarExpr(rule.body_expr_id);
 
     // Normalize the body.
