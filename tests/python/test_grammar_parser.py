@@ -540,7 +540,6 @@ def test_rule_inliner(before: str, expected: str):
     grammar = _ebnf_to_grammar_no_normalization(before)
     GrammarFunctor.rule_inliner(grammar)
     after = str(grammar)
-    print(after)
     assert after == expected
 
 
