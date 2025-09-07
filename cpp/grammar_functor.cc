@@ -918,24 +918,13 @@ class GrammarNormalizerImpl : public GrammarMutator {
   GrammarNormalizerImpl() = default;
 
   Grammar Apply(const Grammar& grammar) final {
-    std::vector<std::unique_ptr<GrammarMutator>> normalizer_mutators = GetNormalizerList();
     InitGrammar(grammar);
     StructureNormalizerImpl().Apply(&base_grammar_);
     ByteStringFuserImpl().Apply(&base_grammar_);
     RuleInlinerImpl().Apply(&base_grammar_);
-    for (auto& mutator : normalizer_mutators) {
-      base_grammar_ = mutator->Apply(base_grammar_);
-    }
+    base_grammar_ = DeadCodeEliminatorImpl().Apply(base_grammar_);
     LookaheadAssertionAnalyzerImpl().Apply(&base_grammar_);
     return base_grammar_;
-  }
-
- private:
-  // Return the list of all normalizers in the class. The normalizers are applied one by one.
-  std::vector<std::unique_ptr<GrammarMutator>> GetNormalizerList() {
-    std::vector<std::unique_ptr<GrammarMutator>> normalizer_mutators;
-    normalizer_mutators.emplace_back(std::make_unique<DeadCodeEliminatorImpl>());
-    return normalizer_mutators;
   }
 };
 
