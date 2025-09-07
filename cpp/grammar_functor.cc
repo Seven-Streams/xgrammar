@@ -44,8 +44,10 @@ class SingleElementExprEliminator {
   void Apply(Grammar* grammar) {
     auto& grammar_impl = *grammar->ImplPtr();
     for (int i = 0; i < grammar_impl.NumRules(); i++) {
+      std::vector<int32_t> tmp_rule_expr_data;
       const auto& rule = grammar_impl.GetRule(i);
-      const auto& rule_expr = grammar_impl.GetGrammarExpr(rule.body_expr_id);
+      const auto& rule_expr =
+          grammar_impl.GetGrammarExprWithDataCopy(rule.body_expr_id, &tmp_rule_expr_data);
       int32_t new_body_expr_id = kNotModify;
       switch (rule_expr.type) {
         case ExprType::kChoices:
@@ -64,7 +66,10 @@ class SingleElementExprEliminator {
         grammar_impl.UpdateRuleBody(i, new_body_expr_id);
       }
       if (rule.lookahead_assertion_id != -1) {
-        const auto& lookahead_expr = grammar_impl.GetGrammarExpr(rule.lookahead_assertion_id);
+        std::vector<int32_t> tmp_lookahead_expr_data;
+        const auto& lookahead_expr = grammar_impl.GetGrammarExprWithDataCopy(
+            rule.lookahead_assertion_id, &tmp_lookahead_expr_data
+        );
         int32_t new_lookahead_expr_id = kNotModify;
         switch (lookahead_expr.type) {
           case ExprType::kChoices:
@@ -91,7 +96,9 @@ class SingleElementExprEliminator {
   int32_t VisitChoice(int32_t expr_id, Grammar::Impl& grammar_impl) {
     std::vector<int32_t> choice_id;
     bool updated = false;
-    const auto& choice_expr = grammar_impl.GetGrammarExpr(expr_id);
+    std::vector<int32_t> tmp_choice_expr_data;
+    const auto& choice_expr =
+        grammar_impl.GetGrammarExprWithDataCopy(expr_id, &tmp_choice_expr_data);
     XGRAMMAR_DCHECK(choice_expr.type == ExprType::kChoices);
     for (const auto& choice_element : choice_expr) {
       const auto& element_expr = grammar_impl.GetGrammarExpr(choice_element);
@@ -149,7 +156,9 @@ class SingleElementExprEliminator {
   int32_t VisitSequence(int32_t expr_id, Grammar::Impl& grammar_impl) {
     std::vector<int32_t> sequence_id;
     bool updated = false;
-    const auto& sequence_expr = grammar_impl.GetGrammarExpr(expr_id);
+    std::vector<int32_t> tmp_sequence_expr_data;
+    const auto& sequence_expr =
+        grammar_impl.GetGrammarExprWithDataCopy(expr_id, &tmp_sequence_expr_data);
     XGRAMMAR_DCHECK(sequence_expr.type == ExprType::kSequence);
     for (const auto& choice_element : sequence_expr) {
       const auto& element_expr = grammar_impl.GetGrammarExpr(choice_element);
@@ -266,7 +275,8 @@ class StructureNormalizerSub {
   std::vector<int32_t> NormalizeExprToElements(
       const int32_t& expr_id, Grammar& grammar, int32_t current_rule_id
   ) {
-    const auto& expr = grammar->GetGrammarExpr(expr_id);
+    std::vector<int32_t> tmp_expr_data;
+    const auto& expr = grammar->GetGrammarExprWithDataCopy(expr_id, &tmp_expr_data);
     switch (expr.type) {
       case GrammarExprType::kByteString:
       case GrammarExprType::kCharacterClass:
@@ -340,7 +350,9 @@ class StructureNormalizerSub {
   }
   void NormalizeRule(int32_t rule_id, Grammar& grammar) {
     const auto rule = grammar->GetRule(rule_id);
-    const auto& rule_body = grammar->GetGrammarExpr(rule.body_expr_id);
+    std::vector<int32_t> tmp_rule_expr_data;
+    const auto& rule_body =
+        grammar->GetGrammarExprWithDataCopy(rule.body_expr_id, &tmp_rule_expr_data);
 
     // Normalize the body.
     switch (rule_body.type) {
@@ -502,7 +514,9 @@ class ByteStringFuserImpl {
     // Visit all the rules.
     for (int i = 0; i < grammar_impl.NumRules(); i++) {
       const auto& rule = grammar_impl.GetRule(i);
-      const auto& rule_expr = grammar_impl.GetGrammarExpr(rule.body_expr_id);
+      std::vector<int32_t> tmp_rule_expr_data;
+      const auto& rule_expr =
+          grammar_impl.GetGrammarExprWithDataCopy(rule.body_expr_id, &tmp_rule_expr_data);
       if (rule_expr.type != ExprType::kChoices) {
         continue;
       }
@@ -511,7 +525,9 @@ class ByteStringFuserImpl {
       std::vector<int32_t> new_choices;
       bool choice_updated = false;
       for (int choice_id = 0; choice_id < rule_expr.size(); choice_id++) {
-        const auto& choice_expr = grammar_impl.GetGrammarExpr(rule_expr[choice_id]);
+        std::vector<int32_t> tmp_choice_expr_data;
+        const auto& choice_expr =
+            grammar_impl.GetGrammarExprWithDataCopy(rule_expr[choice_id], &tmp_choice_expr_data);
         if (choice_expr.type != ExprType::kSequence) {
           new_choices.push_back(rule_expr[choice_id]);
           continue;
