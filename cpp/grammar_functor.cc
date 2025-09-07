@@ -488,6 +488,7 @@ class StructureNormalizerImpl {
  public:
   void Apply(Grammar* grammar) {
     SingleElementExprEliminator().Apply(grammar);
+    XGRAMMAR_LOG(INFO) << *grammar;
     StructureNormalizerSub().Apply(grammar);
   }
 };
