@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <bitset>
 #include <cctype>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
@@ -230,10 +231,11 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
         // If the current element is a character class star, then it's self-recursive without doubt.
         if (current_element_expr.type == GrammarExprType::kCharacterClassStar) {
           return {true, {}};
-          // If the current element is a character class, and the next element is a rule ref to
-          // itself, and the rule only has 2 elements, then it's self-recursive-like.
-        } else if (current_element_expr.type == GrammarExprType::kCharacterClass &&
-                   sequence_expr.size() == 2 && initial_state.element_id == 0) {
+        }
+        // If the current element is a character class, and the next element is a rule ref to
+        // itself, and the rule only has 2 elements, then it's self-recursive-like.
+        if (current_element_expr.type == GrammarExprType::kCharacterClass &&
+            sequence_expr.size() == 2 && initial_state.element_id == 0) {
           const auto& end_element_expr = grammar_->GetGrammarExpr(sequence_expr[1]);
           if (end_element_expr.type == GrammarExprType::kRuleRef &&
               end_element_expr[0] == initial_state.rule_id) {
@@ -250,28 +252,56 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
   const auto& fsm = grammar_->per_rule_fsms[init_rule_id].value();
   XGRAMMAR_DCHECK(initial_state.element_id < fsm.NumStates());
   for (const auto& edge : fsm.GetFsm().GetEdges(initial_state.element_id)) {
-    if (edge.IsCharRange()) {
-      // Case A: The edge is towards itself.
-      if (edge.target == initial_state.element_id) {
-        can_be_applied = true;
-        for (int ch = edge.min; ch <= edge.max; ++ch) {
-          speculative_mask.set(ch);
+    // We only care about character range edges.
+    if (!edge.IsCharRange()) {
+      continue;
+    }
+
+    // Case A: The edge is towards itself.
+    if (edge.target == initial_state.element_id) {
+      can_be_applied = true;
+      for (int ch = edge.min; ch <= edge.max; ++ch) {
+        speculative_mask.set(ch);
+      }
+      continue;
+    }
+
+    // Case B: The state is the start state, and there's an edge to another state,
+    // which calls the fsm itself.
+    if (fsm.GetStart() == initial_state.element_id) {
+      for (const auto& next_edge : fsm.GetFsm().GetEdges(edge.target)) {
+        if (next_edge.IsRuleRef() && next_edge.GetRefRuleId() == init_rule_id) {
+          can_be_applied = true;
+          for (int ch = edge.min; ch <= edge.max; ++ch) {
+            speculative_mask.set(ch);
+          }
+          break;
         }
+      }
+    }
+
+    // Case C: The state has an edge to another state, and that state has an edge to itself, or the
+    // current state. It's common in tagdispatch's AC automaton.
+    for (const auto& next_edge : fsm.GetFsm().GetEdges(edge.target)) {
+      // Only care about char range edges.
+      if (!next_edge.IsCharRange()) {
         continue;
       }
 
-      // Case B: The state is the start state, and there's an edge to another state,
-      // which calls the fsm itself.
-      if (fsm.GetStart() == initial_state.element_id) {
-        for (const auto& next_edge : fsm.GetFsm().GetEdges(edge.target)) {
-          if (next_edge.IsRuleRef() && next_edge.GetRefRuleId() == init_rule_id) {
-            can_be_applied = true;
-            for (int ch = edge.min; ch <= edge.max; ++ch) {
-              speculative_mask.set(ch);
-            }
-            break;
-          }
-        }
+      // Check if the next edge is towards itself or the initial state.
+      if (next_edge.target != edge.target && next_edge.target != initial_state.element_id) {
+        continue;
+      }
+
+      // Check if the two edges have intersection.
+      if (next_edge.max < edge.min || next_edge.min > edge.max) {
+        continue;
+      }
+
+      can_be_applied = true;
+      for (int ch = std::max(edge.min, next_edge.min); ch <= std::min(edge.max, next_edge.max);
+           ++ch) {
+        speculative_mask.set(ch);
       }
     }
   }
@@ -464,6 +494,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
     const std::vector<int32_t>& subtree_nodes_range,
     bool is_root_rule
 ) {
+  std::chrono::steady_clock::time_point begin_time = std::chrono::steady_clock::now();
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
@@ -521,6 +552,11 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(
   bool rejected_indices_are_filled = GetTokenMaskWithFirstCharacterCheck(
       sorted_decoded_vocab, first_character_mask, subtree_nodes_range, is_root_rule
   );
+  std::chrono::steady_clock::time_point end_time = std::chrono::steady_clock::now();
+  XGRAMMAR_LOG(INFO
+  ) << "GetAdaptiveTokenMask time: "
+    << std::chrono::duration_cast<std::chrono::microseconds>(end_time - begin_time).count()
+    << " us, state: " << initial_state.ToString();
   if (rejected_indices_are_filled) {
     return AdaptiveTokenMask(
         vocab_size,
