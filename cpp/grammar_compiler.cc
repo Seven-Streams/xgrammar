@@ -1245,6 +1245,13 @@ CompiledGrammar GrammarCompiler::Impl::CompileRegex(const std::string& regex) {
   return compile_cache_.Get(RegexKey{regex});
 }
 
+CompiledGrammar GrammarCompiler::Impl::CompileGrammar(const Grammar& grammar) {
+  if (!cache_enabled_) {
+    return no_cache_compiler_.CompileGrammar(grammar);
+  }
+  return compile_cache_.Get(GrammarKey{grammar.ToString(), grammar->GetRootRule().name});
+}
+
 CompiledGrammar GrammarCompiler::Impl::CompileGrammar(
     const std::string& ebnf_str, std::string root_rule_name
 ) {
