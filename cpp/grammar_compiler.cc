@@ -435,6 +435,8 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           if ((!lookahead_result_pair.second) && is_exact_lookahead) {
             tmp_accepted_indices_.push_back(i);
             tmp_accepted_by_lookahead_indices_.push_back(i);
+          } else {
+            tmp_uncertain_indices_.push_back(i);
           }
         } else {
           for (int j = i; j < subtree_nodes_range[i]; j++) {
@@ -707,6 +709,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
   const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
   const auto& subtree_nodes_range = tokenizer_info_.GetTrieSubtreeNodesRange();
   const std::string* prev_token = nullptr;
+  bool is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   int last_uncertain_range = 0;
@@ -779,7 +782,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
       auto [lookahead_accepted, lookahead_completed] =
           IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
       if (can_reach_end && !is_root_rule && prev_matched_size > 0 && lookahead_accepted) {
-        if (lookahead_completed) {
+        if (lookahead_completed || !is_exact_lookahead) {
           last_uncertain_range = subtree_nodes_range[uncertain_index];
         } else {
           tmp_accepted_indices_.push_back(uncertain_index);
