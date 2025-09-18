@@ -430,10 +430,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
             IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
         if ((!is_root_rule) && lookahead_accepted) {
           if (lookahead_completed || !is_exact_lookahead) {
-            for (int j = i; j < subtree_nodes_range[i]; j++) {
-              tmp_uncertain_indices_.push_back(j);
-            }
-            i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
+            tmp_uncertain_indices_.push_back(i);
           } else {
             tmp_accepted_indices_.push_back(i);
             tmp_accepted_by_lookahead_indices_.push_back(i);
@@ -782,15 +779,21 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
 
       // All the tokens are at least uncertain!
       XGRAMMAR_CHECK(!accepted);
-      auto [lookahead_accepted, lookahead_completed] =
-          IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
-      if (can_reach_end && !is_root_rule && prev_matched_size > 0 && lookahead_accepted) {
-        if (lookahead_completed || !is_exact_lookahead) {
-          last_uncertain_range = subtree_nodes_range[uncertain_index];
+      if (accepted) {
+        tmp_accepted_indices_.push_back(uncertain_index);
+      } else if (can_reach_end && prev_matched_size > 0) {
+        auto [lookahead_accepted, lookahead_completed] =
+            IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
+        if ((!is_root_rule) && lookahead_accepted) {
+          if (lookahead_completed || !is_exact_lookahead) {
+            tmp_uncertain_indices_.push_back(uncertain_index);
+          } else {
+            tmp_accepted_indices_.push_back(uncertain_index);
+          }
         } else {
-          tmp_accepted_indices_.push_back(uncertain_index);
+          tmp_rejected_indices_.push_back(uncertain_index);
+          last_rejected_range = subtree_nodes_range[uncertain_index];
         }
-        continue;
       } else {
         tmp_rejected_indices_.push_back(uncertain_index);
         last_rejected_range = subtree_nodes_range[uncertain_index];
@@ -798,34 +801,64 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
     }
   }
 
-  // Update the uncertain tokens.
-  tmp_uncertain_indices_.reserve(
-      cache.uncertain_indices.size() - tmp_rejected_indices_.size() - tmp_accepted_indices_.size()
-  );
-  std::set_difference(
-      cache.uncertain_indices.begin(),
-      cache.uncertain_indices.end(),
-      tmp_rejected_indices_.begin(),
-      tmp_rejected_indices_.end(),
-      std::back_inserter(tmp_uncertain_indices_)
-  );
+  // This strategy ensures the consistency of the cache storage type in most cases.
+  // However, in this case, the storage type is unconsistent:
+  // 1. The original cache is accepted_indices, and rejected_indices is also small.
+  // After adapting with lookahead, |accepted_indices| + |accepted_by_lookahead_indices| >
+  // |rejected_indices| + |rejected_by_lookahead_indices|, and |rejected_indices| +
+  // |rejected_by_lookahead_indices| < AdaptiveTokenMask::USE_BITSET_THRESHOLD. In this case, it
+  // should be kRejected, but ignored.
+  // 2. The original cache is rejected_indices, and accepted_indices is also small.
+  // After adapting with lookahead, |accepted_indices| + |accepted_by_lookahead_indices| <
+  // |rejected_indices| + |rejected_by_lookahead_indices|, and |accepted_indices| +
+  // |accepted_by_lookahead_indices| < AdaptiveiveTokenMask::USE_BITSET_THRESHOLD. In this case, it
+  // should be kAccepted, but ignored. These two cases are very rare in practice, and the impact is
+  // very limited, so we ignore them for simplicity.
   cache.uncertain_indices = tmp_uncertain_indices_;
-  std::set_difference(
-      cache.uncertain_indices.begin(),
-      cache.uncertain_indices.end(),
-      tmp_accepted_indices_.begin(),
-      tmp_accepted_indices_.end(),
-      std::back_inserter(tmp_uncertain_indices_)
-  );
-  IntsetUnion(&tmp_accepted_indices_, cache.accepted_indices);
-  IntsetUnion(&tmp_rejected_indices_, cache.rejected_indices);
-  cache = AdaptiveTokenMask(
-      tokenizer_info_.GetVocabSize(),
-      tokenizer_info_.GetSortedDecodedVocab(),
-      tmp_accepted_indices_,
-      tmp_rejected_indices_,
-      tmp_uncertain_indices_
-  );
+  switch (cache.store_type) {
+    case AdaptiveTokenMask::StoreType::kAccepted: {
+      if (cache.accepted_indices.size() + tmp_accepted_indices_.size() <
+          AdaptiveTokenMask::USE_BITSET_THRESHOLD) {
+        IntsetUnion(&cache.accepted_indices, tmp_accepted_indices_);
+        break;
+      }
+      // Transform to bitset.
+      cache.store_type = AdaptiveTokenMask::StoreType::kAcceptedBitset;
+      cache.accepted_bitset = DynamicBitset(tokenizer_info_.GetVocabSize());
+      for (const auto& accepted_index : cache.accepted_indices) {
+        cache.accepted_bitset.Set(sorted_decoded_vocab[accepted_index].first);
+      }
+      break;
+    }
+    case AdaptiveTokenMask::StoreType::kRejected: {
+      if (cache.rejected_indices.size() + tmp_rejected_indices_.size() <
+          AdaptiveTokenMask::USE_BITSET_THRESHOLD) {
+        IntsetUnion(&cache.rejected_indices, tmp_rejected_indices_);
+        break;
+      }
+      // Transform to bitset.
+      cache.store_type = AdaptiveTokenMask::StoreType::kAcceptedBitset;
+      cache.accepted_bitset = DynamicBitset(tokenizer_info_.GetVocabSize());
+      cache.accepted_bitset.Set();
+      for (const auto& special_index : tokenizer_info_.GetSpecialTokenIds()) {
+        cache.accepted_bitset.Reset(special_index);
+      }
+      for (const auto& uncertain_index : cache.uncertain_indices) {
+        cache.accepted_bitset.Set(sorted_decoded_vocab[uncertain_index].first);
+      }
+      for (const auto& rejected_index : cache.rejected_indices) {
+        cache.accepted_bitset.Reset(sorted_decoded_vocab[rejected_index].first);
+      }
+      break;
+    }
+    case AdaptiveTokenMask::StoreType::kAcceptedBitset: {
+      for (const auto& accepted_index : tmp_accepted_indices_) {
+        cache.accepted_bitset.Set(sorted_decoded_vocab[accepted_index].first);
+      }
+      cache.uncertain_indices = tmp_uncertain_indices_;
+      break;
+    }
+  }
 }
 
 /******************* GrammarCompilerNoCache *******************/

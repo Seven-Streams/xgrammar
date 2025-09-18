@@ -378,7 +378,6 @@ def test_grammar_compiler_crossing_cache_different_grammar_with_same_fsm():
     contextb_without_cache = compiler.compile_grammar(grammar_b)
     time_end = time.monotonic_ns()
     print(f"Grammar B recompiled in {(time_end - time_start) / 1e6} ms")
-
     assert (
         contextb.serialize_json() == contextb_without_cache.serialize_json()
     ), "Cached and non-cached compilations should yield the same result."
