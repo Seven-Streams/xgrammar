@@ -425,18 +425,18 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
       if (accepted) {
         tmp_accepted_indices_.push_back(i);
-      } else {
-        auto lookahead_result_pair = IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
-        if (can_reach_end && !is_root_rule && lookahead_result_pair.first &&
-            prev_matched_size > 0) {
-          // 1. If the current rule is the root rule (is_root_rule=true), there are no
-          // uncertain tokens. Not accepted tokens are just rejected.
-          // 2. If a token cannot pass the lookahead assertion, it is rejected.
-          if ((!lookahead_result_pair.second) && is_exact_lookahead) {
+      } else if (can_reach_end && prev_matched_size > 0) {
+        auto [lookahead_accepted, lookahead_completed] =
+            IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
+        if ((!is_root_rule) && lookahead_accepted) {
+          if (lookahead_completed || !is_exact_lookahead) {
+            for (int j = i; j < subtree_nodes_range[i]; j++) {
+              tmp_uncertain_indices_.push_back(j);
+            }
+            i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
+          } else {
             tmp_accepted_indices_.push_back(i);
             tmp_accepted_by_lookahead_indices_.push_back(i);
-          } else {
-            tmp_uncertain_indices_.push_back(i);
           }
         } else {
           for (int j = i; j < subtree_nodes_range[i]; j++) {
@@ -445,6 +445,9 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           }
           i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
         }
+      } else {
+        tmp_rejected_indices_.push_back(i);
+        last_rejected_range = subtree_nodes_range[i];
       }
     }
     if (interval_idx != possible_intervals.size() - 1 && fill_reject_indices) {
