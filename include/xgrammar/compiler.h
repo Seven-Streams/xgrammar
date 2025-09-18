@@ -65,6 +65,7 @@ class GrammarCompiler {
    * \param max_threads The maximum number of threads to use for compiling grammars.
    * \param cache_enabled Whether to enable the cache.
    * \param max_memory_bytes The maximum memory usage in bytes.
+   * \param is_jit If JIT mode.
    */
   GrammarCompiler(
       const TokenizerInfo& tokenizer_info,
