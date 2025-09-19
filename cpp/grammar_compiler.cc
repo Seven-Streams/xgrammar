@@ -756,6 +756,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
       for (const auto& accepted_index : tmp_accepted_indices_) {
         cache.accepted_bitset.Set(sorted_decoded_vocab[accepted_index].first);
       }
+      cache.accepted_indices.clear();
       break;
     }
     case AdaptiveTokenMask::StoreType::kRejected: {
@@ -772,7 +773,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
         cache.accepted_bitset.Reset(special_index);
       }
       for (const auto& uncertain_index : cache.uncertain_indices) {
-        cache.accepted_bitset.Set(sorted_decoded_vocab[uncertain_index].first);
+        cache.accepted_bitset.Reset(sorted_decoded_vocab[uncertain_index].first);
       }
       for (const auto& rejected_index : cache.rejected_indices) {
         cache.accepted_bitset.Reset(sorted_decoded_vocab[rejected_index].first);
@@ -780,13 +781,13 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
       for (const auto& rejected_index : tmp_rejected_indices_) {
         cache.accepted_bitset.Reset(sorted_decoded_vocab[rejected_index].first);
       }
+      cache.rejected_indices.clear();
       break;
     }
     case AdaptiveTokenMask::StoreType::kAcceptedBitset: {
       for (const auto& accepted_index : tmp_accepted_indices_) {
         cache.accepted_bitset.Set(sorted_decoded_vocab[accepted_index].first);
       }
-      cache.uncertain_indices = tmp_uncertain_indices_;
       break;
     }
   }
