@@ -542,6 +542,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   uint64_t fsm_hash = -1;
   uint32_t new_state_id = -1;
   int lookahead_id = grammar_->GetRule(initial_state_.rule_id).lookahead_assertion_id;
+  bool is_exact_lookahead = grammar_->GetRule(initial_state_.rule_id).is_exact_lookahead;
   auto lookahead_hash = grammar_->HashSequence(lookahead_id);
   if (crossing_cache_is_available) {
     fsm_hash = grammar_->per_rule_fsm_hashes[init_rule_id_].value();
@@ -556,7 +557,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
     new_state_id = get_new_state_id->second;
     if (lookahead_hash.has_value()) {
       crossing_cache = crossing_cache_manager_.GetCache(
-          HashCombine64Bits(fsm_hash, lookahead_hash.value()),
+          HashCombine64Bits(fsm_hash, lookahead_hash.value(), is_exact_lookahead),
           new_state_id,
           tokenizer_info_.GetTokenizerHash()
       );
@@ -638,7 +639,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
       );
       if (lookahead_hash.has_value()) {
         crossing_cache_manager_.AddCache(
-            HashCombine64Bits(fsm_hash, lookahead_hash.value()),
+            HashCombine64Bits(fsm_hash, lookahead_hash.value(), is_exact_lookahead),
             new_state_id,
             tokenizer_info_.GetTokenizerHash(),
             return_value
@@ -692,7 +693,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
 
       if (lookahead_hash.has_value()) {
         crossing_cache_manager_.AddCache(
-            HashCombine64Bits(fsm_hash, lookahead_hash.value()),
+            HashCombine64Bits(fsm_hash, lookahead_hash.value(), is_exact_lookahead),
             new_state_id,
             tokenizer_info_.GetTokenizerHash(),
             return_value
