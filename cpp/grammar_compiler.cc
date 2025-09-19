@@ -744,6 +744,7 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
     case AdaptiveTokenMask::StoreType::kAccepted: {
       if (cache.accepted_indices.size() + tmp_accepted_indices_.size() <
           AdaptiveTokenMask::USE_BITSET_THRESHOLD) {
+        IntsetUnion(&cache.accepted_indices, tmp_accepted_indices_);
         break;
       }
       // Transform to bitset.
