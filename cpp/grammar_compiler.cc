@@ -617,7 +617,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
 
       if (lookahead_hash.has_value()) {
         crossing_cache_manager_.AddCache(
-            HashCombine64Bits(fsm_hash, lookahead_hash.value()),
+            HashCombine64Bits(fsm_hash, lookahead_hash.value(), is_exact_lookahead),
             new_state_id,
             tokenizer_info_.GetTokenizerHash(),
             return_value
