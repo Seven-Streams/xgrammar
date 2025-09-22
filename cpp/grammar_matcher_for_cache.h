@@ -52,11 +52,13 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 
   /*!
    * \brief Check if speculative calculation will be applied.
-   * \return first: whether speculative calculation is applicable.
+   * \return first: if 0, then speculative calculation is applicable.
+   * Otherwise, it represents the longest matching length. If -1, means
+   * no upper limit.
    * \return second: part of the first character mask,
    * which can be used in speculative calculation.
    */
-  std::pair<bool, std::bitset<256>> GetSpeculativeCalculation();
+  std::pair<int, std::bitset<256>> GetSpeculativeCalculation();
 
   /*!
    * \brief Get the first character mask.
