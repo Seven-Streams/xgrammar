@@ -329,5 +329,69 @@ def test_grammar_compiler_cache_limited():
     assert grammar_compiler.get_cache_size_bytes() == 0
 
 
+@pytest.mark.hf_token_required
+def test_grammar_compiler_jit():
+    grammar = xgr.Grammar.builtin_json_grammar()
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    compiler = xgr.GrammarCompiler(xgr.TokenizerInfo.from_huggingface(tokenizer), is_jit=True)
+    time_start = time.monotonic_ns()
+    _ = compiler.compile_grammar(grammar)
+    time_end = time.monotonic_ns()
+    print(f"JIT compilation time: {(time_end - time_start) / 1e6} ms")
+
+
+def test_grammar_compiler_crossing_cache_same_grammar():
+    grammar = xgr.Grammar.builtin_json_grammar()
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer)
+    compiler = xgr.GrammarCompiler(tokenizer_info)
+    time_start = time.monotonic_ns()
+    contexta = compiler.compile_grammar(grammar)
+    time_end = time.monotonic_ns()
+    print(f"Compile time: {(time_end - time_start) / 1e6} ms")
+    compiler = xgr.GrammarCompiler(tokenizer_info)
+    time_start = time.monotonic_ns()
+    contextb = compiler.compile_grammar(grammar)
+    time_end = time.monotonic_ns()
+    print(f"Compile time: {(time_end - time_start) / 1e6} ms")
+    assert contexta.serialize_json() == contextb.serialize_json()
+
+
+@pytest.mark.hf_token_required
+def test_grammar_compiler_crossing_cache_different_grammar_with_same_fsm():
+    grammar_a = """
+    root ::= "{" string "}"
+    string ::= "\\"" [^"]* "\\"" | "'" [^']* "'"
+    """
+    grammar_b = """
+    root ::= "[" string "]"
+    string ::= "\\"" [^"]* "\\"" | "'" [^']* "'"
+    """
+
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer)
+    compiler = xgr.GrammarCompiler(tokenizer_info)
+
+    time_start = time.monotonic_ns()
+    _ = compiler.compile_grammar(grammar_a)
+    time_end = time.monotonic_ns()
+    print(f"Grammar A compiled in {(time_end - time_start) / 1e6} ms")
+
+    time_start = time.monotonic_ns()
+    contextb = compiler.compile_grammar(grammar_b)
+    time_end = time.monotonic_ns()
+    print(f"Grammar B compiled in {(time_end - time_start) / 1e6} ms")
+
+    compiler.clear_cache()
+
+    time_start = time.monotonic_ns()
+    contextb_without_cache = compiler.compile_grammar(grammar_b)
+    time_end = time.monotonic_ns()
+    print(f"Grammar B recompiled in {(time_end - time_start) / 1e6} ms")
+    assert (
+        contextb.serialize_json() == contextb_without_cache.serialize_json()
+    ), "Cached and non-cached compilations should yield the same result."
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

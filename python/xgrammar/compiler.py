@@ -59,6 +59,9 @@ class CompiledGrammar(XGRObject):
         """
         return self._handle.serialize_json()
 
+    def print_cache(self) -> None:
+        self._handle.print_cache()
+
     @staticmethod
     def deserialize_json(json_str: str, tokenizer_info: TokenizerInfo) -> "CompiledGrammar":
         """Deserialize the compiled grammar from a JSON string and associate it with the specified
@@ -111,6 +114,7 @@ class GrammarCompiler(XGRObject):
         max_threads: int = 8,
         cache_enabled: bool = True,
         cache_limit_bytes: int = -1,
+        is_jit: bool = False,
     ):
         """Construct the compiler.
 
@@ -128,6 +132,9 @@ class GrammarCompiler(XGRObject):
         cache_limit_bytes : int, default: -1
             The maximum memory usage for the cache in the specified unit.
             Note that the actual memory usage may slightly exceed this value.
+
+        is_jit : bool, default: False
+            Whether to enable Just-In-Time (JIT) compilation.
         """
         if not isinstance(tokenizer_info, TokenizerInfo):
             raise ValueError(
@@ -137,7 +144,7 @@ class GrammarCompiler(XGRObject):
 
         self._init_handle(
             _core.GrammarCompiler(
-                tokenizer_info._handle, max_threads, cache_enabled, cache_limit_bytes
+                tokenizer_info._handle, max_threads, cache_enabled, cache_limit_bytes, is_jit
             )
         )
 
