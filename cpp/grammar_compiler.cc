@@ -172,7 +172,7 @@ int GetPossibleTokenIntervals(
   return possible_token_num;
 }
 
-std::pair<int, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativeCalculation() {
+std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativeCalculation() {
   using GrammarExprType = Grammar::Impl::GrammarExprType;
   // If the initial rule is a tag dispatch, we will check if it can achieve its initial state.
   const auto& rule = grammar_->GetRule(init_rule_id_);
@@ -192,7 +192,7 @@ std::pair<int, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculative
         speculative_mask.set(ch);
       }
     }
-    return {1, speculative_mask};
+    return {true, speculative_mask};
   }
 
   // Check if the initial state is self-recursive-like. If the state is self-recursive-like,
@@ -206,53 +206,20 @@ std::pair<int, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculative
             grammar_->GetGrammarExpr(sequence_expr[initial_state_.element_id]);
         // If the current element is a character class star, then it's self-recursive without doubt.
         if (current_element_expr.type == GrammarExprType::kCharacterClassStar) {
-          return {-1, {}};
+          return {true, {}};
           // If the current element is a character class, and the next element is a rule ref to
           // itself, and the rule only has 2 elements, then it's self-recursive-like.
-        } else if (current_element_expr.type == GrammarExprType::kCharacterClass) {
-          if (sequence_expr.size() == 2 && initial_state_.element_id == 0) {
-            const auto& end_element_expr = grammar_->GetGrammarExpr(sequence_expr[1]);
-            if (end_element_expr.type == GrammarExprType::kRuleRef &&
-                end_element_expr[0] == initial_state_.rule_id) {
-              return {-1, {}};
-            }
-          }
-          // Try to check the longest same prefix.
-          std::vector<int32_t> character_class;
-          for (const auto& v : current_element_expr) {
-            character_class.push_back(v);
-          }
-          int longest_prefix = 1;
-          for (int i = initial_state_.element_id + 1; i < sequence_expr.size(); ++i) {
-            const auto& next_element_expr = grammar_->GetGrammarExpr(sequence_expr[i]);
-            if (next_element_expr.type != GrammarExprType::kCharacterClass &&
-                next_element_expr.type != GrammarExprType::kCharacterClassStar) {
-              return {longest_prefix, {}};
-            }
-            if (next_element_expr.type == GrammarExprType::kCharacterClassStar) {
-              std::vector<int32_t> next_character_class;
-              for (const auto& v : next_element_expr) {
-                next_character_class.push_back(v);
-              }
-              if (next_character_class == character_class) {
-                return {-1, {}};
-              }
-              return {longest_prefix, {}};
-            }
-            XGRAMMAR_DCHECK(next_element_expr.type == GrammarExprType::kCharacterClass);
-            std::vector<int32_t> next_character_class;
-            for (const auto& v : next_element_expr) {
-              next_character_class.push_back(v);
-            }
-            if (next_character_class != character_class) {
-              return {longest_prefix, {}};
-            }
-            longest_prefix++;
+        } else if (current_element_expr.type == GrammarExprType::kCharacterClass &&
+                   sequence_expr.size() == 2 && initial_state_.element_id == 0) {
+          const auto& end_element_expr = grammar_->GetGrammarExpr(sequence_expr[1]);
+          if (end_element_expr.type == GrammarExprType::kRuleRef &&
+              end_element_expr[0] == initial_state_.rule_id) {
+            return {true, {}};
           }
         }
       }
     }
-    return {0, {}};
+    return {false, {}};
   }
   // If the initial state is a FSM, we will check if the FSM is self-recursive-like.
   bool can_be_applied = false;
@@ -312,15 +279,15 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       tmp_rejected_indices_.push_back(i);
     }
   }
-  int32_t speculative_calculation_length = 0;
+  bool speculative_calculation = false;
   std::bitset<256> speculative_mask;
   if (init_rule_id_ == -1 || !grammar_->per_rule_fsms[init_rule_id_].has_value()) {
-    speculative_calculation_length =
-        (GetSpeculativeCalculation().first != 0) &&
+    speculative_calculation =
+        GetSpeculativeCalculation().first &&
         (possible_token_num >= static_cast<int>(sorted_decoded_vocab.size() / 4));
     speculative_mask = first_char_mask;
   } else {
-    std::tie(speculative_calculation_length, speculative_mask) = GetSpeculativeCalculation();
+    std::tie(speculative_calculation, speculative_mask) = GetSpeculativeCalculation();
   }
 
   int prev_matched_size = 0;
@@ -350,7 +317,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
       const auto& token = sorted_decoded_vocab[i].second;
       // This optimization is useful for simple self-recursive rules, like string content.
-      if (speculative_calculation_length != 0) {
+      if (speculative_calculation) {
         // Optimization for tag dispatch rules.
         if (definite_accepted_bitset.has_value()) {
           // If the token is empty, it must be accepted.
@@ -368,20 +335,17 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           }
         } else {
           bool all_accepted = true;
-          if (speculative_calculation_length == -1 ||
-              speculative_calculation_length >= static_cast<int>(token.size())) {
-            for (char ch : token) {
-              // If the first character is not the ascii character or can't be accepted by the
-              // first character mask, we need to check them in the parser.
-              if (isascii(ch) == 0 || !speculative_mask[static_cast<uint8_t>(ch)]) {
-                all_accepted = false;
-                break;
-              }
+          for (char ch : token) {
+            // If the first character is not the ascii character or can't be accepted by the
+            // first character mask, we need to check them in the parser.
+            if (isascii(ch) == 0 || !speculative_mask[static_cast<uint8_t>(ch)]) {
+              all_accepted = false;
+              break;
             }
-            if (all_accepted) {
-              tmp_accepted_indices_.push_back(i);
-              continue;
-            }
+          }
+          if (all_accepted) {
+            tmp_accepted_indices_.push_back(i);
+            continue;
           }
         }
       }
