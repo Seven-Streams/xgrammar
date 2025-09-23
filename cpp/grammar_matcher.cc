@@ -641,11 +641,11 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       }
 
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
-      // repetition_threshold = 10
-      if (speculative_accept && static_cast<int32_t>(cur_token.size()) < (repeat_time + 10)) {
+      const int32_t kRepetitionThreshold = 15;
+      if (speculative_accept &&
+          static_cast<int32_t>(cur_token.size()) < (repeat_time + kRepetitionThreshold)) {
         bool all_accepted = true;
-        // 11 = repetition_threshold + 1. At least the first 11 chars are accepted.
-        for (int i = 11; cur_token.begin() + i != cur_token.end(); i++) {
+        for (int i = kRepetitionThreshold + 1; cur_token.begin() + i != cur_token.end(); i++) {
           if (!isascii(*(cur_token.begin() + i)) ||
               !speculative_accepted_chars[static_cast<uint8_t>(*(cur_token.begin() + i))]) {
             all_accepted = false;
