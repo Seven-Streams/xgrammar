@@ -350,7 +350,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
       const auto& token = sorted_decoded_vocab[i].second;
       // This optimization is useful for simple self-recursive rules, like string content.
-      if (speculative_calculation_length != 0) {
+      if (speculative_calculation_length == -1 || speculative_calculation_length >= 4) {
         // Optimization for tag dispatch rules.
         if (definite_accepted_bitset.has_value()) {
           // If the token is empty, it must be accepted.
