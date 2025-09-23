@@ -858,9 +858,12 @@ int32_t EBNFParser::HandleRepetitionRange(
     XGRAMMAR_DCHECK(upper > kRepetitionThreshold);
     auto new_grammar_expr_id = builder_.AddChoices({builder_.AddSequence({grammar_expr_id})});
     auto new_rule_id = builder_.AddRuleWithHint(repeat_name, new_grammar_expr_id);
-    repeated_sequence.push_back(
-        builder_.AddRepeat(new_rule_id, lower - kRepetitionThreshold, upper - kRepetitionThreshold)
-    );
+    auto new_repeated_ref_rule_expr = builder_.AddChoices({builder_.AddSequence({builder_.AddRepeat(
+        new_rule_id, lower - kRepetitionThreshold, upper - kRepetitionThreshold
+    )})});
+    auto new_repeated_rule_id =
+        builder_.AddRuleWithHint(repeat_name + "_inner", new_repeated_ref_rule_expr);
+    repeated_sequence.push_back(builder_.AddRuleRef(new_repeated_rule_id));
     std::vector<int32_t> repetition_lookahead(kRepetitionThreshold, grammar_expr_id);
     builder_.UpdateLookaheadAssertion(new_rule_id, builder_.AddSequence(repetition_lookahead));
   }
