@@ -549,7 +549,8 @@ class RuleInlinerImpl : public GrammarMutator {
       XGRAMMAR_ICHECK(choice_expr.type == GrammarExprType::kSequence);
       for (auto element_id : choice_expr) {
         auto element_expr = base_grammar_->GetGrammarExpr(element_id);
-        if (element_expr.type == GrammarExprType::kRuleRef) {
+        if (element_expr.type == GrammarExprType::kRuleRef ||
+            element_expr.type == GrammarExprType::kRepeat) {
           return false;
         }
       }
@@ -628,7 +629,8 @@ class SingleRuleInlinerImpl : public GrammarMutator {
       XGRAMMAR_ICHECK(choice_expr.type == GrammarExprType::kSequence);
       for (auto element_id : choice_expr) {
         auto element_expr = base_grammar_->GetGrammarExpr(element_id);
-        if (element_expr.type == GrammarExprType::kRuleRef) {
+        if (element_expr.type == GrammarExprType::kRuleRef ||
+            element_expr.type == GrammarExprType::kRepeat) {
           return false;
         }
       }
