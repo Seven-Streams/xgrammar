@@ -874,10 +874,9 @@ int32_t EBNFParser::HandleRepetitionRange(
   if (infinite_repetition_id.has_value()) {
     repeated_sequence.push_back(infinite_repetition_id.value());
   }
-  int new_rule_id = builder_.AddRuleWithHint(
-      repeat_name + "_body", builder_.AddChoices({builder_.AddSequence(repeated_sequence)})
-  );
-  choices.push_back(builder_.AddSequence({builder_.AddRuleRef(new_rule_id)}));
+
+  // Add the sequence to choices.
+  choices.push_back(builder_.AddSequence(repeated_sequence));
   return builder_.AddChoices(choices);
 }
 
