@@ -1268,6 +1268,8 @@ Result<FSMWithStartEnd> FSMWithStartEnd::MinimizeDFA(int max_num_states) const {
     now_fsm = Copy();
   }
 
+  XGRAMMAR_LOG(INFO) << now_fsm;
+
   // Initialize the precursors of nodes.
   std::vector<std::vector<std::pair<std::pair<int16_t, int16_t>, int>>> precursors;
   precursors.resize(now_fsm.NumStates());
@@ -1498,6 +1500,37 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
     now_process++;
   }
   dfa.is_dfa_ = true;
+  // Merge the equivalent edges.
+  for (int i = 0; i < dfa.NumStates(); i++) {
+    std::unordered_map<int, std::bitset<256>> target_to_char_set;
+    std::vector<FSMEdge> new_edges;
+    const auto& edges = dfa.GetFsm().GetEdges(i);
+    for (const auto& edge : edges) {
+      if (edge.IsCharRange()) {
+        if (target_to_char_set.find(edge.target) == target_to_char_set.end()) {
+          target_to_char_set[edge.target] = std::bitset<256>();
+        }
+        for (int c = edge.min; c <= edge.max; ++c) {
+          target_to_char_set[edge.target].set(c);
+        }
+      } else {
+        new_edges.push_back(edge);
+      }
+    }
+    for (const auto& [target, char_set] : target_to_char_set) {
+      int left = -1;
+      for (int i = 0; i < 256; i++) {
+        if (char_set[i]) {
+          left = i;
+          while (i + 1 < 256 && char_set[i + 1]) {
+            i++;
+          }
+          new_edges.push_back(FSMEdge(left, i, target));
+        }
+      }
+    }
+    dfa.fsm_->edges_[i] = std::move(new_edges);
+  }
   return ResultOk(dfa);
 }
 
