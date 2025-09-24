@@ -1964,9 +1964,10 @@ void GrammarFSMHasherImpl::Apply(Grammar* grammar) {
     std::sort(sorted_edges_.back().begin(), sorted_edges_.back().end());
   }
 
-  // Disable non-fsms.
+  // Disable non-fsms and nfas.
   for (size_t i = 0; i < grammar->ImplPtr()->per_rule_fsms.size(); i++) {
-    if (!grammar->ImplPtr()->per_rule_fsms[i].has_value()) {
+    if (!grammar->ImplPtr()->per_rule_fsms[i].has_value() ||
+        !grammar->ImplPtr()->per_rule_fsms[i].value().IsDFA()) {
       visited_[i] = true;
     }
   }

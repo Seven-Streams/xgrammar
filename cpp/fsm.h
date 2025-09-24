@@ -563,6 +563,12 @@ class FSMWithStartEndBase {
    */
   FSMType& GetFsm() { return fsm_; }
 
+  /*!
+   * \brief Check if the FSM is a DFA.
+   * \return True if the FSM is a DFA, false otherwise.
+   */
+  bool IsDFA() const { return is_dfa_; }
+
   /****************** FSM Traversal Algorithms ******************/
 
   /*!
@@ -697,12 +703,6 @@ class FSMWithStartEnd : public FSMWithStartEndBase<FSM> {
    * \return The concatenation of the FSMs.
    */
   static FSMWithStartEnd Concat(const std::vector<FSMWithStartEnd>& fsms);
-
-  /*!
-   * \brief Check if the FSM is a DFA.
-   * \return True if the FSM is a DFA, false otherwise.
-   */
-  bool IsDFA();
 
   /*!
    * \brief Merge some states by removing some epsilon transitions.

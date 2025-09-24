@@ -747,7 +747,7 @@ FSMWithStartEnd FSMWithStartEnd::RebuildWithMapping(
 }
 
 CompactFSMWithStartEnd FSMWithStartEnd::ToCompact() {
-  return CompactFSMWithStartEnd(fsm_.ToCompact(), start_, ends_);
+  return CompactFSMWithStartEnd(fsm_.ToCompact(), start_, ends_, is_dfa_);
 }
 
 FSMWithStartEnd FSMWithStartEnd::AddToCompleteFSM(
@@ -983,40 +983,6 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
     }
   }
   return ResultOk(std::move(result));
-}
-
-bool FSMWithStartEnd::IsDFA() {
-  if (is_dfa_) {
-    return true;
-  }
-  std::bitset<256> character_transitions;
-  std::unordered_set<int> rule_transitions;
-  for (const auto& edges : fsm_->GetEdges()) {
-    character_transitions.reset();
-    rule_transitions.clear();
-    for (const auto& edge : edges) {
-      if (edge.IsEpsilon()) {
-        return false;  // Epsilon transitions are not allowed in DFA.
-      }
-      if (edge.IsCharRange()) {
-        for (int i = edge.min; i <= edge.max; ++i) {
-          if (character_transitions[i]) {
-            return false;  // Duplicate character transition.
-          }
-          character_transitions.set(i);
-        }
-        continue;
-      }
-      if (edge.IsRuleRef()) {
-        if (rule_transitions.find(edge.GetRefRuleId()) != rule_transitions.end()) {
-          return false;  // Duplicate rule transition.
-        }
-        rule_transitions.insert(edge.GetRefRuleId());
-      }
-    }
-  }
-  is_dfa_ = true;
-  return true;
 }
 
 FSMWithStartEnd FSMWithStartEnd::SimplifyEpsilon(int max_num_states) const {
@@ -1373,7 +1339,9 @@ Result<FSMWithStartEnd> FSMWithStartEnd::MinimizeDFA(int max_num_states) const {
     }
   }
   int new_num_states = partitions.size();
-  return ResultOk(now_fsm.RebuildWithMapping(state_mapping, new_num_states));
+  auto result_value = now_fsm.RebuildWithMapping(state_mapping, new_num_states);
+  result_value.is_dfa_ = true;
+  return ResultOk(result_value);
 }
 
 Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
