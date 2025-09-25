@@ -352,7 +352,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       const auto& token = sorted_decoded_vocab[i].second;
-      if (current_length > 0 && static_cast<int>(token.size()) <= current_length) {
+      if (current_length > 4 && static_cast<int>(token.size()) <= current_length) {
         bool all_accepted = true;
         for (char ch : token) {
           if (isascii(ch) == 0 || ch == '"' || ch == '\\' || ch == '\n' || ch == '\r') {
