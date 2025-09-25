@@ -24,9 +24,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       const std::unordered_map<int32_t, DynamicBitset>&
           tag_dispatch_rule_id_to_second_slicing_bitset,
       const TokenizerInfo& tokenizer_info,
-      const bool& need_expand = true
+      const bool& need_expand = false
   )
-      : EarleyParser(grammar, init_state),
+      : EarleyParser(grammar, init_state, need_expand),
         init_rule_id_(init_state.rule_id),
         initial_state_(init_state),
         tokenizer_info_(tokenizer_info),
