@@ -258,7 +258,7 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
 int GrammarMatcherForTokenMaskCache::GetLengthOfString(int current_state) {
   // If the initial rule doesn't have a FSM, we can't get the length of string.
   if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
-    return -1;
+    return 0;
   }
   // [\0-\t]->96, [\v-\f]->96, [\x0e-!]->96, [#-[]->96, []-\x7f]->96
 
@@ -276,7 +276,11 @@ int GrammarMatcherForTokenMaskCache::GetLengthOfString(int current_state) {
   }
   for (const auto& [state, mask] : possible_first_char_masks) {
     if (mask.count() == 124 && !mask['"'] && !mask['\\'] && !mask['\n'] && !mask['\r']) {
-      return GetLengthOfString(state) + 1;
+      if (state == current_state) {
+        return 1024;
+      } else {
+        return GetLengthOfString(state) + 1;
+      }
     }
   }
   return 0;
