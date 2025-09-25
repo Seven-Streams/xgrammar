@@ -853,6 +853,11 @@ int32_t EBNFParser::HandleRepetitionRange(
   const auto repeat_name = cur_rule_name_ + "_repeat_1";
   XGRAMMAR_DCHECK(lower >= kRepetitionThreshold && upper >= lower);
 
+  // If we have infinite repetition part, add it to the sequence.
+  if (infinite_repetition_id.has_value()) {
+    repeated_sequence.push_back(infinite_repetition_id.value());
+  }
+
   // The repetition body.
   if (upper != kRepetitionThreshold) {
     XGRAMMAR_DCHECK(upper > kRepetitionThreshold);
@@ -871,11 +876,6 @@ int32_t EBNFParser::HandleRepetitionRange(
   // Add the last threshold grammar_expr_id to the sequence.
   for (int i = 0; i < kRepetitionThreshold; ++i) {
     repeated_sequence.push_back(grammar_expr_id);
-  }
-
-  // If we have infinite repetition part, add it to the sequence.
-  if (infinite_repetition_id.has_value()) {
-    repeated_sequence.push_back(infinite_repetition_id.value());
   }
 
   // Add the sequence to choices.
