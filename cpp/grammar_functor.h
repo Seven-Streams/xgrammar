@@ -392,7 +392,7 @@ class CrossingCacheManager {
       const uint64_t& tokenizer_hash,
       AdaptiveTokenMask&& token_mask
   );
-  CrossingCacheManager(size_t max_cache_size = 10000)
+  CrossingCacheManager(size_t max_cache_size = 100000)
       : crossing_cache_manager_impl_(max_cache_size) {
     XGRAMMAR_CHECK(max_cache_size != 0);
   }
@@ -417,7 +417,7 @@ class CrossingCacheManager {
         const uint64_t& tokenizer_hash,
         AdaptiveTokenMask&& token_mask
     );
-    CrossingCacheManagerImpl(size_t max_cache_size = 10000) : max_cache_size_(max_cache_size) {}
+    CrossingCacheManagerImpl(size_t max_cache_size = 100000) : max_cache_size_(max_cache_size) {}
 
     void ClearCache();
 

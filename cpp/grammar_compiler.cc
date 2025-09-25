@@ -29,6 +29,7 @@
 #include "support/thread_safe_cache.h"
 #include "support/utils.h"
 #include "xgrammar/grammar.h"
+#include "xgrammar/matcher.h"
 #include "xgrammar/tokenizer_info.h"
 
 namespace std {
