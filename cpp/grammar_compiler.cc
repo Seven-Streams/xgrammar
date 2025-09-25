@@ -49,8 +49,6 @@ struct hash<xgrammar::StructuralTagItem> {
 
 namespace xgrammar {
 
-std::optional<std::vector<DynamicBitset>> string_like = std::nullopt;
-
 CrossingCacheManager GrammarMatcherForTokenMaskCache::crossing_cache_manager_;
 
 /************** Use GrammarMatcher to generate the AdaptiveTokenMaskCache **************/
@@ -330,7 +328,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   int prev_matched_size = 0;
   int last_rejected_range = 0;
-  int max_length = std::min(15, current_length);
   const bool& is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const bool is_tag_dispatch_rule =
@@ -355,9 +352,18 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       const auto& token = sorted_decoded_vocab[i].second;
-      if (string_like.value()[max_length - 1][i]) {
-        tmp_accepted_indices_.push_back(i);
-        continue;
+      if (current_length > 0 && static_cast<int>(token.size()) <= current_length) {
+        bool all_accepted = true;
+        for (char ch : token) {
+          if (isascii(ch) == 0 || ch == '"' || ch == '\\' || ch == '\n' || ch == '\r') {
+            all_accepted = false;
+            break;
+          }
+        }
+        if (all_accepted) {
+          tmp_accepted_indices_.push_back(i);
+          continue;
+        }
       }
       // This optimization is useful for simple self-recursive rules, like string content.
       if (speculative_calculation) {
@@ -938,36 +944,6 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
   RepetitionNormalizer::Apply(&compiled_grammar_impl->grammar);
   GrammarFSMBuilder::Apply(&compiled_grammar_impl->grammar);
   GrammarFSMHasher::Apply(&compiled_grammar_impl->grammar);
-  if (!string_like.has_value()) {
-    std::vector<DynamicBitset> string_like_masks(15);
-    string_like_masks.back() = DynamicBitset(tokenizer_info_.GetSortedDecodedVocab().size());
-    for (int i = 0; i < static_cast<int>(tokenizer_info_.GetSortedDecodedVocab().size()); i++) {
-      const auto& token = tokenizer_info_.GetSortedDecodedVocab()[i].second;
-      if (token.size() <= 15) {
-        bool all_accepted = true;
-        for (size_t j = 0; j < token.size(); j++) {
-          if (isascii(token[j]) == 0 || token[j] == '"' || token[j] == '\\' || token[j] == '\n' ||
-              token[j] == '\r') {
-            all_accepted = false;
-            break;
-          }
-        }
-        if (all_accepted) {
-          string_like_masks[token.size() - 1].Set(i);
-        }
-      }
-    }
-    for (int i = 13; i >= 0; i--) {
-      string_like_masks[i] = string_like_masks[i + 1];
-      for (int j = 0; j < static_cast<int>(tokenizer_info_.GetSortedDecodedVocab().size()); j++) {
-        const auto& token = tokenizer_info_.GetSortedDecodedVocab()[j].second;
-        if (string_like_masks[i][j] && static_cast<int>(token.size()) == i + 1) {
-          string_like_masks[i].Reset(j);
-        }
-      }
-    }
-    string_like = string_like_masks;
-  }
   if (tokenizer_info_.GetVocabSize() == 0) {
     return CompiledGrammar(compiled_grammar_impl);
   }
