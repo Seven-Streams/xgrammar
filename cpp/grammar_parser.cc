@@ -762,22 +762,38 @@ int32_t EBNFParser::HandleRepetitionRange(
 ) {
   XGRAMMAR_DCHECK(lower >= 0);
   XGRAMMAR_DCHECK(upper == -1 || upper >= lower);
+  const auto repeat_name = cur_rule_name_ + "_repeat";
 
   // Case 1. small (<=threshold), unzip the repetition.
   if (upper != -1 && upper <= kRepetitionThreshold) {
-    std::vector<int32_t> choices;
-    if (lower == 0) {
-      choices.push_back(builder_.AddEmptyStr());
-      lower = 1;  // We have already handled the empty string case.
+    std::vector<int32_t> common_part;
+
+    // The first lower repetition body.
+    for (int i = 0; i < lower; i++) {
+      common_part.push_back(grammar_expr_id);
     }
-    for (int64_t count = lower; count <= upper; ++count) {
-      std::vector<int32_t> sequence;
-      for (int64_t i = 0; i < count; ++i) {
-        sequence.push_back(grammar_expr_id);
+
+    int32_t last_rule_id = -1;
+    for (int i = upper; i > lower; i--) {
+      if (last_rule_id == -1) {
+        builder_.AddRuleWithHint(
+            repeat_name,
+            builder_.AddChoices({builder_.AddEmptyStr(), builder_.AddSequence({grammar_expr_id})})
+        );
+      } else {
+        last_rule_id = builder_.AddRuleWithHint(
+            repeat_name,
+            builder_.AddChoices(
+                {builder_.AddEmptyStr(),
+                 builder_.AddSequence({grammar_expr_id, builder_.AddRuleRef(last_rule_id)})}
+            )
+        );
       }
-      choices.push_back(builder_.AddSequence(sequence));
     }
-    return builder_.AddChoices(choices);
+    if (last_rule_id != -1) {
+      common_part.push_back(builder_.AddRuleRef(last_rule_id));
+    }
+    return builder_.AddChoices({builder_.AddSequence(common_part)});
   }
 
   // Case 2. upper is unbounded or large.
@@ -788,6 +804,7 @@ int32_t EBNFParser::HandleRepetitionRange(
   // {lower} repetition, and add a star expression.
   std::vector<int32_t> choices;
   if (lower < kRepetitionThreshold) {
+    // If it's unbounded, then it's {lower}, inf.
     if (upper == -1) {
       int infinite_repetition_id = -1;
       const auto& rule_expr = builder_.GetGrammarExpr(grammar_expr_id);
@@ -811,17 +828,56 @@ int32_t EBNFParser::HandleRepetitionRange(
       sequence.push_back(infinite_repetition_id);
       return builder_.AddSequence(sequence);
     }
+
+    // Otherwise, we extract a {lower} expression at the end.
+    std::vector<int32_t> can_be_refered_rules;
+    if (lower != 0) {
+      std::vector<int32_t> common_sequence(lower, grammar_expr_id);
+      int32_t sequence_id = builder_.AddSequence(common_sequence);
+      can_be_refered_rules.push_back(
+          builder_.AddRuleWithHint(repeat_name, builder_.AddChoices({sequence_id}))
+      );
+    }
+
+    // Extract each element into the format like element rule.
+    for (int i = kRepetitionThreshold; i > lower; i--) {
+      if (!can_be_refered_rules.empty()) {
+        can_be_refered_rules.push_back(builder_.AddRuleWithHint(
+            repeat_name,
+            builder_.AddChoices({builder_.AddSequence(
+                {grammar_expr_id, builder_.AddRuleRef(can_be_refered_rules.back())}
+            )})
+        ));
+      } else {
+        can_be_refered_rules.push_back(builder_.AddRuleWithHint(
+            repeat_name, builder_.AddChoices({builder_.AddSequence({grammar_expr_id})})
+        ));
+      }
+    }
+
+    if (upper != kRepetitionThreshold) {
+      int repeated_rule_id = builder_.AddRuleWithHint(repeat_name + "_body", grammar_expr_id);
+      can_be_refered_rules.push_back(builder_.AddRuleWithHint(
+          repeat_name,
+          builder_.AddChoices({builder_.AddSequence(
+              {builder_.AddRepeat(repeated_rule_id, 0, upper - kRepetitionThreshold),
+               builder_.AddRuleRef(can_be_refered_rules.back())}
+          )})
+      ));
+      std::vector<int32_t> repetition_lookahead(kRepetitionThreshold, grammar_expr_id);
+      builder_.UpdateLookaheadAssertion(
+          repeated_rule_id, builder_.AddSequence(repetition_lookahead)
+      );
+    }
+
+    std::vector<int32_t> choices;
     if (lower == 0) {
       choices.push_back(builder_.AddEmptyStr());
-      lower = 1;
     }
-    for (; lower < kRepetitionThreshold; ++lower) {
-      std::vector<int32_t> sequence;
-      for (int64_t i = 0; i < lower; ++i) {
-        sequence.push_back(grammar_expr_id);
-      }
-      choices.push_back(builder_.AddSequence(sequence));
+    for (const auto& rule : can_be_refered_rules) {
+      choices.push_back(builder_.AddSequence({builder_.AddRuleRef(rule)}));
     }
+    return builder_.AddChoices(choices);
   }
 
   std::optional<int32_t> infinite_repetition_id = std::nullopt;
@@ -850,7 +906,6 @@ int32_t EBNFParser::HandleRepetitionRange(
   }
 
   // Handle the {lower, upper} part, where threshold <= lower <= upper.
-  const auto repeat_name = cur_rule_name_ + "_repeat_1";
   XGRAMMAR_DCHECK(lower >= kRepetitionThreshold && upper >= lower);
 
   // The repetition body.
