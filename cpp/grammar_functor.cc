@@ -2010,7 +2010,6 @@ void GrammarFSMHasherImpl::Apply(Grammar* grammar) {
   // except the edges at the start state, we can hash it.
   std::vector<std::pair<int32_t, uint64_t>> partial_hashed_list;
   for (int i = 0; i < (*grammar)->NumRules(); i++) {
-    XGRAMMAR_LOG(INFO) << i;
     if (grammar->ImplPtr()->per_rule_fsm_hashes[i].has_value()) {
       continue;
     }
@@ -2028,7 +2027,6 @@ void GrammarFSMHasherImpl::Apply(Grammar* grammar) {
   for (const auto& [rule_id, hash_value] : partial_hashed_list) {
     grammar->ImplPtr()->per_rule_fsm_hashes[rule_id] = hash_value;
   }
-  XGRAMMAR_LOG(INFO) << "OK";
 }
 
 std::pair<bool, uint64_t> GrammarFSMHasherImpl::IsPartialHashable(int fsm_index) {
@@ -2048,7 +2046,6 @@ std::pair<bool, uint64_t> GrammarFSMHasherImpl::IsPartialHashable(int fsm_index)
     bool is_start = current_old_state_id == fsm->GetStart();
     const int& current_new_state_id = original_state_id_to_new_id[current_old_state_id];
     bfs_queue.pop();
-    XGRAMMAR_LOG(INFO) << "Visiting state: " << current_old_state_id;
 
     // Check if the current state is an end state.
     if (fsm->IsEndState(current_old_state_id)) {
