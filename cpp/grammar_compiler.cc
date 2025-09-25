@@ -255,6 +255,33 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
   return {can_be_applied, speculative_mask};
 }
 
+int GrammarMatcherForTokenMaskCache::GetLengthOfString(int current_state) {
+  // If the initial rule doesn't have a FSM, we can't get the length of string.
+  if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
+    return -1;
+  }
+  // [\0-\t]->96, [\v-\f]->96, [\x0e-!]->96, [#-[]->96, []-\x7f]->96
+
+  const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+  std::unordered_map<int, std::bitset<256>> possible_first_char_masks;
+  for (const auto& edge : fsm.GetFsm().GetEdges(current_state)) {
+    if (edge.IsCharRange()) {
+      if (possible_first_char_masks.find(edge.target) == possible_first_char_masks.end()) {
+        possible_first_char_masks[edge.target] = std::bitset<256>();
+      }
+      for (int ch = edge.min; ch <= edge.max; ++ch) {
+        possible_first_char_masks[edge.target].set(ch);
+      }
+    }
+  }
+  for (const auto& [state, mask] : possible_first_char_masks) {
+    if (mask.count() == 124 && !mask['"'] && !mask['\\'] && !mask['\n'] && !mask['\r']) {
+      return GetLengthOfString(state) + 1;
+    }
+  }
+  return 0;
+}
+
 bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::bitset<256>& first_char_mask, bool is_root_rule, bool crossing_cache_is_available
 ) {
@@ -290,6 +317,11 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     std::tie(speculative_calculation, speculative_mask) = GetSpeculativeCalculation();
   }
 
+  int32_t current_length = 0;
+  if (grammar_->per_rule_fsms[init_rule_id_].has_value()) {
+    current_length = GetLengthOfString(initial_state_.element_id);
+  }
+
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   const bool& is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
@@ -316,6 +348,19 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       const auto& token = sorted_decoded_vocab[i].second;
+      if (current_length > 0 && static_cast<int>(token.size()) <= current_length) {
+        bool all_accepted = true;
+        for (char ch : token) {
+          if (isascii(ch) == 0 || ch == '"' || ch == '\\' || ch == '\n' || ch == '\r') {
+            all_accepted = false;
+            break;
+          }
+        }
+        if (all_accepted) {
+          tmp_accepted_indices_.push_back(i);
+          continue;
+        }
+      }
       // This optimization is useful for simple self-recursive rules, like string content.
       if (speculative_calculation) {
         // Optimization for tag dispatch rules.
