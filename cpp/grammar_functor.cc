@@ -1805,6 +1805,7 @@ class GrammarFSMHasherImpl {
   static const int16_t kEndStateFlag = -0x200;
   static const int16_t kSelfRecursionFlag = -0x300;
   static const int16_t kSimpleCycleFlag = -0x400;
+  static const int16_t kUnKnownFlag = -0x500;
 
  private:
   Grammar* grammar_;
@@ -1812,6 +1813,7 @@ class GrammarFSMHasherImpl {
   std::vector<std::vector<int32_t>> ref_graph_from_referrer_to_referee_;
   std::vector<std::vector<int32_t>> ref_graph_from_referee_to_referrer_;
   std::vector<std::vector<FSMEdge>> sorted_edges_;
+  std::vector<bool> has_inward_edges_;
 
   /*!
    * \brief Get the hash value of a fsm, with a given grammar.
@@ -1835,6 +1837,8 @@ class GrammarFSMHasherImpl {
    * find a simple fsm again.
    */
   int32_t FindSimpleFsmCanBeHashed();
+
+  std::pair<bool, uint64_t> IsPartialHashable(int fsm_index);
 };
 
 bool GrammarFSMHasherImpl::FindSimpleCycle() {
@@ -1943,6 +1947,12 @@ void GrammarFSMHasherImpl::Apply(Grammar* grammar) {
   ref_graph_from_referrer_to_referee_.clear();
   sorted_edges_.clear();
   visited_ = std::vector<bool>((*grammar)->NumRules(), false);
+  has_inward_edges_ = std::vector<bool>((*grammar)->complete_fsm.NumStates(), false);
+  for (int i = 0; i < (*grammar)->NumRules(); i++) {
+    for (const auto& edge : grammar->ImplPtr()->complete_fsm.GetEdges(i)) {
+      has_inward_edges_[edge.target] = true;
+    }
+  }
 
   // Get the reference graph.
   ref_graph_from_referee_to_referrer_ = RuleRefGraphFinder().Apply(*grammar);
@@ -1994,6 +2004,127 @@ void GrammarFSMHasherImpl::Apply(Grammar* grammar) {
     // Find if there are more fsms can be hashed.
     current_operating_index = FindSimpleFsmCanBeHashed();
   }
+
+  // Try to hash the remaining fsms: they must contain something can't be hashed, like repetition.
+  // We can do this: if the fsm's start state has no inward edges, and all the ref edges are hashed
+  // except the edges at the start state, we can hash it.
+  std::vector<std::pair<int32_t, uint64_t>> partial_hashed_list;
+  for (int i = 0; i < (*grammar)->NumRules(); i++) {
+    XGRAMMAR_LOG(INFO) << i;
+    if (grammar->ImplPtr()->per_rule_fsm_hashes[i].has_value()) {
+      continue;
+    }
+    if (!grammar->ImplPtr()->per_rule_fsms[i].has_value()) {
+      continue;
+    }
+    if (has_inward_edges_[grammar->ImplPtr()->per_rule_fsms[i]->GetStart()]) {
+      continue;
+    }
+    const auto& [can_be_hashed, hash_value] = IsPartialHashable(i);
+    if (can_be_hashed) {
+      partial_hashed_list.emplace_back(i, hash_value);
+    }
+  }
+  for (const auto& [rule_id, hash_value] : partial_hashed_list) {
+    grammar->ImplPtr()->per_rule_fsm_hashes[rule_id] = hash_value;
+  }
+  XGRAMMAR_LOG(INFO) << "OK";
+}
+
+std::pair<bool, uint64_t> GrammarFSMHasherImpl::IsPartialHashable(int fsm_index) {
+  uint64_t hash_result = 0;
+  XGRAMMAR_DCHECK(fsm_index >= 0 && fsm_index < (*grammar_)->NumRules())
+      << "Invalid fsm index: " << fsm_index << " num_rules: " << (*grammar_)->NumRules();
+  const auto& fsm = grammar_->ImplPtr()->per_rule_fsms[fsm_index];
+  XGRAMMAR_DCHECK(fsm.has_value());
+  std::map<int32_t, int32_t> original_state_id_to_new_id;
+  original_state_id_to_new_id[fsm->GetStart()] = 0;
+  std::queue<int32_t> bfs_queue;
+  std::set<std::pair<int32_t, int32_t>> hash_and_target;
+  bfs_queue.push(fsm->GetStart());
+  // Perform a bfs to hash all the edges.
+  while (!bfs_queue.empty()) {
+    const int& current_old_state_id = std::move(bfs_queue.front());
+    bool is_start = current_old_state_id == fsm->GetStart();
+    const int& current_new_state_id = original_state_id_to_new_id[current_old_state_id];
+    bfs_queue.pop();
+    XGRAMMAR_LOG(INFO) << "Visiting state: " << current_old_state_id;
+
+    // Check if the current state is an end state.
+    if (fsm->IsEndState(current_old_state_id)) {
+      hash_result = HashCombine64Bits(
+          hash_result, current_new_state_id, kEndStateFlag, kEndStateFlag, current_new_state_id
+      );
+    }
+
+    // Hash the edges.
+
+    // First, check the edges which are rule references. To keep consistent, we need to sort them
+    // with hashes.
+    int32_t unhashed_rules_count = 0;
+    for (const auto& edge : sorted_edges_[current_old_state_id]) {
+      if (!edge.IsRuleRef()) {
+        continue;
+      }
+      if (edge.GetRefRuleId() == fsm_index) {
+        hash_and_target.insert({kSelfRecursionFlag, edge.target});
+        continue;
+      }
+      if (!grammar_->ImplPtr()->per_rule_fsm_hashes[edge.GetRefRuleId()].has_value()) {
+        // Can't be hashed.
+        if (!is_start) {
+          return {false, 0};
+        } else {
+          unhashed_rules_count++;
+          if (unhashed_rules_count > 1) {
+            return {false, 0};
+          }
+          hash_and_target.insert({kUnKnownFlag, edge.target});
+        }
+        continue;
+      }
+      hash_and_target.insert(
+          {grammar_->ImplPtr()->per_rule_fsm_hashes[edge.GetRefRuleId()].value(), edge.target}
+      );
+    }
+
+    // Hash them.
+    for (const auto& [hash, target] : hash_and_target) {
+      if (original_state_id_to_new_id.find(target) == original_state_id_to_new_id.end()) {
+        original_state_id_to_new_id[target] =
+            static_cast<int32_t>(original_state_id_to_new_id.size());
+        bfs_queue.push(target);
+      }
+      int32_t target_new_id = original_state_id_to_new_id[target];
+      hash_result = HashCombine64Bits(hash_result, current_new_state_id, hash, target_new_id);
+    }
+
+    // Then, check the edges which are not rule references.
+    for (const auto& edge : sorted_edges_[current_old_state_id]) {
+      // Visit a new node.
+      if (original_state_id_to_new_id.find(edge.target) == original_state_id_to_new_id.end()) {
+        original_state_id_to_new_id[edge.target] =
+            static_cast<int32_t>(original_state_id_to_new_id.size());
+        bfs_queue.push(edge.target);
+      }
+      int32_t target_new_id = original_state_id_to_new_id[edge.target];
+      if (edge.IsRuleRef()) {
+        continue;
+      }
+      hash_result = HashCombine64Bits(
+          hash_result,
+          current_new_state_id,
+          static_cast<int32_t>(edge.min),
+          static_cast<int32_t>(edge.max),
+          target_new_id
+      );
+    }
+  }
+  auto& id_mapping = grammar_->ImplPtr()->per_rule_fsm_new_state_ids[fsm_index];
+  id_mapping = std::vector<std::pair<int32_t, int32_t>>(
+      original_state_id_to_new_id.begin(), original_state_id_to_new_id.end()
+  );
+  return {true, hash_result};
 }
 
 uint64_t GrammarFSMHasherImpl::HashFsm(int fsm_index) {
