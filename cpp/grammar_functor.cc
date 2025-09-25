@@ -1209,7 +1209,10 @@ class GrammarFSMBuilderImpl {
     for (int i = 0; i < (*grammar)->NumRules(); ++i) {
       if (per_rule_fsms[i]) {
         compact_per_rule_fsms[i] = CompactFSMWithStartEnd(
-            compact_complete_fsm, per_rule_fsms[i]->GetStart(), per_rule_fsms[i]->GetEnds()
+            compact_complete_fsm,
+            per_rule_fsms[i]->GetStart(),
+            per_rule_fsms[i]->GetEnds(),
+            per_rule_fsms[i]->IsDFA()
         );
       }
     }
