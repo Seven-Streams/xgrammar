@@ -1802,6 +1802,7 @@ class GrammarFSMHasherImpl {
  public:
   void Apply(Grammar* grammar);
 
+  static const int16_t kNotEndStateFlag = -0x100;
   static const int16_t kEndStateFlag = -0x200;
   static const int16_t kSelfRecursionFlag = -0x300;
   static const int16_t kSimpleCycleFlag = -0x400;
@@ -2052,6 +2053,14 @@ std::pair<bool, uint64_t> GrammarFSMHasherImpl::IsPartialHashable(int fsm_index)
       hash_result = HashCombine64Bits(
           hash_result, current_new_state_id, kEndStateFlag, kEndStateFlag, current_new_state_id
       );
+    } else {
+      hash_result = HashCombine64Bits(
+          hash_result,
+          current_new_state_id,
+          kNotEndStateFlag,
+          kNotEndStateFlag,
+          current_new_state_id
+      );
     }
 
     // Hash the edges.
@@ -2146,6 +2155,14 @@ uint64_t GrammarFSMHasherImpl::HashFsm(int fsm_index) {
     if (fsm->IsEndState(current_old_state_id)) {
       hash_result = HashCombine64Bits(
           hash_result, current_new_state_id, kEndStateFlag, kEndStateFlag, current_new_state_id
+      );
+    } else {
+      hash_result = HashCombine64Bits(
+          hash_result,
+          current_new_state_id,
+          kNotEndStateFlag,
+          kNotEndStateFlag,
+          current_new_state_id
       );
     }
 
