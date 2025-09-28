@@ -1890,19 +1890,21 @@ void GrammarFSMHasherImpl::HashSimpleCycle(const std::vector<int32_t>& simple_cy
     grammar_->ImplPtr()->per_rule_fsm_hashes[cycle_id] = kSimpleCycleFlag;
   }
 
-  std::vector<int32_t> local_cycle_hash;
+  std::vector<uint64_t> local_cycle_hash;
   local_cycle_hash.reserve(simple_cycle.size());
   for (const auto& cycle_id : simple_cycle) {
     local_cycle_hash.push_back(HashFsm(cycle_id));
   }
-  for (int i = 1; i < static_cast<int>(local_cycle_hash.size()); i++) {
-    std::vector<int32_t> local_cycle_hash_copy = local_cycle_hash;
+  std::vector<uint64_t> local_cycle_hash_copy = local_cycle_hash;
+  for (int i = 0; i < static_cast<int>(local_cycle_hash.size()); i++) {
+    uint64_t current_hash = 0;
     for (int j = 0; j < static_cast<int>(local_cycle_hash.size()); j++) {
-      local_cycle_hash[j] = HashCombine64Bits(
-          local_cycle_hash[j], local_cycle_hash_copy[(i + j) % local_cycle_hash.size()]
-      );
+      current_hash =
+          HashCombine64Bits(current_hash, local_cycle_hash_copy[(i + j) % local_cycle_hash.size()]);
     }
+    local_cycle_hash[i] = current_hash;
   }
+
   for (int i = 0; i < static_cast<int>(simple_cycle.size()); i++) {
     grammar_->ImplPtr()->per_rule_fsm_hashes[simple_cycle[i]] = local_cycle_hash[i];
     for (const auto& referer : ref_graph_from_referee_to_referrer_[simple_cycle[i]]) {
