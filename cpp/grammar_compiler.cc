@@ -990,6 +990,16 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
     tag_dispatch_rule_id_to_second_slicing_bitset[i] = definite_accepted_tokens_since_second_char;
   }
   if (is_jit_) {
+    // TODO(Linzhang): partial JIT here.
+    /*
+     * Designed parameter: task_each_thread = k(default 2).
+     * The method to determine if the rule should be pre-computed in JIT compilation:
+     * 1. If the cross-grammar cache hits, no need to pre-compute.
+     * 2. Otherwise, we use first character mask to estimate the number of tokens
+     * needs to be checked.
+     * 3. Choose k * max_threads_ rules with the most tokens to pre-compute, which
+     * is useful to reduce the TPOM.
+     */
     return CompiledGrammar(compiled_grammar_impl);
   }
   // Step 3. Compute the adaptive token mask cache
