@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -931,6 +932,12 @@ class GrammarCompilerNoCache {
   const bool is_jit_;
   /*! \brief Mapping from the rule_id to the definite accepted token mask. */
   std::unordered_map<int32_t, DynamicBitset> tag_dispatch_rule_id_to_second_slicing_bitset;
+
+  /*! \brief Get the size of the first character mask for a given state in the compiled grammar.
+   * This is used to estimate the time consumption of computing the token mask for the state in
+   * partial JIT compilation.
+   */
+  int32_t GetFirstCharacterMaskSize(const Grammar& grammar, const ParserState& state);
 };
 
 CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar grammar) {
@@ -989,19 +996,6 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
     }
     tag_dispatch_rule_id_to_second_slicing_bitset[i] = definite_accepted_tokens_since_second_char;
   }
-  if (is_jit_) {
-    // TODO(Linzhang): partial JIT here.
-    /*
-     * Designed parameter: task_each_thread = k(default 2).
-     * The method to determine if the rule should be pre-computed in JIT compilation:
-     * 1. If the cross-grammar cache hits, no need to pre-compute.
-     * 2. Otherwise, we use first character mask to estimate the number of tokens
-     * needs to be checked.
-     * 3. Choose k * max_threads_ rules with the most tokens to pre-compute, which
-     * is useful to reduce the TPOM.
-     */
-    return CompiledGrammar(compiled_grammar_impl);
-  }
   // Step 3. Compute the adaptive token mask cache
   // The token mask cache is computed for these positions in the grammar:
   // 1. All character class or character class star (with last_utf8_bytes=0, 1, 2, 3)
@@ -1042,6 +1036,88 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
       add_adaptive_token_mask(state, is_root_rule);
     }
   };
+
+  const int32_t kPartialJitThreshold = 2;
+
+  if (is_jit_) {
+    if (kPartialJitThreshold != 0) {
+      // Estimate the time consumption of computing the token mask for each state, and only
+      // compute the token mask for the states with the biggest first character mask size.
+      auto root_rule_id = grammar->GetRootRuleId();
+      std::multimap<int32_t, ParserState, std::greater<>> first_character_size_to_states;
+      for (int32_t rule_id = 0; rule_id < static_cast<int>(grammar->NumRules()); ++rule_id) {
+        auto rule = grammar->GetRule(rule_id);
+        auto rule_body = grammar->GetGrammarExpr(rule.body_expr_id);
+        const auto& rule_fsm = grammar->per_rule_fsms[rule_id];
+        if (rule_fsm.has_value()) {
+          auto cur_stack_element =
+              ParserState(rule_id, rule.body_expr_id, 0, ParserState::kNoPrevInputPos, 0);
+          std::unordered_set<int> reachable_states;
+          rule_fsm->GetReachableStates(&reachable_states);
+          for (int i : reachable_states) {
+            cur_stack_element.element_id = i;
+            if (!rule_fsm->IsScanableState(i)) {
+              continue;
+            }
+            int32_t first_character_size =
+                GetFirstCharacterMaskSize(compiled_grammar_impl->grammar, cur_stack_element);
+            first_character_size_to_states.insert({first_character_size, cur_stack_element});
+          }
+          continue;
+        }
+        XGRAMMAR_DCHECK(rule_body.type == GrammarExprType::kChoices);
+        for (auto sequence_id : rule_body) {
+          const auto& sequence = grammar->GetGrammarExpr(sequence_id);
+          if (sequence.type == GrammarExprType::kEmptyStr) {
+            continue;
+          }
+          XGRAMMAR_DCHECK(sequence.type == GrammarExprType::kSequence);
+          auto state = ParserState(rule_id, sequence_id, 0, ParserState::kNoPrevInputPos, 0);
+          for (int element_id = 0; element_id < sequence.size(); ++element_id) {
+            state.element_id = element_id;
+            auto element = grammar->GetGrammarExpr(sequence[element_id]);
+            if (element.type == GrammarExprType::kRuleRef ||
+                element.type == GrammarExprType::kRepeat) {
+              continue;
+            }
+            if (element.type == GrammarExprType::kByteString) {
+              for (int idx = 0; idx < element.size(); ++idx) {
+                state.sub_element_id = idx;
+                int32_t first_character_size =
+                    GetFirstCharacterMaskSize(compiled_grammar_impl->grammar, state);
+                first_character_size_to_states.insert({first_character_size, state});
+              }
+            } else {
+              XGRAMMAR_DCHECK(
+                  element.type == GrammarExprType::kCharacterClassStar ||
+                  element.type == GrammarExprType::kCharacterClass
+              );
+              for (int left_utf8_bytes = 0; left_utf8_bytes <= 3; ++left_utf8_bytes) {
+                state.sub_element_id = left_utf8_bytes;
+                int32_t first_character_size =
+                    GetFirstCharacterMaskSize(compiled_grammar_impl->grammar, state);
+                first_character_size_to_states.insert({first_character_size, state});
+              }
+            }
+          }
+        }
+      }
+      // Generate partial adaptive token mask cache for the states with the biggest first character
+      // mask size(kPartialJitThreshold * max_threads).
+      int cnt = 0;
+      for (const auto& [first_character_size, state] : first_character_size_to_states) {
+        if (cnt >= kPartialJitThreshold * max_threads_) {
+          break;
+        }
+        add_task_adaptive_token_mask(state, state.rule_id == root_rule_id);
+        cnt++;
+      }
+      if (max_threads_ > 1) {
+        thread_pool->Join();
+      }
+    }
+    return CompiledGrammar(compiled_grammar_impl);
+  }
 
   auto root_rule_id = grammar->GetRootRuleId();
 
@@ -1305,6 +1381,59 @@ class GrammarCompiler::Impl {
   /*! \brief The cache for compiled grammars. */
   ThreadSafeLRUCache<UnionKey, CompiledGrammar, Computer, SizeEstimator> compile_cache_;
 };
+
+int32_t GrammarCompilerNoCache::GetFirstCharacterMaskSize(
+    const Grammar& grammar, const ParserState& state
+) {
+  std::bitset<256> first_character_mask;
+  const auto& sequence = grammar->GetGrammarExpr(state.sequence_id);
+  if (!grammar->per_rule_fsms[state.rule_id].has_value()) {
+    const auto& sub_sequence = grammar->GetGrammarExpr(sequence[state.element_id]);
+    switch (sub_sequence.type) {
+      case Grammar::Impl::GrammarExprType::kByteString: {
+        first_character_mask[sub_sequence[state.sub_element_id]] = true;
+        break;
+      }
+      case xgrammar::Grammar::Impl::GrammarExprType::kCharacterClass:
+      case xgrammar::Grammar::Impl::GrammarExprType::kCharacterClassStar: {
+        if (state.sub_element_id == 0) {
+          bool is_negative = sub_sequence[0];
+          for (int i = 1; i < sub_sequence.size(); i += 2) {
+            int left_char = static_cast<uint8_t>(sub_sequence[i]);
+            int right_char = static_cast<uint8_t>(sub_sequence[i + 1]);
+            for (int c = left_char; c <= right_char; ++c) {
+              first_character_mask[c] = true;
+            }
+          }
+          if (is_negative) {
+            first_character_mask = ~first_character_mask;
+          }
+          break;
+        }
+        // Otherwise, it's matching a UTF-8 character. We can optimize the matching process
+        // here.
+        for (size_t i = 0x80; i < 0xC0; ++i) {
+          first_character_mask[i] = true;
+        }
+        break;
+      }
+      default: {
+        XGRAMMAR_LOG(FATAL) << "Unsupported grammar expr type: " << static_cast<int>(sequence.type);
+      }
+    }
+  } else {
+    const auto& fsm = grammar->per_rule_fsms[state.rule_id].value();
+    const auto& edges = fsm.GetFsm().GetEdges(state.element_id);
+    for (const auto& edge : edges) {
+      if (edge.IsCharRange()) {
+        for (int c = edge.min; c <= edge.max; ++c) {
+          first_character_mask[c] = true;
+        }
+      }
+    }
+  }
+  return static_cast<int32_t>(first_character_mask.count());
+}
 
 CompiledGrammar GrammarCompiler::Impl::Compute(const UnionKey& key) {
   return std::visit(
