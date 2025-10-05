@@ -874,8 +874,12 @@ class GrammarNormalizerImpl : public GrammarMutator {
   Grammar Apply(const Grammar& grammar) final {
     std::vector<std::unique_ptr<GrammarMutator>> normalizer_mutators = GetNormalizerList();
     InitGrammar(grammar);
+    bool flag = true;
     for (auto& mutator : normalizer_mutators) {
-      base_grammar_ = mutator->Apply(base_grammar_);
+      if (base_grammar_->NumRules() <= 1000 || flag) {
+        base_grammar_ = mutator->Apply(base_grammar_);
+        flag = false;
+      }
     }
     return base_grammar_;
   }
