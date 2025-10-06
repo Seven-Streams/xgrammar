@@ -301,7 +301,7 @@ class StructureNormalizer {
  */
 class ByteStringFuser {
  public:
-  static Grammar Apply(const Grammar& grammar);
+  static void Apply(Grammar* grammar);
 };
 
 /*!
@@ -309,7 +309,7 @@ class ByteStringFuser {
  */
 class RuleInliner {
  public:
-  static Grammar Apply(const Grammar& grammar);
+  static void Apply(Grammar* grammar);
 };
 
 /*!
@@ -325,7 +325,7 @@ class DeadCodeEliminator {
  */
 class LookaheadAssertionAnalyzer {
  public:
-  static Grammar Apply(const Grammar& grammar);
+  static void Apply(Grammar* grammar);
 };
 
 /*!
@@ -445,7 +445,7 @@ class PlusNormalizer {
 /*! \brief Inline the rules with only one sequence.*/
 class SingleRuleInliner {
  public:
-  static Grammar Apply(const Grammar& grammar);
+  static void Apply(Grammar* grammar);
 };
 
 }  // namespace xgrammar
