@@ -1135,44 +1135,13 @@ class GrammarNormalizerImpl : public GrammarMutator {
 
   Grammar Apply(const Grammar& grammar) final {
     InitGrammar(grammar);
-    std::chrono::high_resolution_clock::time_point start_time =
-        std::chrono::high_resolution_clock::now();
     StructureNormalizerImpl().Apply(&base_grammar_);
-    std::chrono::high_resolution_clock::time_point end_time =
-        std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    XGRAMMAR_LOG(INFO) << "StructureNormalizer: " << duration << "us";
-    start_time = std::chrono::high_resolution_clock::now();
     ByteStringFuserImpl().Apply(&base_grammar_);
-    end_time = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    XGRAMMAR_LOG(INFO) << "ByteStringFuser: " << duration << "us";
-    start_time = std::chrono::high_resolution_clock::now();
     base_grammar_ = PlusNormalizerImpl().Apply(base_grammar_);
-    end_time = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    XGRAMMAR_LOG(INFO) << "PlusNormalizer: " << duration << "us";
-    start_time = std::chrono::high_resolution_clock::now();
     SingleRuleInlinerImpl().Apply(&base_grammar_);
-    end_time = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    XGRAMMAR_LOG(INFO) << "SingleRuleInliner: " << duration << "us";
-    start_time = std::chrono::high_resolution_clock::now();
     RuleInlinerImpl().Apply(&base_grammar_);
-    end_time = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    XGRAMMAR_LOG(INFO) << "RuleInliner: " << duration << "us";
-    start_time = std::chrono::high_resolution_clock::now();
     base_grammar_ = DeadCodeEliminatorImpl().Apply(base_grammar_);
-    end_time = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    XGRAMMAR_LOG(INFO) << "DeadCodeEliminator: " << duration << "us";
-    start_time = std::chrono::high_resolution_clock::now();
     LookaheadAssertionAnalyzerImpl().Apply(&base_grammar_);
-    end_time = std::chrono::high_resolution_clock::now();
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    XGRAMMAR_LOG(INFO) << "LookaheadAssertionAnalyzer: " << duration << "us";
     return base_grammar_;
   }
 
