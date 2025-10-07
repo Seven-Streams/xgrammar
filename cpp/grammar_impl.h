@@ -105,6 +105,12 @@ class Grammar::Impl {
     return rules_[root_rule_id_];
   }
 
+  void SetRootRuleId(int32_t rule_id) {
+    XGRAMMAR_DCHECK(rule_id >= 0 && rule_id < static_cast<int32_t>(rules_.size()))
+        << "rule_id " << rule_id << " is out of bound";
+    root_rule_id_ = rule_id;
+  }
+
   /*! \brief The type of the grammar expr. */
   enum class GrammarExprType : int32_t {
     // data format: [byte0, byte1, ...]
@@ -201,10 +207,22 @@ class Grammar::Impl {
     return static_cast<int32_t>(rules_.size()) - 1;
   }
 
+  void ShrinkRules(int32_t new_size) {
+    XGRAMMAR_DCHECK(new_size >= 0 && new_size <= static_cast<int32_t>(rules_.size()))
+        << "new_size " << new_size << " is out of bound";
+    rules_.resize(new_size);
+  }
+
   void UpdateRuleBody(int32_t rule_id, int32_t body_expr_id) {
     XGRAMMAR_CHECK(rule_id < static_cast<int32_t>(rules_.size()))
         << "Rule id " << rule_id << " is out of range.";
     rules_[rule_id].body_expr_id = body_expr_id;
+  }
+
+  void UpdateRuleName(int32_t rule_id, const std::string& rule_name) {
+    XGRAMMAR_CHECK(rule_id < static_cast<int32_t>(rules_.size()))
+        << "Rule id " << rule_id << " is out of range.";
+    rules_[rule_id].name = rule_name;
   }
 
   void UpdateLookaheadAssertion(int32_t rule_id, int32_t lookahead_assertion_id) {

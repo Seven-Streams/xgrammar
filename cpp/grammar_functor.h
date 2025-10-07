@@ -317,7 +317,7 @@ class RuleInliner {
  */
 class DeadCodeEliminator {
  public:
-  static Grammar Apply(const Grammar& grammar);
+  static void Apply(Grammar* grammar);
 };
 
 /*!

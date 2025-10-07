@@ -20,6 +20,7 @@
 #include <stack>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -943,55 +944,58 @@ class UsedRulesAnalyzer : public GrammarVisitor<std::vector<int32_t>> {
   std::queue<int32_t> visit_queue_;
 };
 
-class DeadCodeEliminatorImpl : public GrammarMutator {
+class DeadCodeEliminatorImpl {
  public:
-  using GrammarMutator::Apply;
-  using GrammarMutator::GrammarMutator;
-
-  Grammar Apply(const Grammar& grammar) final {
-    InitGrammar(grammar);
-    InitBuilder();
+  using GrammarExprType = Grammar::Impl::GrammarExprType;
+  void Apply(Grammar* grammar_ptr) {
+    auto& grammar = *grammar_ptr;
     auto used_rules = UsedRulesAnalyzer().Apply(grammar);
     rule_id_map_.clear();
-    for (auto rule_id : used_rules) {
-      rule_id_map_[rule_id] = builder_->AddEmptyRule(grammar->GetRule(rule_id).name);
-    }
-    for (auto rule_id : used_rules) {
-      auto rule = grammar->GetRule(rule_id);
-      auto new_body_expr_id = VisitExpr(rule.body_expr_id);
-      builder_->UpdateRuleBody(rule_id_map_[rule_id], new_body_expr_id);
-      builder_->UpdateLookaheadAssertion(
-          rule_id_map_[rule_id], VisitLookaheadAssertion(rule.lookahead_assertion_id)
-      );
-    }
-    XGRAMMAR_CHECK(rule_id_map_.count(grammar->GetRootRuleId()) > 0);
-    return builder_->Get(rule_id_map_[grammar->GetRootRuleId()]);
-  }
-
-  int32_t VisitTagDispatch(const GrammarExpr& grammar_expr) final {
-    Grammar::Impl::TagDispatch tag_dispatch = base_grammar_->GetTagDispatch(grammar_expr);
-    for (auto& [tag, rule_id] : tag_dispatch.tag_rule_pairs) {
-      XGRAMMAR_DCHECK(rule_id_map_.count(rule_id) > 0);
-      rule_id = rule_id_map_[rule_id];
+    for (const auto& rule_id : used_rules) {
+      rule_id_map_[rule_id] = static_cast<int32_t>(rule_id_map_.size());
     }
 
-    return builder_->AddTagDispatch(tag_dispatch);
-  }
+    for (const auto& [old_rule_id, new_rule_id] : rule_id_map_) {
+      XGRAMMAR_CHECK(new_rule_id <= old_rule_id);
+      const auto& rule = grammar->GetRule(old_rule_id);
+      grammar->UpdateRuleName(new_rule_id, rule.name);
+      grammar->UpdateRuleBody(new_rule_id, rule.body_expr_id);
+      grammar->UpdateLookaheadAssertion(new_rule_id, rule.lookahead_assertion_id);
+      grammar->UpdateLookaheadExact(new_rule_id, rule.is_exact_lookahead);
+    }
 
-  int32_t VisitRuleRef(const GrammarExpr& grammar_expr) final {
-    XGRAMMAR_DCHECK(rule_id_map_.count(grammar_expr[0]) > 0);
-    auto new_rule_id = rule_id_map_[grammar_expr[0]];
-    return builder_->AddRuleRef(new_rule_id);
-  }
+    for (int i = 0; i < static_cast<int>(grammar->NumGrammarExprs()); i++) {
+      auto expr = grammar->GetGrammarExpr(i);
+      switch (expr.type) {
+        case GrammarExprType::kRuleRef:
+        case GrammarExprType::kRepeat: {
+          if (rule_id_map_.count(expr[0]) != 0) {
+            expr.SetData(0, rule_id_map_[expr[0]]);
+          }
+          break;
+        }
+        case GrammarExprType::kTagDispatch: {
+          for (int j = 1; j < expr.size() - 3; j += 2) {
+            if (rule_id_map_.count(expr[j]) != 0) {
+              expr.SetData(j, rule_id_map_[expr[j]]);
+            }
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    }
 
-  int32_t VisitRepeat(const GrammarExpr& grammar_expr) final {
-    XGRAMMAR_DCHECK(rule_id_map_.count(grammar_expr[0]) > 0);
-    auto new_rule_id = rule_id_map_[grammar_expr[0]];
-    return builder_->AddRepeat(new_rule_id, grammar_expr[1], grammar_expr[2]);
+    grammar->ShrinkRules(static_cast<int>(rule_id_map_.size()));
+
+    if (rule_id_map_.count(grammar->GetRootRuleId()) != 0) {
+      grammar->SetRootRuleId(rule_id_map_[grammar->GetRootRuleId()]);
+    }
   }
 
  private:
-  std::unordered_map<int32_t, int32_t> rule_id_map_;
+  std::map<int32_t, int32_t> rule_id_map_;
 };
 
 class LookaheadAssertionAnalyzerImpl {
@@ -1126,7 +1130,7 @@ class GrammarNormalizerImpl : public GrammarMutator {
     base_grammar_ = PlusNormalizerImpl().Apply(base_grammar_);
     SingleRuleInlinerImpl().Apply(&base_grammar_);
     RuleInlinerImpl().Apply(&base_grammar_);
-    base_grammar_ = DeadCodeEliminatorImpl().Apply(base_grammar_);
+    DeadCodeEliminatorImpl().Apply(&base_grammar_);
     LookaheadAssertionAnalyzerImpl().Apply(&base_grammar_);
     return base_grammar_;
   }
@@ -2563,9 +2567,7 @@ void RuleInliner::Apply(Grammar* grammar) { RuleInlinerImpl().Apply(grammar); }
 
 void ByteStringFuser::Apply(Grammar* grammar) { ByteStringFuserImpl().Apply(grammar); }
 
-Grammar DeadCodeEliminator::Apply(const Grammar& grammar) {
-  return DeadCodeEliminatorImpl().Apply(grammar);
-}
+void DeadCodeEliminator::Apply(Grammar* grammar) { return DeadCodeEliminatorImpl().Apply(grammar); }
 
 void StructureNormalizer::Apply(Grammar* grammar) { StructureNormalizerImpl().Apply(grammar); }
 
