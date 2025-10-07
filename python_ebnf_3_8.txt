@@ -10,29 +10,29 @@ funcdef ::= "def" MUST_WB NAME parameters ("->" test)? ":" TYPE_COMMENT? func_bo
 parameters ::= "(" typedargslist? ")"
 
 typedargslist ::= (
-  (tfpdef ("=" test)? ("," TYPE_COMMENT? tfpdef ("=" test)?)* "," TYPE_COMMENT? "/" ("," ( TYPE_COMMENT? tfpdef ("=" test)? (
-        "," TYPE_COMMENT? tfpdef ("=" test)?)* (TYPE_COMMENT | ("," TYPE_COMMENT? (
-        "*" tfpdef? ("," TYPE_COMMENT? tfpdef ("=" test)?)* (TYPE_COMMENT | ("," TYPE_COMMENT? ("**" tfpdef ","? TYPE_COMMENT?)?)?)
-      | "**" tfpdef ","? TYPE_COMMENT?)?)?)
-  | "*" tfpdef? ("," TYPE_COMMENT? tfpdef ("=" test)?)* (TYPE_COMMENT | ("," TYPE_COMMENT? ("**" tfpdef ","? TYPE_COMMENT?)?)?)
-  | "**" tfpdef ","? TYPE_COMMENT?)?)?)
-|  (tfpdef ("=" test)? ("," TYPE_COMMENT? tfpdef ("=" test)?)* (TYPE_COMMENT | ("," TYPE_COMMENT? (
-   "*" tfpdef? ("," TYPE_COMMENT? tfpdef ("=" test)?)* (TYPE_COMMENT | ("," TYPE_COMMENT? ("**" tfpdef ","? TYPE_COMMENT?)?)?)
-  | "**" tfpdef ","? TYPE_COMMENT?)?)?)
-  | "*" tfpdef? ("," TYPE_COMMENT? tfpdef ("=" test)?)* (TYPE_COMMENT | ("," TYPE_COMMENT? ("**" tfpdef ","? TYPE_COMMENT?)?)?)
-  | "**" tfpdef ","? TYPE_COMMENT?)
+  (tfpdef ((WB "=" WB) test)? ((WB "," WB) TYPE_COMMENT? tfpdef ((WB "=" WB) test)?)* (WB "," WB) TYPE_COMMENT? "/" ((WB "," WB) ( TYPE_COMMENT? tfpdef ((WB "=" WB) test)? (
+        (WB "," WB) TYPE_COMMENT? tfpdef ((WB "=" WB) test)?)* (TYPE_COMMENT | ((WB "," WB) TYPE_COMMENT? (
+        "*" tfpdef? ((WB "," WB) TYPE_COMMENT? tfpdef ((WB "=" WB) test)?)* (TYPE_COMMENT | ((WB "," WB) TYPE_COMMENT? ("**" tfpdef (WB "," WB)? TYPE_COMMENT?)?)?)
+      | "**" tfpdef (WB "," WB)? TYPE_COMMENT?)?)?)
+  | "*" tfpdef? ((WB "," WB) TYPE_COMMENT? tfpdef ((WB "=" WB) test)?)* (TYPE_COMMENT | ((WB "," WB) TYPE_COMMENT? ("**" tfpdef (WB "," WB)? TYPE_COMMENT?)?)?)
+  | "**" tfpdef (WB "," WB)? TYPE_COMMENT?)?)?)
+|  (tfpdef ((WB "=" WB) test)? ((WB "," WB) TYPE_COMMENT? tfpdef ((WB "=" WB) test)?)* (TYPE_COMMENT | ((WB "," WB) TYPE_COMMENT? (
+   "*" tfpdef? ((WB "," WB) TYPE_COMMENT? tfpdef ((WB "=" WB) test)?)* (TYPE_COMMENT | ((WB "," WB) TYPE_COMMENT? ("**" tfpdef (WB "," WB)? TYPE_COMMENT?)?)?)
+  | "**" tfpdef (WB "," WB)? TYPE_COMMENT?)?)?)
+  | "*" tfpdef? ((WB "," WB) TYPE_COMMENT? tfpdef ((WB "=" WB) test)?)* (TYPE_COMMENT | ((WB "," WB) TYPE_COMMENT? ("**" tfpdef (WB "," WB)? TYPE_COMMENT?)?)?)
+  | "**" tfpdef (WB "," WB)? TYPE_COMMENT?)
 )
 tfpdef ::= NAME (":" test)?
 
-varargslist ::= vfpdef ("=" test )?("," vfpdef ("=" test)?)* "," "/" ("," ( (vfpdef ("=" test)? ("," vfpdef ("=" test)?)* ("," (
-        "*" vfpdef? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef ","?)?)?
-      | "**" vfpdef ","?)?)?
-  | "*" vfpdef? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef ","?)?)?
-  | "**" vfpdef ","?) )?)? | (vfpdef ("=" test)? ("," vfpdef ("=" test)?)* ("," (
-        "*" vfpdef? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef ","?)?)?
-      | "**" vfpdef ","?)?)?
-  | "*" vfpdef? ("," vfpdef ("=" test)?)* ("," ("**" vfpdef ","?)?)?
-  | "**" vfpdef ","?
+varargslist ::= vfpdef ((WB "=" WB) test )?((WB "," WB) vfpdef ((WB "=" WB) test)?)* (WB "," WB) "/" ((WB "," WB) ( (vfpdef ((WB "=" WB) test)? ((WB "," WB) vfpdef ((WB "=" WB) test)?)* ((WB "," WB) (
+        "*" vfpdef? ((WB "," WB) vfpdef ((WB "=" WB) test)?)* ((WB "," WB) ("**" vfpdef (WB "," WB)?)?)?
+      | "**" vfpdef (WB "," WB)?)?)?
+  | "*" vfpdef? ((WB "," WB) vfpdef ((WB "=" WB) test)?)* ((WB "," WB) ("**" vfpdef (WB "," WB)?)?)?
+  | "**" vfpdef (WB "," WB)?) )?)? | (vfpdef ((WB "=" WB) test)? ((WB "," WB) vfpdef ((WB "=" WB) test)?)* ((WB "," WB) (
+        "*" vfpdef? ((WB "," WB) vfpdef ((WB "=" WB) test)?)* ((WB "," WB) ("**" vfpdef (WB "," WB)?)?)?
+      | "**" vfpdef (WB "," WB)?)?)?
+  | "*" vfpdef? ((WB "," WB) vfpdef ((WB "=" WB) test)?)* ((WB "," WB) ("**" vfpdef (WB "," WB)?)?)?
+  | "**" vfpdef (WB "," WB)?
 )
 vfpdef ::= NAME
 
@@ -40,10 +40,10 @@ stmt ::= simple_stmt | compound_stmt
 simple_stmt ::= small_stmt (";" small_stmt)* ";"? NEWLINE
 small_stmt ::= (expr_stmt | del_stmt | pass_stmt | flow_stmt |
              import_stmt | global_stmt | nonlocal_stmt | assert_stmt)
-expr_stmt ::= testlist_star_expr (annassign | augassign (yield_expr|testlist) |
-                     (("=" (yield_expr|testlist_star_expr))+ TYPE_COMMENT?)? )
-annassign ::= ":" test ("=" (yield_expr|testlist_star_expr))?
-testlist_star_expr ::= (test|star_expr) ("," (test|star_expr))* ","?
+expr_stmt ::= testlist_star_expr (annassign | WB augassign WB (yield_expr|testlist) |
+                     (((WB "=" WB) (yield_expr|testlist_star_expr))+ TYPE_COMMENT?)? )
+annassign ::= ":" test ((WB "=" WB) (yield_expr|testlist_star_expr))?
+testlist_star_expr ::= (test|star_expr) ((WB "," WB) (test|star_expr))* (WB "," WB)?
 augassign ::= ("+=" | "-=" | "*=" | "@=" | "/=" | "%=" | "&=" | "|=" | "^=" |
             "<<=" | ">>=" | "**=" | "//=")
 
@@ -63,12 +63,12 @@ import_from ::= ("from" MUST_WB (("." | "...")* dotted_name | ("." | "...")+)
               "import" MUST_WB ("*" | "(" import_as_names ")" | import_as_names))
 import_as_name ::= NAME (MUST_WB "as" MUST_WB NAME)?
 dotted_as_name ::= dotted_name (MUST_WB "as" MUST_WB NAME)?
-import_as_names ::= import_as_name ("," import_as_name)* ","?
-dotted_as_names ::= dotted_as_name ("," dotted_as_name)*
+import_as_names ::= import_as_name ((WB "," WB) import_as_name)* (WB "," WB)?
+dotted_as_names ::= dotted_as_name ((WB "," WB) dotted_as_name)*
 dotted_name ::= NAME ("." NAME)*
-global_stmt ::= "global" MUST_WB NAME ("," NAME)*
-nonlocal_stmt ::= "nonlocal" MUST_WB NAME ("," NAME)*
-assert_stmt ::= "assert" MUST_WB test ("," test)?
+global_stmt ::= "global" MUST_WB NAME ((WB "," WB) NAME)*
+nonlocal_stmt ::= "nonlocal" MUST_WB NAME ((WB "," WB) NAME)*
+assert_stmt ::= "assert" MUST_WB test ((WB "," WB) test)?
 
 compound_stmt ::= if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef | decorated | async_stmt
 async_stmt ::= "async" MUST_WB (funcdef | with_stmt | for_stmt)
@@ -80,7 +80,7 @@ try_stmt ::= ("try" ":" suite
             ("else" ":" suite)?
             ("finally" ":" suite)? |
            "finally" ":" suite))
-with_stmt ::= "with" MUST_WB with_item ("," with_item)*  ":" TYPE_COMMENT? suite
+with_stmt ::= "with" MUST_WB with_item ((WB "," WB) with_item)*  ":" TYPE_COMMENT? suite
 with_item ::= test (MUST_WB "as" MUST_WB expr)?
 
 except_clause ::= "except" (MUST_WB test (MUST_WB "as" MUST_WB NAME)?)?
@@ -94,43 +94,43 @@ lambdef_nocond ::= "lambda" (MUST_WB varargslist)? ":" test_nocond
 or_test ::= and_test (MUST_WB "or" MUST_WB and_test)*
 and_test ::= not_test (MUST_WB "and" MUST_WB not_test)*
 not_test ::= MUST_WB "not" MUST_WB not_test | comparison
-comparison ::= expr (comp_op expr)*
+comparison ::= expr (WB comp_op WB expr)*
 
 
 comp_op ::= "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"not" "in"|"is"|"is" "not"
-star_expr ::= "*" expr
-expr ::= xor_expr ("|" xor_expr)*
-xor_expr ::= and_expr ("^" and_expr)*
-and_expr ::= shift_expr ("&" shift_expr)*
-shift_expr ::= arith_expr (("<<"|">>") arith_expr)*
-arith_expr ::= term (("+"|"-") term)*
-term ::= factor (("*"|"@"|"/"|"%"|"//") factor)*
-factor ::= ("+"|"-"|"~") factor | power
-power ::= atom_expr ("**" factor)?
+star_expr ::= WB "*" WB expr
+expr ::= xor_expr (WB "|" WB xor_expr)*
+xor_expr ::= and_expr (WB "^" WB and_expr)*
+and_expr ::= shift_expr (WB"&" WB shift_expr)*
+shift_expr ::= arith_expr (WB ("<<"|">>") WB arith_expr)*
+arith_expr ::= term (WB ("+"|"-") WB term)*
+term ::= factor (WB ("*"|"@"|"/"|"%"|"//") WB factor)*
+factor ::= WB ("+"|"-"|"~") WB factor | power
+power ::= atom_expr (WB "**" WB factor)?
 atom_expr ::= "await"? atom trailer*
 atom ::= ("(" (yield_expr|testlist_comp)? ")" |
        "[" testlist_comp? "]" |
        "{" dictorsetmaker? "}" |
        NAME | NUMBER | STRING+ | "..." | "None" | "True" | "False")
-testlist_comp ::= (namedexpr_test|star_expr) ( comp_for | ("," (namedexpr_test|star_expr))* ","? )
+testlist_comp ::= (namedexpr_test|star_expr) ( comp_for | ((WB "," WB) (namedexpr_test|star_expr))* (WB "," WB)? )
 trailer ::= "(" arglist? ")" | "[" subscriptlist "]" | "." NAME
-subscriptlist ::= subscript ("," subscript)* ","?
+subscriptlist ::= subscript ((WB "," WB) subscript)* (WB "," WB)?
 subscript ::= test | test? ":" test? sliceop?
 sliceop ::= ":" test?
-exprlist ::= (expr|star_expr) ("," (expr|star_expr))* ","?
-testlist ::= test ("," test)* ","?
+exprlist ::= (expr|star_expr) ((WB "," WB) (expr|star_expr))* (WB "," WB)?
+testlist ::= test ((WB "," WB) test)* (WB "," WB)?
 dictorsetmaker ::= ( ((test ":" test | "**" expr)
-                   (comp_for | ("," (test ":" test | "**" expr))* ","?)) |
+                   (comp_for | ((WB "," WB) (test ":" test | "**" expr))* (WB "," WB)?)) |
                   ((test | star_expr)
-                   (comp_for | ("," (test | star_expr))* ","?)) )
+                   (comp_for | ((WB "," WB) (test | star_expr))* (WB "," WB)?)) )
 
 classdef ::= "class" MUST_WB NAME ("(" arglist? ")")? ":" suite
 
-arglist ::= argument ("," argument)*  ","?
+arglist ::= argument ((WB "," WB) argument)*  (WB "," WB)?
 
 argument ::= ( test comp_for? |
             test ":=" test |
-            test "=" test |
+            test (WB "=" WB) test |
             "**" test |
             "*" test )
 
@@ -145,9 +145,9 @@ yield_arg ::= "from" MUST_WB test | testlist_star_expr
 func_body_suite ::= simple_stmt | NEWLINE (TYPE_COMMENT NEWLINE)? INDENT stmt+ DEDENT
 
 
-typelist ::= (test ("," test)* (","
-       ("*" test? ("," test)* ("," "**" test)? | "**" test)?)?
-     |  "*" test? ("," test)* ("," "**" test)? | "**" test)
+typelist ::= (test ((WB "," WB) test)* ((WB "," WB)
+       ("*" test? ((WB "," WB) test)* ((WB "," WB) "**" test)? | "**" test)?)?
+     |  "*" test? ((WB "," WB) test)* ((WB "," WB) "**" test)? | "**" test)
 
 stringliteral   ::=  stringprefix? (shortstring | longstring)
 stringprefix    ::=  "r" | "u" | "R" | "U" | "f" | "F"
@@ -171,14 +171,14 @@ longbyteschar  ::=  [^\\]
 bytesescapeseq ::=  "\\" [\0-\x7f]
 
 f_string          ::=  (literal_char | "{{" | "}}" | replacement_field)*
-replacement_field ::=  "{" f_expression "="? ("!" conversion)? (":" format_spec)? "}"
+replacement_field ::=  "{" f_expression (WB "=" WB)? ("!" conversion)? (":" format_spec)? "}"
 f_expression      ::=  (conditional_expression | "*" xor_expr)
-                         ("," conditional_expression | "," "*" xor_expr)* ","?
+                         ((WB "," WB) conditional_expression | (WB "," WB) "*" xor_expr)* (WB "," WB)?
                        | yield_expr
 conversion        ::=  "s" | "r" | "a"
 format_spec       ::=  (literal_char | "\0" | replacement_field)*
 literal_char      ::=  [^{}\0]
-conditional_expression ::= expr "if" expr "else" expr
+conditional_expression ::= expr MUST_WB "if" MUST_WB expr MUST_WB "else" MUST_WB expr
 
 integer      ::=  decinteger | bininteger | octinteger | hexinteger
 decinteger   ::=  nonzerodigit ("_"? digit)* | "0"+ ("_"? "0")*
