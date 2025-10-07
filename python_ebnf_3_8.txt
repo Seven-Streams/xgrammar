@@ -207,4 +207,4 @@ DEDENT ::= "<DEDENT>"
 NUMBER ::= integer | floatnumber | imagnumber
 STRING ::= stringliteral | bytesliteral | f_string
 WB ::= [ ]*
-MUST_WB ::= [ ]+
+MUST_WB ::= [ ] [ ]*
