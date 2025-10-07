@@ -1,6 +1,4 @@
-single_input ::= NEWLINE | simple_stmt | compound_stmt NEWLINE
-file_input ::= (NEWLINE | stmt)* ENDMARKER
-eval_input ::= testlist NEWLINE* ENDMARKER
+root ::= (NEWLINE | stmt)* ENDMARKER
 
 decorator ::= "@" dotted_name ( "(" arglist? ")" )? NEWLINE
 decorators ::= decorator+
@@ -163,7 +161,7 @@ shortstringitem ::=  shortstringchar | stringescapeseq
 longstringitem  ::=  longstringchar | stringescapeseq
 shortstringchar ::=  [^\\\"\r\n]
 longstringchar  ::=  [^\\]
-stringescapeseq ::=  "\" [\0-\xff]
+stringescapeseq ::=  "\\" [\0-\xff]
 
 bytesliteral   ::=  bytesprefix(shortbytes | longbytes)
 bytesprefix    ::=  "b" | "B" | "br" | "Br" | "bR" | "BR" | "rb" | "rB" | "Rb" | "RB"
@@ -173,7 +171,7 @@ shortbytesitem ::=  shortbyteschar | bytesescapeseq
 longbytesitem  ::=  longbyteschar | bytesescapeseq
 shortbyteschar ::=  [^\\\"\r\n]
 longbyteschar  ::=  [^\\]
-bytesescapeseq ::=  "\" [\0-\x7f]
+bytesescapeseq ::=  "\\" [\0-\x7f]
 
 f_string          ::=  (literal_char | "{{" | "}}" | replacement_field)*
 replacement_field ::=  "{" f_expression "="? ("!" conversion)? (":" format_spec)? "}"
