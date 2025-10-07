@@ -170,7 +170,7 @@ shortbyteschar ::=  [^\\\"\r\n]
 longbyteschar  ::=  [^\\]
 bytesescapeseq ::=  "\\" [\0-\x7f]
 
-f_string          ::=  (literal_char | "{{" | "}}" | replacement_field)*
+f_string          ::=  "f\"" (literal_char | "{{" | "}}" | replacement_field)* "\""
 replacement_field ::=  "{" f_expression (WB "=" WB)? ("!" conversion)? (":" format_spec)? "}"
 f_expression      ::=  (conditional_expression | "*" xor_expr)
                          ((WB "," WB) conditional_expression | (WB "," WB) "*" xor_expr)* (WB "," WB)?
