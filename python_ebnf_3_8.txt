@@ -1,4 +1,4 @@
-root ::= (NEWLINE | stmt)* ENDMARKER
+root ::= (NEWLINE | stmt)*
 
 decorator ::= "@" dotted_name ( "(" arglist? ")" )? NEWLINE
 decorators ::= decorator+
@@ -144,9 +144,6 @@ yield_arg ::= "from" test | testlist_star_expr
 
 func_body_suite ::= simple_stmt | NEWLINE (TYPE_COMMENT NEWLINE)? INDENT stmt+ DEDENT
 
-func_type_input ::= func_type NEWLINE* ENDMARKER
-func_type ::= "(" typelist? ")" "->" test
-
 
 typelist ::= (test ("," test)* (","
        ("*" test? ("," test)* ("," "**" test)? | "**" test)?)?
@@ -200,3 +197,5 @@ digitpart     ::=  digit ("_"? digit)*
 fraction      ::=  "." digitpart
 exponent      ::=  ("e" | "E") ("+" | "-")? digitpart
 imagnumber ::=  (floatnumber | digitpart) ("j" | "J")
+
+NEWLINE ::= [\r\n]
