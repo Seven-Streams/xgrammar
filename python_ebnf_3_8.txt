@@ -4,7 +4,7 @@ decorator ::= "@" dotted_name ( "(" arglist? ")" )? NEWLINE
 decorators ::= decorator+
 decorated ::= decorators (classdef | funcdef | async_funcdef)
 
-async_funcdef ::= ASYNC funcdef
+async_funcdef ::= "async" funcdef
 funcdef ::= "def" NAME parameters ("->" test)? ":" TYPE_COMMENT? func_body_suite
 
 parameters ::= "(" typedargslist? ")"
@@ -71,7 +71,7 @@ nonlocal_stmt ::= "nonlocal" NAME ("," NAME)*
 assert_stmt ::= "assert" test ("," test)?
 
 compound_stmt ::= if_stmt | while_stmt | for_stmt | try_stmt | with_stmt | funcdef | classdef | decorated | async_stmt
-async_stmt ::= ASYNC (funcdef | with_stmt | for_stmt)
+async_stmt ::= "async" (funcdef | with_stmt | for_stmt)
 if_stmt ::= "if" namedexpr_test ":" suite ("elif" namedexpr_test ":" suite)* ("else" ":" suite)?
 while_stmt ::= "while" namedexpr_test ":" suite ("else" ":" suite)?
 for_stmt ::= "for" exprlist "in" testlist ":" TYPE_COMMENT? suite ("else" ":" suite)?
@@ -107,7 +107,7 @@ arith_expr ::= term (("+"|"-") term)*
 term ::= factor (("*"|"@"|"/"|"%"|"//") factor)*
 factor ::= ("+"|"-"|"~") factor | power
 power ::= atom_expr ("**" factor)?
-atom_expr ::= AWAIT? atom trailer*
+atom_expr ::= "await"? atom trailer*
 atom ::= ("(" (yield_expr|testlist_comp)? ")" |
        "[" testlist_comp? "]" |
        "{" dictorsetmaker? "}" |
@@ -136,7 +136,7 @@ argument ::= ( test comp_for? |
 
 comp_iter ::= comp_for | comp_if
 sync_comp_for ::= "for" exprlist "in" or_test comp_iter?
-comp_for ::= ASYNC? sync_comp_for
+comp_for ::= "async"? sync_comp_for
 comp_if ::= "if" test_nocond comp_iter?
 
 yield_expr ::= "yield" yield_arg?
@@ -172,12 +172,13 @@ bytesescapeseq ::=  "\\" [\0-\x7f]
 
 f_string          ::=  (literal_char | "{{" | "}}" | replacement_field)*
 replacement_field ::=  "{" f_expression "="? ("!" conversion)? (":" format_spec)? "}"
-f_expression      ::=  (conditional_expression | "*" or_expr)
-                         ("," conditional_expression | "," "*" or_expr)* ","?
-                       | yield_expression
+f_expression      ::=  (conditional_expression | "*" xor_expr)
+                         ("," conditional_expression | "," "*" xor_expr)* ","?
+                       | yield_expr
 conversion        ::=  "s" | "r" | "a"
 format_spec       ::=  (literal_char | "\0" | replacement_field)*
 literal_char      ::=  [^{}\0]
+conditional_expression ::= expr "if" expr "else" expr
 
 integer      ::=  decinteger | bininteger | octinteger | hexinteger
 decinteger   ::=  nonzerodigit ("_"? digit)* | "0"+ ("_"? "0")*
@@ -199,3 +200,9 @@ exponent      ::=  ("e" | "E") ("+" | "-")? digitpart
 imagnumber ::=  (floatnumber | digitpart) ("j" | "J")
 
 NEWLINE ::= [\r\n]
+NAME ::= [a-zA-Z_][a-zA-Z_0-9]*
+TYPE_COMMENT ::= "#" "type" ":" [^\r\n]*
+INDENT ::= "<INDENT>"
+DEDENT ::= "<DEDENT>"
+NUMBER ::= integer | floatnumber | imagnumber
+STRING ::= stringliteral | bytesliteral | f_string
