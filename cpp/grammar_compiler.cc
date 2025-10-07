@@ -276,11 +276,21 @@ int GrammarMatcherForTokenMaskCache::GetLengthOfString(int current_state) {
     }
   }
   for (const auto& [state, mask] : possible_first_char_masks) {
-    if (mask.count() == 124 && !mask['"'] && !mask['\\'] && !mask['\n'] && !mask['\r']) {
+    bool accepted = true;
+    for (int i = 0; i < 128; i++) {
+      if (i == '"' || i == '\\' || i == '\n' || i == '\r') {
+        continue;
+      }
+      if (!mask[i]) {
+        accepted = false;
+        break;
+      }
+    }
+    if (accepted) {
       if (state == current_state) {
         return 1024;
       } else {
-        return GetLengthOfString(state) + 1;
+        return 1 + GetLengthOfString(state);
       }
     }
   }
@@ -329,7 +339,20 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   int prev_matched_size = 0;
   int last_rejected_range = 0;
+  bool is_string_quotation = false;
   const bool& is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
+  if (is_exact_lookahead && current_length != 0) {
+    const auto& lookahead_assertion_id = grammar_->GetRule(init_rule_id_).lookahead_assertion_id;
+    if (lookahead_assertion_id != -1) {
+      const auto& lookahead_expr = grammar_->GetGrammarExpr(lookahead_assertion_id);
+      XGRAMMAR_CHECK(lookahead_expr.type == Grammar::Impl::GrammarExprType::kSequence);
+      const auto& first_lookahead_element_expr = grammar_->GetGrammarExpr(lookahead_expr[0]);
+      if (first_lookahead_element_expr.type == Grammar::Impl::GrammarExprType::kByteString &&
+          first_lookahead_element_expr[0] == '"') {
+        is_string_quotation = true;
+      }
+    }
+  }
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
@@ -353,7 +376,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       const auto& token = sorted_decoded_vocab[i].second;
-      if (current_length > 4 && static_cast<int>(token.size()) <= current_length) {
+      if (current_length != 0) {
         bool all_accepted = true;
         for (char ch : token) {
           if (isascii(ch) == 0 || ch == '"' || ch == '\\' || ch == '\n' || ch == '\r') {
@@ -362,8 +385,14 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           }
         }
         if (all_accepted) {
-          tmp_accepted_indices_.push_back(i);
-          continue;
+          if (static_cast<int32_t>(token.size()) <= current_length) {
+            tmp_accepted_indices_.push_back(i);
+            continue;
+          } else if (is_string_quotation) {
+            tmp_rejected_indices_.push_back(i);
+            tmp_rejected_by_lookahead_indices_.push_back(i);
+            continue;
+          }
         }
       }
       // This optimization is useful for simple self-recursive rules, like string content.
