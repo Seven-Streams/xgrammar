@@ -1066,9 +1066,11 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
     }
   };
 
-  const int32_t kPartialJitThreshold = 2;
+  const int32_t kPartialJitThreshold = 0;
 
   if (is_jit_) {
+    compiled_grammar_impl->tag_dispatch_rule_id_to_second_slicing_bitset =
+        &tag_dispatch_rule_id_to_second_slicing_bitset;
     if (kPartialJitThreshold != 0) {
       // Estimate the time consumption of computing the token mask for each state, and only
       // compute the token mask for the states with the biggest first character mask size.

@@ -540,8 +540,13 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       latest_states_with_masks;
 
   auto add_adaptive_token_mask = [&](const ParserState& state, bool is_root_rule) {
-    auto grammar_matcher =
-        GrammarMatcherForTokenMaskCache(grammar_, state, {}, tokenizer_info_, false);
+    auto grammar_matcher = GrammarMatcherForTokenMaskCache(
+        grammar_,
+        state,
+        *compiled_grammar_->tag_dispatch_rule_id_to_second_slicing_bitset,
+        tokenizer_info_,
+        false
+    );
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(is_root_rule);
     return adaptive_token_mask_cache.emplace(state, std::move(cur_adaptive_token_mask_cache)).first;
   };
