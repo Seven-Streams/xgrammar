@@ -68,6 +68,8 @@ class FSMImplBase {
 
   void GetEpsilonClosure(std::unordered_set<int>* state_set) const;
 
+  void GetEpsilonClosure(std::set<int>* state_set) const;
+
   void GetPossibleRules(int state_num, std::unordered_set<int>* rules) const;
 
   void GetReachableStates(const std::vector<int>& from, std::unordered_set<int>* result) const;
@@ -121,6 +123,28 @@ std::string FSMImplBase<ContainerType>::EdgesToString(std::optional<std::vector<
 
 template <typename ContainerType>
 void FSMImplBase<ContainerType>::GetEpsilonClosure(std::unordered_set<int>* state_set) const {
+  std::queue<int> queue;
+  for (const auto& state : *state_set) {
+    queue.push(state);
+  }
+  while (!queue.empty()) {
+    int current = queue.front();
+    queue.pop();
+    for (const auto& edge : edges_[current]) {
+      if (!edge.IsEpsilon()) {
+        continue;
+      }
+      if (state_set->find(edge.target) != state_set->end()) {
+        continue;
+      }
+      state_set->insert(edge.target);
+      queue.push(edge.target);
+    }
+  }
+}
+
+template <typename ContainerType>
+void FSMImplBase<ContainerType>::GetEpsilonClosure(std::set<int>* state_set) const {
   std::queue<int> queue;
   for (const auto& state : *state_set) {
     queue.push(state);
@@ -429,6 +453,10 @@ void FSM::GetPossibleRules(int state, std::unordered_set<int>* rules) const {
 }
 
 void FSM::GetEpsilonClosure(std::unordered_set<int>* state_set) const {
+  pimpl_->GetEpsilonClosure(state_set);
+}
+
+void FSM::GetEpsilonClosure(std::set<int>* state_set) const {
   pimpl_->GetEpsilonClosure(state_set);
 }
 

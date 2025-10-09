@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -238,7 +239,7 @@ class FSM {
    * \param state_set The states in the epsilon closure. The result is not cleared.
    */
   void GetEpsilonClosure(std::unordered_set<int>* state_set) const;
-
+  void GetEpsilonClosure(std::set<int>* state_set) const;
   /*!
    * \brief Get the reachable states from a set of states.
    * \param from The current states.
