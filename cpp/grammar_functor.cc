@@ -1880,7 +1880,7 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::Choices(
   auto result = FSMWithStartEnd::Union(fsm_list);
   result = result.SimplifyEpsilon();
   // result = result.MergeEquivalentSuccessors();
-  auto result_raw = result.MinimizeDFA();
+  auto result_raw = result.ToDFA();
   if (result_raw.IsOk()) {
     result = std::move(result_raw).Unwrap();
   }
