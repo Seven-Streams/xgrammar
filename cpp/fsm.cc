@@ -1456,7 +1456,6 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
       }
       if (!found) {
         closures.push_back(closure);
-        dfa.AddState();
         for (const auto& edge : edges) {
           dfa.GetFsm()->AddEdge(
               now_process, static_cast<int32_t>(closures.size()) - 1, edge.first, edge.second
