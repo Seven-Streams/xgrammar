@@ -1360,6 +1360,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
     rules.clear();
     std::set<int> interval_ends;
     std::bitset<256> allowed_characters;
+    std::map<std::vector<int>, std::vector<std::pair<int16_t, int16_t>>> targets_to_edges;
     dfa.AddState();
     // Check if the closure is a final state.
     for (const auto& state : closures[now_process]) {
@@ -1416,18 +1417,11 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
         }
       }
       fsm_.GetEpsilonClosure(&next_closure);
-      bool flag = false;
-      for (int j = 0; j < static_cast<int>(closures.size()); j++) {
-        if (closures[j] == next_closure) {
-          dfa.GetFsm().AddEdge(now_process, j, interval.first, interval.second);
-          flag = true;
-          break;
-        }
+      std::vector<int> next_closure_vector(next_closure.begin(), next_closure.end());
+      if (targets_to_edges.find(next_closure_vector) == targets_to_edges.end()) {
+        targets_to_edges[next_closure_vector] = {};
       }
-      if (!flag) {
-        dfa.GetFsm().AddEdge(now_process, closures.size(), interval.first, interval.second);
-        closures.push_back(next_closure);
-      }
+      targets_to_edges[next_closure_vector].push_back(interval);
     }
     for (auto rule : rules) {
       std::unordered_set<int> next_closure;
@@ -1442,17 +1436,32 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
         }
       }
       fsm_.GetEpsilonClosure(&next_closure);
-      bool flag = false;
-      for (int j = 0; j < static_cast<int>(closures.size()); j++) {
-        if (closures[j] == next_closure) {
-          dfa.GetFsm().AddRuleEdge(now_process, j, rule);
-          flag = true;
+      std::vector<int> next_closure_vector(next_closure.begin(), next_closure.end());
+      if (targets_to_edges.find(next_closure_vector) == targets_to_edges.end()) {
+        targets_to_edges[next_closure_vector] = {};
+      }
+      targets_to_edges[next_closure_vector].push_back(std::make_pair(-1, rule));
+    }
+    for (const auto& [closure_vector, edges] : targets_to_edges) {
+      std::unordered_set<int> closure(closure_vector.begin(), closure_vector.end());
+      bool found = false;
+      for (int i = 0; i < static_cast<int>(closures.size()); i++) {
+        if (closures[i] == closure) {
+          for (const auto& edge : edges) {
+            dfa.GetFsm()->AddEdge(now_process, i, edge.first, edge.second);
+          }
+          found = true;
           break;
         }
       }
-      if (!flag) {
-        dfa.GetFsm().AddRuleEdge(now_process, closures.size(), rule);
-        closures.push_back(next_closure);
+      if (!found) {
+        closures.push_back(closure);
+        dfa.AddState();
+        for (const auto& edge : edges) {
+          dfa.GetFsm()->AddEdge(
+              now_process, static_cast<int32_t>(closures.size()) - 1, edge.first, edge.second
+          );
+        }
       }
     }
     now_process++;
