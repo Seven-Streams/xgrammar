@@ -1410,16 +1410,12 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
         for (const auto& edge : edges) {
           if (edge.IsCharRange()) {
             if (interval.first >= edge.min && interval.second <= edge.max) {
-              if (next_closure.find(edge.target) == next_closure.end()) {
-                std::unordered_set<int> epsilon_closure;
-                epsilon_closure.insert(edge.target);
-                fsm_.GetEpsilonClosure(&epsilon_closure);
-                next_closure.insert(epsilon_closure.begin(), epsilon_closure.end());
-              }
+              next_closure.insert(edge.target);
             }
           }
         }
       }
+      fsm_.GetEpsilonClosure(&next_closure);
       bool flag = false;
       for (int j = 0; j < static_cast<int>(closures.size()); j++) {
         if (closures[j] == next_closure) {
@@ -1440,16 +1436,12 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
         for (const auto& edge : edges) {
           if (edge.IsRuleRef()) {
             if (rule == edge.GetRefRuleId()) {
-              if (next_closure.find(edge.target) == next_closure.end()) {
-                std::unordered_set<int> epsilon_closure;
-                epsilon_closure.insert(edge.target);
-                fsm_.GetEpsilonClosure(&epsilon_closure);
-                next_closure.insert(epsilon_closure.begin(), epsilon_closure.end());
-              }
+              next_closure.insert(edge.target);
             }
           }
         }
       }
+      fsm_.GetEpsilonClosure(&next_closure);
       bool flag = false;
       for (int j = 0; j < static_cast<int>(closures.size()); j++) {
         if (closures[j] == next_closure) {
