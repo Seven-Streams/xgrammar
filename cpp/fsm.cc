@@ -1349,24 +1349,20 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
     return ResultErr("The number of states exceeds the limit.");
   }
   FSMWithStartEnd dfa(FSM(0), 0, std::vector<bool>(), true);
-  std::vector<std::pair<unsigned int, std::unordered_set<int>>> closures;
+  std::vector<std::unordered_set<int>> closures;
   std::unordered_set<int> rules;
   int now_process = 0;
   std::unordered_set<int> closure;
   closure.insert(start_);
   fsm_.GetEpsilonClosure(&closure);
-  unsigned int hash_value = 0;
-  for (const auto& state : closure) {
-    hash_value ^= std::hash<int>()(state) + 0x9e3779b9;
-  }
-  closures.push_back({hash_value, closure});
+  closures.push_back(closure);
   while (now_process < static_cast<int>(closures.size())) {
     rules.clear();
     std::set<int> interval_ends;
     std::bitset<256> allowed_characters;
     dfa.AddState();
     // Check if the closure is a final state.
-    for (const auto& state : closures[now_process].second) {
+    for (const auto& state : closures[now_process]) {
       if (IsEndState(state)) {
         dfa.AddEndState(now_process);
       }
@@ -1409,7 +1405,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
     }
     for (const auto& interval : intervals) {
       std::unordered_set<int> next_closure;
-      for (const auto& state : closures[now_process].second) {
+      for (const auto& state : closures[now_process]) {
         const auto& edges = fsm_->GetEdges(state);
         for (const auto& edge : edges) {
           if (edge.IsCharRange()) {
@@ -1420,13 +1416,9 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
         }
       }
       fsm_.GetEpsilonClosure(&next_closure);
-      unsigned int hash_value = 0;
-      for (const auto& state : next_closure) {
-        hash_value ^= std::hash<int>()(state) + 0x9e3779b9;
-      }
       bool flag = false;
       for (int j = 0; j < static_cast<int>(closures.size()); j++) {
-        if (closures[j].first == hash_value) {
+        if (closures[j] == next_closure) {
           dfa.GetFsm().AddEdge(now_process, j, interval.first, interval.second);
           flag = true;
           break;
@@ -1434,12 +1426,12 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
       }
       if (!flag) {
         dfa.GetFsm().AddEdge(now_process, closures.size(), interval.first, interval.second);
-        closures.push_back({hash_value, next_closure});
+        closures.push_back(next_closure);
       }
     }
     for (auto rule : rules) {
       std::unordered_set<int> next_closure;
-      for (const auto& state : closures[now_process].second) {
+      for (const auto& state : closures[now_process]) {
         const auto& edges = fsm_.GetEdges(state);
         for (const auto& edge : edges) {
           if (edge.IsRuleRef()) {
@@ -1450,13 +1442,9 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
         }
       }
       fsm_.GetEpsilonClosure(&next_closure);
-      unsigned int hash_value = 0;
-      for (const auto& state : next_closure) {
-        hash_value ^= std::hash<int>()(state) + 0x9e3779b9;
-      }
       bool flag = false;
       for (int j = 0; j < static_cast<int>(closures.size()); j++) {
-        if (closures[j].first == hash_value) {
+        if (closures[j] == next_closure) {
           dfa.GetFsm().AddRuleEdge(now_process, j, rule);
           flag = true;
           break;
@@ -1464,7 +1452,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
       }
       if (!flag) {
         dfa.GetFsm().AddRuleEdge(now_process, closures.size(), rule);
-        closures.push_back({hash_value, next_closure});
+        closures.push_back(next_closure);
       }
     }
     now_process++;
