@@ -107,7 +107,7 @@ struct alignas(8) FSMEdge {
    * \brief Get the rule id of the edge.
    * \return The rule id of the edge. -1 if the edge is not a rule reference.
    */
-  int32_t GetRefRuleId() const { return IsRuleRef() ? max : -1; }
+  int32_t GetRefRuleId() const { return IsRuleRef() ? static_cast<uint16_t>(max) : -1; }
 
   friend struct member_trait<FSMEdge>;
 };
