@@ -2194,7 +2194,7 @@ void GrammarFSMHasherImpl::Apply(Grammar* grammar) {
   sorted_edges_.clear();
   visited_ = std::vector<bool>((*grammar)->NumRules(), false);
   has_inward_edges_ = std::vector<bool>((*grammar)->complete_fsm.NumStates(), false);
-  for (int i = 0; i < (*grammar)->NumRules(); i++) {
+  for (int i = 0; i < grammar_->ImplPtr()->complete_fsm.NumStates(); i++) {
     for (const auto& edge : grammar->ImplPtr()->complete_fsm.GetEdges(i)) {
       has_inward_edges_[edge.target] = true;
     }
