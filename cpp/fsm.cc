@@ -1376,7 +1376,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
           }
           continue;
         } else if (edge.IsRuleRef()) {
-          rules.insert(edge.GetRefRuleId(), edge.target);
+          rules.insert({edge.GetRefRuleId(), edge.target});
         }
       }
     }
