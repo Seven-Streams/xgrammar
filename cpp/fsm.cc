@@ -1433,6 +1433,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
     while (iterator != rules.end()) {
       auto range = rules.equal_range(iterator->first);
       int rule = iterator->first;
+      iterator = range.second;
       std::unordered_set<int> next_closure;
       for (auto it = range.first; it != range.second; ++it) {
         const auto& target = it->second;
