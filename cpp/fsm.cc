@@ -1433,7 +1433,11 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
     while (iterator != rules.end()) {
       auto range = rules.equal_range(iterator->first);
       int rule = iterator->first;
-      std::unordered_set<int> next_closure(range.first, range.second);
+      std::unordered_set<int> next_closure;
+      for (auto it = range.first; it != range.second; ++it) {
+        const auto& target = it->second;
+        next_closure.insert(target);
+      }
       fsm_.GetEpsilonClosure(&next_closure);
       bool flag = false;
       for (int j = 0; j < static_cast<int>(closures.size()); j++) {
