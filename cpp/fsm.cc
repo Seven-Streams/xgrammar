@@ -1350,7 +1350,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
   }
   FSMWithStartEnd dfa(FSM(0), 0, std::vector<bool>(), true);
   std::vector<std::unordered_set<int>> closures;
-  std::unordered_set<int> rules;
+  std::unordered_multimap<int, int> rules;
   int now_process = 0;
   std::unordered_set<int> closure;
   closure.insert(start_);
@@ -1376,7 +1376,7 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
           }
           continue;
         } else if (edge.IsRuleRef()) {
-          rules.insert(edge.GetRefRuleId());
+          rules.insert(edge.GetRefRuleId(), edge.target);
         }
       }
     }
@@ -1429,18 +1429,11 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
         closures.push_back(next_closure);
       }
     }
-    for (auto rule : rules) {
-      std::unordered_set<int> next_closure;
-      for (const auto& state : closures[now_process]) {
-        const auto& edges = fsm_.GetEdges(state);
-        for (const auto& edge : edges) {
-          if (edge.IsRuleRef()) {
-            if (rule == edge.GetRefRuleId()) {
-              next_closure.insert(edge.target);
-            }
-          }
-        }
-      }
+    auto iterator = rules.begin();
+    while (iterator != rules.end()) {
+      auto range = rules.equal_range(iterator->first);
+      int rule = iterator->first;
+      std::unordered_set<int> next_closure(range.first, range.second);
       fsm_.GetEpsilonClosure(&next_closure);
       bool flag = false;
       for (int j = 0; j < static_cast<int>(closures.size()); j++) {
