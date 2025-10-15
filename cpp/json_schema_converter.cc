@@ -637,7 +637,7 @@ std::string JSONSchemaConverter::Convert(const JSONFormat json_format) {
     // VisitObject directly, and pass JSONFormat::kXML to it.
     // In other VisitObject, only JSONFormat::kJSON will be passed.
     case (JSONFormat::kXML): {
-      auto rule_name = ebnf_script_creator_.AllocateRuleName(kRootRuleName);
+      const auto& rule_name = ebnf_script_creator_.AllocateRuleName(kRootRuleName);
       XGRAMMAR_CHECK(json_schema_.is<picojson::object>());
       std::string rule_content =
           VisitObject(json_schema_.get<picojson::object>(), rule_name, json_format);
@@ -653,7 +653,7 @@ void JSONSchemaConverter::AddBasicRules(JSONFormat json_format) {
   // Allow any field for basic array/obj rules
   strict_mode_ = false;
 
-  auto past_indent_manager = indentManager_;
+  const auto& past_indent_manager = indentManager_;
   if (any_whitespace_) {
     indentManager_ = IndentManager(std::nullopt, ",", true, std::nullopt);
   } else {
@@ -788,7 +788,7 @@ std::string JSONSchemaConverter::CreateRuleFromSchema(
     return basic_rules_cache_[{idx, json_format}];
   }
 
-  auto rule_name = ebnf_script_creator_.AllocateRuleName(rule_name_hint);
+  const auto& rule_name = ebnf_script_creator_.AllocateRuleName(rule_name_hint);
   std::string rule_content = VisitSchema(schema, rule_name, json_format);
   ebnf_script_creator_.AddRuleWithAllocatedName(rule_name, rule_content);
   return rule_name;
@@ -918,7 +918,7 @@ std::string JSONSchemaConverter::VisitRef(
 ) {
   XGRAMMAR_CHECK(schema.count("$ref") && schema.at("$ref").is<std::string>())
       << "Schema $ref should be a string";
-  auto ref_str = schema.at("$ref").get<std::string>();
+  const auto& ref_str = schema.at("$ref").get<std::string>();
   return URIToRule(ref_str);
 }
 
@@ -963,9 +963,9 @@ std::string JSONSchemaConverter::URIToRule(const std::string& uri) {
     current = &(current->get(part));
   }
 
-  auto new_rule_name = ebnf_script_creator_.AllocateRuleName(new_rule_name_perfix);
+  const auto& new_rule_name = ebnf_script_creator_.AllocateRuleName(new_rule_name_perfix);
   uri_to_rule_cache_[uri] = new_rule_name;
-  auto body = VisitSchema(*current, new_rule_name);
+  const auto& body = VisitSchema(*current, new_rule_name);
   ebnf_script_creator_.AddRuleWithAllocatedName(new_rule_name, body);
   return new_rule_name;
 }
@@ -984,7 +984,7 @@ std::string JSONSchemaConverter::VisitEnum(
   XGRAMMAR_CHECK(schema.count("enum"));
   std::string result = "";
   int64_t idx = 0;
-  for (auto value : schema.at("enum").get<picojson::array>()) {
+  for (const auto& value : schema.at("enum").get<picojson::array>()) {
     if (idx != 0) {
       result += " | ";
     }
@@ -1015,9 +1015,9 @@ std::string JSONSchemaConverter::VisitAnyOf(
   XGRAMMAR_CHECK(schema.count("anyOf") || schema.count("oneOf"));
   std::string result = "";
   int64_t idx = 0;
-  auto anyof_schema = schema.count("anyOf") ? schema.at("anyOf") : schema.at("oneOf");
+  const auto& anyof_schema = schema.count("anyOf") ? schema.at("anyOf") : schema.at("oneOf");
   XGRAMMAR_CHECK(anyof_schema.is<picojson::array>()) << "anyOf or oneOf must be an array";
-  for (auto anyof_schema : anyof_schema.get<picojson::array>()) {
+  for (const auto& anyof_schema : anyof_schema.get<picojson::array>()) {
     if (idx != 0) {
       result += " | ";
     }
@@ -1040,13 +1040,13 @@ std::string JSONSchemaConverter::VisitAllOf(
   // cases with CFG
   XGRAMMAR_CHECK(schema.count("allOf"));
   XGRAMMAR_CHECK(schema.at("allOf").is<picojson::array>()) << "allOf must be an array";
-  auto all_array = schema.at("allOf").get<picojson::array>();
+  const auto& all_array = schema.at("allOf").get<picojson::array>();
   // Case 1: allOf is a single schema
   if (all_array.size() == 1) {
     return VisitSchema(all_array[0], rule_name + "_case_0");
   }
   // Case 2: allOf is a list of schemas, we fuse them into a single schema
-  auto fused_schema = FuseAllOfSchema(all_array);
+  const auto& fused_schema = FuseAllOfSchema(all_array);
   return VisitSchema(fused_schema, rule_name);
 }
 
@@ -1840,7 +1840,7 @@ std::string JSONSchemaConverter::VisitInteger(
       }
   );
 
-  auto checkAndConvertIntegerBound = [](const picojson::value& value) -> int64_t {
+  const auto& checkAndConvertIntegerBound = [](const picojson::value& value) -> int64_t {
     XGRAMMAR_CHECK(value.is<int64_t>() || value.is<double>()) << "Value must be a number";
 
     if (value.is<int64_t>()) {
@@ -1975,7 +1975,7 @@ std::string JSONSchemaConverter::VisitString(
   if (string_spec_result.IsErr()) {
     XGRAMMAR_LOG(FATAL) << std::move(string_spec_result).UnwrapErr().what();
   }
-  auto string_spec = std::move(string_spec_result).Unwrap();
+  const auto& string_spec = std::move(string_spec_result).Unwrap();
 
   // Check if we have already generated a rule for this string spec.
   if (string_spec_to_rule_name_and_context_.find(string_spec) !=
@@ -2074,7 +2074,7 @@ Result<JSONSchemaConverter::ArraySpec, SchemaError> JSONSchemaConverter::ParseAr
   }
 
   if (schema.count("items")) {
-    auto items_value = schema.at("items");
+    const auto& items_value = schema.at("items");
     if (!items_value.is<bool>() && !items_value.is<picojson::object>()) {
       return ResultErr<SchemaError>(
           SchemaErrorType::kInvalidSchema, "items must be a boolean or an object"
@@ -2087,7 +2087,7 @@ Result<JSONSchemaConverter::ArraySpec, SchemaError> JSONSchemaConverter::ParseAr
       additional_item_schema = items_value;
     }
   } else if (schema.count("unevaluatedItems")) {
-    auto unevaluated_items_value = schema.at("unevaluatedItems");
+    const auto& unevaluated_items_value = schema.at("unevaluatedItems");
     if (!unevaluated_items_value.is<bool>() && !unevaluated_items_value.is<picojson::object>()) {
       return ResultErr<SchemaError>(
           SchemaErrorType::kInvalidSchema, "unevaluatedItems must be a boolean or an object"
@@ -2181,14 +2181,14 @@ std::string JSONSchemaConverter::VisitArray(
     XGRAMMAR_LOG(FATAL) << std::move(array_spec_result).UnwrapErr().what();
   }
 
-  auto array_spec = std::move(array_spec_result).Unwrap();
+  const auto& array_spec = std::move(array_spec_result).Unwrap();
 
   indentManager_->StartIndent();
 
-  auto start_separator = indentManager_->StartSeparator();
-  auto mid_separator = indentManager_->MiddleSeparator();
-  auto end_separator = indentManager_->EndSeparator();
-  auto empty_separator = indentManager_->EmptySeparator();
+  const auto& start_separator = indentManager_->StartSeparator();
+  const auto& mid_separator = indentManager_->MiddleSeparator();
+  const auto& end_separator = indentManager_->EndSeparator();
+  const auto& empty_separator = indentManager_->EmptySeparator();
 
   std::vector<std::string> item_rule_names;
   std::string additional_rule_name;
@@ -2235,7 +2235,8 @@ std::string JSONSchemaConverter::VisitArray(
   const std::string& right_bracket = EBNFScriptCreator::Str("]");
 
   if (array_spec.prefix_item_schemas.empty()) {
-    auto empty_part = EBNFScriptCreator::Concat({left_bracket, empty_separator, right_bracket});
+    const auto& empty_part =
+        EBNFScriptCreator::Concat({left_bracket, empty_separator, right_bracket});
     if (!array_spec.allow_additional_items) {
       return empty_part;
     } else if (array_spec.min_items == 0 && array_spec.max_items == 0) {
@@ -2279,7 +2280,7 @@ std::string JSONSchemaConverter::VisitArray(
       }
       prefix_part.push_back(item_rule_names[i]);
     }
-    auto prefix_part_str = EBNFScriptCreator::Concat(prefix_part);
+    const auto& prefix_part_str = EBNFScriptCreator::Concat(prefix_part);
     if (!array_spec.allow_additional_items) {
       return EBNFScriptCreator::Concat(
           {left_bracket, start_separator, prefix_part_str, end_separator, right_bracket}
@@ -2839,7 +2840,7 @@ Result<JSONSchemaConverter::ObjectSpec, SchemaError> JSONSchemaConverter::ParseO
           SchemaErrorType::kInvalidSchema, "properties must be an object"
       );
     }
-    auto properties_obj = schema.at("properties").get<picojson::object>();
+    const auto& properties_obj = schema.at("properties").get<picojson::object>();
     for (const auto& key : properties_obj.ordered_keys()) {
       properties.push_back({key, properties_obj.at(key)});
     }
@@ -2860,7 +2861,7 @@ Result<JSONSchemaConverter::ObjectSpec, SchemaError> JSONSchemaConverter::ParseO
           SchemaErrorType::kInvalidSchema, "patternProperties must be an object"
       );
     }
-    auto pattern_properties_obj = schema.at("patternProperties").get<picojson::object>();
+    const auto& pattern_properties_obj = schema.at("patternProperties").get<picojson::object>();
     for (const auto& key : pattern_properties_obj.ordered_keys()) {
       pattern_properties.push_back({key, pattern_properties_obj.at(key)});
     }
@@ -3233,7 +3234,7 @@ std::string JSONSchemaConverter::VisitObject(
     XGRAMMAR_LOG(FATAL) << std::move(object_spec_result).UnwrapErr().what();
   }
 
-  auto object_spec = std::move(object_spec_result).Unwrap();
+  const auto& object_spec = std::move(object_spec_result).Unwrap();
   std::string result;
   if (json_format == JSONFormat::kJSON) {
     result += "\"{\"";
@@ -3300,7 +3301,7 @@ std::string JSONSchemaConverter::VisitObject(
         }
         property_rule_body += ")";
       } else {
-        auto key_pattern =
+        const auto& key_pattern =
             CreateRuleFromSchema(object_spec.property_names, rule_name + "_name", json_format);
         switch (json_format) {
           case (JSONFormat::kJSON): {
@@ -3317,7 +3318,7 @@ std::string JSONSchemaConverter::VisitObject(
         }
       }
       // set the property rule
-      auto prop_rule_name = ebnf_script_creator_.AllocateRuleName(rule_name + "_prop");
+      const auto& prop_rule_name = ebnf_script_creator_.AllocateRuleName(rule_name + "_prop");
       ebnf_script_creator_.AddRuleWithAllocatedName(prop_rule_name, property_rule_body);
       switch (json_format) {
         case (JSONFormat::kJSON): {
@@ -3401,7 +3402,7 @@ std::string JSONSchemaConverter::VisitObject(
         } else {
           whitespace_part = "[ \\n\\t]{0," + std::to_string(*max_whitespace_cnt_) + "} ";
         }
-        auto rest = "\"{\" " + std::string(any_whitespace_ ? whitespace_part : "") + "\"}\"";
+        const auto& rest = "\"{\" " + std::string(any_whitespace_ ? whitespace_part : "") + "\"}\"";
         if (result == "\"{\"  \"}\"") {
           result = rest;
         } else {
@@ -3424,7 +3425,7 @@ std::string JSONSchemaConverter::VisitTypeArray(
     const picojson::object& schema, const std::string& rule_name
 ) {
   XGRAMMAR_CHECK(schema.at("type").is<picojson::array>());
-  auto type_array = schema.at("type").get<picojson::array>();
+  const auto& type_array = schema.at("type").get<picojson::array>();
 
   picojson::object schema_copy = schema;
   if (type_array.size() == 0) {

@@ -1408,11 +1408,13 @@ Result<FSMWithStartEnd> FSMWithStartEnd::ToDFA(int max_num_states) const {
       for (const auto& state : closures[now_process]) {
         const auto& edges = fsm_->GetEdges(state);
         for (const auto& edge : edges) {
-          if (edge.IsCharRange()) {
-            if (interval.first >= edge.min && interval.second <= edge.max) {
-              next_closure.insert(edge.target);
-            }
+          if (!edge.IsCharRange()) {
+            continue;
           }
+          if (interval.first < edge.min || interval.second > edge.max) {
+            continue;
+          }
+          next_closure.insert(edge.target);
         }
       }
       fsm_.GetEpsilonClosure(&next_closure);
