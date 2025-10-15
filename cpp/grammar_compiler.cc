@@ -337,6 +337,61 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     current_length = GetLengthOfString(initial_state_.element_id);
   }
 
+  bool is_string_repetition = false;
+  if (current_length == 1) {
+    const auto& rule = grammar_->GetRule(init_rule_id_);
+    if (rule.lookahead_assertion_id != -1 && rule.is_exact_lookahead) {
+      const auto& lookahead_expr = grammar_->GetGrammarExpr(rule.lookahead_assertion_id);
+      if (lookahead_expr.size() == 15) {
+        bool all_passed = true;
+        for (const auto& expr_id : lookahead_expr) {
+          const auto& expr = grammar_->GetGrammarExpr(expr_id);
+          if (!expr[0]) {
+            all_passed = false;
+            break;
+          }
+          if (expr.type != Grammar::Impl::GrammarExprType::kCharacterClass) {
+            all_passed = false;
+            break;
+          }
+          int stat = 0;
+          for (int idx = 1; idx < expr.size(); idx += 2) {
+            if (expr[idx] != expr[idx + 1]) {
+              break;
+            }
+            switch (expr[idx]) {
+              case '"': {
+                stat |= 1;
+                break;
+              }
+              case '\\': {
+                stat |= 2;
+                break;
+              }
+              case '\n': {
+                stat |= 4;
+                break;
+              }
+              case '\r': {
+                stat |= 8;
+                break;
+              }
+              default:
+                break;
+            }
+          }
+          if (stat != 15) {
+            all_passed = false;
+            break;
+          }
+        }
+        if (all_passed) {
+          is_string_repetition = true;
+        }
+      }
+    }
+  }
+
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   bool is_string_quotation = false;
@@ -385,6 +440,17 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           }
         }
         if (all_accepted) {
+          if (is_string_repetition) {
+            if (token.size() >= 17) {
+              tmp_uncertain_indices_.push_back(i);
+            } else {
+              if (token.size() > 1) {
+                tmp_accepted_by_lookahead_indices_.push_back(i);
+              }
+              tmp_accepted_indices_.push_back(i);
+            }
+            continue;
+          }
           if (static_cast<int32_t>(token.size()) <= current_length) {
             tmp_accepted_indices_.push_back(i);
             continue;
@@ -633,6 +699,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   bool rejected_filled = GetTokenMaskWithFirstCharacterCheck(
       first_character_mask, is_root_rule, crossing_cache_is_available
   );
+
   if (rejected_filled) {
     auto return_value = AdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),
