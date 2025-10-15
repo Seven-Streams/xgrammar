@@ -339,8 +339,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   if (grammar_->per_rule_fsms[init_rule_id_].has_value()) {
     current_length = GetLengthOfString(initial_state_.element_id);
     if (current_length != 0) {
-      XGRAMMAR_LOG(INFO) << "The max length of string that can be accepted by the initial state is "
-                         << current_length;
       string_slicer_bitset =
           &tokenizer_info_.GetStringSlicerBitset(std::min(current_length - 1, 14));
     }
@@ -575,7 +573,6 @@ void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& fi
 }
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_root_rule) {
-  auto start_time = std::chrono::high_resolution_clock::now();
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
@@ -634,11 +631,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   bool rejected_filled = GetTokenMaskWithFirstCharacterCheck(
       first_character_mask, is_root_rule, crossing_cache_is_available
   );
-  auto end_time = std::chrono::high_resolution_clock::now();
-  XGRAMMAR_LOG(INFO
-  ) << "GetAdaptiveTokenMask time: "
-    << std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count()
-    << " us for the state: " << initial_state_;
   if (rejected_filled) {
     auto return_value = AdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),
