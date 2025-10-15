@@ -8,7 +8,10 @@
 #include <picojson.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <array>
+#include <cctype>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -18,6 +21,7 @@
 #include <variant>
 #include <vector>
 
+#include "support/dynamic_bitset.h"
 #include "support/encoding.h"
 #include "support/json_serializer.h"
 #include "support/logging.h"
@@ -323,6 +327,27 @@ TokenizerInfo::Impl::Impl(
     trie_subtree_nodes_range_[top_pair.second] = sorted_decoded_vocab_.size();
     prefix_stack.pop();
   }
+
+  // Initialize the bitset used for string slicing.
+  for (int i = 0; i < 16; ++i) {
+    string_slicer_bitset_[i] = DynamicBitset(sorted_decoded_vocab_.size());
+  }
+  for (size_t j = 0; j < sorted_decoded_vocab_.size(); ++j) {
+    const auto& token = sorted_decoded_vocab_[j].second;
+    bool all_accepted = true;
+    for (char c : token) {
+      if (isascii(c) == 0 || c == '"' || c == '\\' || c == '\n' || c == '\r') {
+        all_accepted = false;
+        break;
+      }
+    }
+    if (all_accepted) {
+      for (int i = std::min(14, static_cast<int>(token.size())) - 1; i >= 0; i--) {
+        string_slicer_bitset_[i].Set(j);
+      }
+      string_slicer_bitset_[15].Set(j);
+    }
+  }
 }
 
 std::string TokenizerInfo::Impl::DumpMetadata() const {
@@ -480,6 +505,10 @@ const std::vector<std::pair<int32_t, std::string>>& TokenizerInfo::GetSortedDeco
 
 const std::vector<int32_t>& TokenizerInfo::GetTrieSubtreeNodesRange() const {
   return pimpl_->GetTrieSubtreeNodesRange();
+}
+
+const DynamicBitset& TokenizerInfo::GetStringSlicerBitset(int index) const {
+  return pimpl_->GetStringSlicerBitset(index);
 }
 
 std::string TokenizerInfo::DumpMetadata() const { return pimpl_->DumpMetadata(); }

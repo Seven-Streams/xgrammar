@@ -331,15 +331,25 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   } else {
     std::tie(speculative_calculation, speculative_mask) = GetSpeculativeCalculation();
   }
+  std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
+  std::optional<const DynamicBitset*> string_slicer_bitset = std::nullopt;
+  const auto& all_is_string_context = tokenizer_info_.GetStringSlicerBitset(15);
 
   int32_t current_length = 0;
   if (grammar_->per_rule_fsms[init_rule_id_].has_value()) {
     current_length = GetLengthOfString(initial_state_.element_id);
+    if (current_length != 0) {
+      XGRAMMAR_LOG(INFO) << "The max length of string that can be accepted by the initial state is "
+                         << current_length;
+      string_slicer_bitset =
+          &tokenizer_info_.GetStringSlicerBitset(std::min(current_length - 1, 14));
+    }
   }
 
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   bool is_string_quotation = false;
+
   const bool& is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
   if (is_exact_lookahead && current_length != 0) {
     const auto& lookahead_assertion_id = grammar_->GetRule(init_rule_id_).lookahead_assertion_id;
@@ -353,7 +363,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
     }
   }
-  std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -376,23 +385,14 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       const auto& token = sorted_decoded_vocab[i].second;
-      if (current_length != 0) {
-        bool all_accepted = true;
-        for (char ch : token) {
-          if (isascii(ch) == 0 || ch == '"' || ch == '\\' || ch == '\n' || ch == '\r') {
-            all_accepted = false;
-            break;
-          }
-        }
-        if (all_accepted) {
-          if (static_cast<int32_t>(token.size()) <= current_length) {
-            tmp_accepted_indices_.push_back(i);
-            continue;
-          } else if (is_string_quotation) {
-            tmp_rejected_indices_.push_back(i);
-            tmp_rejected_by_lookahead_indices_.push_back(i);
-            continue;
-          }
+      if (string_slicer_bitset.has_value()) {
+        if ((*(string_slicer_bitset.value()))[i]) {
+          tmp_accepted_indices_.push_back(i);
+          continue;
+        } else if (is_string_quotation && all_is_string_context[i]) {
+          tmp_rejected_indices_.push_back(i);
+          tmp_rejected_by_lookahead_indices_.push_back(i);
+          continue;
         }
       }
       // This optimization is useful for simple self-recursive rules, like string content.
@@ -575,6 +575,7 @@ void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& fi
 }
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_root_rule) {
+  auto start_time = std::chrono::high_resolution_clock::now();
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
@@ -633,6 +634,11 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   bool rejected_filled = GetTokenMaskWithFirstCharacterCheck(
       first_character_mask, is_root_rule, crossing_cache_is_available
   );
+  auto end_time = std::chrono::high_resolution_clock::now();
+  XGRAMMAR_LOG(INFO
+  ) << "GetAdaptiveTokenMask time: "
+    << std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count()
+    << " us for the state: " << initial_state_;
   if (rejected_filled) {
     auto return_value = AdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),

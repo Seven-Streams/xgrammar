@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "support/dynamic_bitset.h"
 #include "support/reflection.h"
 #include "xgrammar/tokenizer_info.h"
 
@@ -37,6 +38,9 @@ class TokenizerInfo::Impl {
     return sorted_decoded_vocab_;
   }
   const std::vector<int32_t>& GetTrieSubtreeNodesRange() const { return trie_subtree_nodes_range_; }
+  const DynamicBitset& GetStringSlicerBitset(int index) const {
+    return string_slicer_bitset_[index];
+  }
 
   std::string DumpMetadata() const;
   picojson::value DumpMetadataValue() const;
@@ -70,6 +74,9 @@ class TokenizerInfo::Impl {
   /*! \brief A pesudo-trie. trie_subtree_nodes_range[i] stores how many nodes there are in the
    * subtree. */
   std::vector<int32_t> trie_subtree_nodes_range_;
+
+  /* \brief The bitset used for string slicing. The max length is at most 15.*/
+  DynamicBitset string_slicer_bitset_[16];
   /*! \brief The stop tokens. When the GrammarMatcher can reach the end of the grammar,
    * stop tokens can be accepted. */
   std::vector<int32_t> stop_token_ids_;
