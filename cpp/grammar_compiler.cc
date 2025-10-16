@@ -14,6 +14,7 @@
 #include <functional>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -257,14 +258,18 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
   return {can_be_applied, speculative_mask};
 }
 
-int GrammarMatcherForTokenMaskCache::GetLengthOfString(int current_state) {
+int GrammarMatcherForTokenMaskCache::GetLengthOfString(
+    int current_state, std::unordered_set<int32_t>& accepted_str_size, int accepted_character
+) {
   // If the initial rule doesn't have a FSM, we can't get the length of string.
   if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
     return 0;
   }
   // [\0-\t]->96, [\v-\f]->96, [\x0e-!]->96, [#-[]->96, []-\x7f]->96
-
   const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+  if (fsm.IsEndState(current_state)) {
+    accepted_str_size.insert(accepted_character);
+  }
   std::unordered_map<int, std::bitset<256>> possible_first_char_masks;
   for (const auto& edge : fsm.GetFsm().GetEdges(current_state)) {
     if (edge.IsCharRange()) {
@@ -291,7 +296,7 @@ int GrammarMatcherForTokenMaskCache::GetLengthOfString(int current_state) {
       if (state == current_state) {
         return 1024;
       } else {
-        return 1 + GetLengthOfString(state);
+        return 1 + GetLengthOfString(state, accepted_str_size, accepted_character + 1);
       }
     }
   }
@@ -334,8 +339,9 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   }
 
   int32_t current_length = 0;
+  std::unordered_set<int32_t> accepted_str_size;
   if (grammar_->per_rule_fsms[init_rule_id_].has_value()) {
-    current_length = GetLengthOfString(initial_state_.element_id);
+    current_length = GetLengthOfString(initial_state_.element_id, accepted_str_size, 0);
   }
 
   bool is_string_repetition = false;
@@ -411,6 +417,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   }
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
+  const auto& ended_by_quote = tokenizer_info_.GetEndedByQuote();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -433,26 +440,35 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
 
       const auto& token = sorted_decoded_vocab[i].second;
-      if (current_length != 0 && string_bitset[i]) {
-        if (is_string_repetition) {
-          if (token.size() >= 17) {
-            tmp_uncertain_indices_.push_back(i);
-          } else {
-            if (token.size() > 1) {
-              tmp_accepted_by_lookahead_indices_.push_back(i);
+      if (current_length != 0) {
+        if (string_bitset[i]) {
+          // Can be accepted directly.
+          if (is_string_repetition) {
+            if (token.size() >= 17) {
+              tmp_uncertain_indices_.push_back(i);
+            } else {
+              if (token.size() > 1) {
+                tmp_accepted_by_lookahead_indices_.push_back(i);
+              }
+              tmp_accepted_indices_.push_back(i);
             }
+            continue;
+          }
+          if (static_cast<int32_t>(token.size()) <= current_length) {
             tmp_accepted_indices_.push_back(i);
+          } else if (is_string_quotation) {
+            tmp_rejected_indices_.push_back(i);
+            tmp_rejected_by_lookahead_indices_.push_back(i);
           }
           continue;
         }
-        if (static_cast<int32_t>(token.size()) <= current_length) {
-          tmp_accepted_indices_.push_back(i);
-        } else if (is_string_quotation) {
-          tmp_rejected_indices_.push_back(i);
-          tmp_rejected_by_lookahead_indices_.push_back(i);
+        if (is_string_quotation && ended_by_quote[i] != -1) {
+          if (accepted_str_size.count(ended_by_quote[i])) {
+            tmp_accepted_indices_.push_back(i);
+            tmp_accepted_by_lookahead_indices_.push_back(i);
+            continue;
+          }
         }
-
-        continue;
       }
       // This optimization is useful for simple self-recursive rules, like string content.
       if (speculative_calculation) {

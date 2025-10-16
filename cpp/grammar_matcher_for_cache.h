@@ -74,7 +74,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       const std::bitset<256>& first_char_mask, bool is_root_rule, bool crossing_cache_is_available
   );
 
-  int GetLengthOfString(int current_state);
+  int GetLengthOfString(
+      int current_state, std::unordered_set<int32_t>& accepted_str_size, int accepted_character
+  );
 
   // The id of the initial rule.
   int32_t init_rule_id_;

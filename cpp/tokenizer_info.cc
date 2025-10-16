@@ -328,12 +328,17 @@ TokenizerInfo::Impl::Impl(
   }
 
   all_string_tokens_bitset_ = DynamicBitset(sorted_decoded_vocab_.size());
+  ended_by_quote_.resize(sorted_decoded_vocab_.size(), -1);
   for (size_t i = 0; i < sorted_decoded_vocab_.size(); ++i) {
     const auto& token = sorted_decoded_vocab_[i].second;
     bool is_string = true;
-    for (char ch : token) {
+    for (int idx = 0; idx < static_cast<int>(token.size()); ++idx) {
+      unsigned char ch = static_cast<unsigned char>(token[idx]);
       if (isascii(ch) == 0 || ch == '\n' || ch == '\r' || ch == '\\' || ch == '"') {
         is_string = false;
+        if (ch == '"') {
+          ended_by_quote_[i] = idx;
+        }
         break;
       }
     }
@@ -498,6 +503,10 @@ const std::vector<std::pair<int32_t, std::string>>& TokenizerInfo::GetSortedDeco
 
 const DynamicBitset& TokenizerInfo::GetAllStringTokensBitset() const {
   return pimpl_->GetAllStringTokensBitset();
+}
+
+const std::vector<int32_t>& TokenizerInfo::GetEndedByQuote() const {
+  return pimpl_->GetEndedByQuote();
 }
 
 const std::vector<int32_t>& TokenizerInfo::GetTrieSubtreeNodesRange() const {
