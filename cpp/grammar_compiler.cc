@@ -390,13 +390,13 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           // Can be accepted directly.
           if (static_cast<int32_t>(token.size()) <= current_length) {
             tmp_accepted_indices_.push_back(i);
+            continue;
           } else if (is_string_quotation) {
             tmp_rejected_indices_.push_back(i);
             tmp_rejected_by_lookahead_indices_.push_back(i);
+            continue;
           }
-          continue;
-        }
-        if (is_string_quotation && ended_by_quote[i] != -1) {
+        } else if (is_string_quotation && ended_by_quote[i] != -1) {
           if (accepted_str_size.count(ended_by_quote[i])) {
             tmp_accepted_indices_.push_back(i);
             tmp_accepted_by_lookahead_indices_.push_back(i);
