@@ -646,7 +646,7 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
       }
 
       const auto& cur_token = sorted_decoded_vocab[cur_token_idx].second;
-      const int32_t kRepetitionThreshold = 15;
+      const int32_t kRepetitionThreshold = 30;
       if (speculative_accept &&
           static_cast<int32_t>(cur_token.size()) < (repeat_time + kRepetitionThreshold)) {
         bool all_accepted = true;

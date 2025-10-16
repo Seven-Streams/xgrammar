@@ -343,7 +343,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const auto& rule = grammar_->GetRule(init_rule_id_);
     if (rule.lookahead_assertion_id != -1 && rule.is_exact_lookahead) {
       const auto& lookahead_expr = grammar_->GetGrammarExpr(rule.lookahead_assertion_id);
-      if (lookahead_expr.size() == 15) {
+      if (lookahead_expr.size() == 30) {
         bool all_passed = true;
         for (const auto& expr_id : lookahead_expr) {
           const auto& expr = grammar_->GetGrammarExpr(expr_id);

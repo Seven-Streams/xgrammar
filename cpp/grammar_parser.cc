@@ -427,7 +427,7 @@ class EBNFParser {
  public:
   /*! \brief The logic of parsing the grammar string. */
   Grammar Parse(const std::vector<EBNFLexer::Token>& tokens, const std::string& root_rule_name);
-  const int kRepetitionThreshold = 15;
+  const int kRepetitionThreshold = 30;
 
  private:
   using Rule = Grammar::Impl::Rule;
