@@ -9,6 +9,8 @@
 #include <sys/types.h>
 
 #include <array>
+#include <cctype>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -18,6 +20,7 @@
 #include <variant>
 #include <vector>
 
+#include "support/dynamic_bitset.h"
 #include "support/encoding.h"
 #include "support/json_serializer.h"
 #include "support/logging.h"
@@ -323,6 +326,21 @@ TokenizerInfo::Impl::Impl(
     trie_subtree_nodes_range_[top_pair.second] = sorted_decoded_vocab_.size();
     prefix_stack.pop();
   }
+
+  all_string_tokens_bitset_ = DynamicBitset(sorted_decoded_vocab_.size());
+  for (size_t i = 0; i < sorted_decoded_vocab_.size(); ++i) {
+    const auto& token = sorted_decoded_vocab_[i].second;
+    bool is_string = true;
+    for (char ch : token) {
+      if (isascii(ch) == 0 || ch == '\n' || ch == '\r' || ch == '\\' || ch == '"') {
+        is_string = false;
+        break;
+      }
+    }
+    if (is_string) {
+      all_string_tokens_bitset_.Set(i);
+    }
+  }
 }
 
 std::string TokenizerInfo::Impl::DumpMetadata() const {
@@ -476,6 +494,10 @@ const std::vector<int32_t>& TokenizerInfo::GetSpecialTokenIds() const {
 }
 const std::vector<std::pair<int32_t, std::string>>& TokenizerInfo::GetSortedDecodedVocab() const {
   return pimpl_->GetSortedDecodedVocab();
+}
+
+const DynamicBitset& TokenizerInfo::GetAllStringTokensBitset() const {
+  return pimpl_->GetAllStringTokensBitset();
 }
 
 const std::vector<int32_t>& TokenizerInfo::GetTrieSubtreeNodesRange() const {

@@ -15,6 +15,7 @@
 #include <variant>
 #include <vector>
 
+#include "../cpp/support/dynamic_bitset.h"
 #include "xgrammar/exception.h"
 
 namespace xgrammar {
@@ -43,6 +44,7 @@ class TokenizerInfo {
   const std::vector<int32_t>& GetStopTokenIds() const;
   const std::vector<int32_t>& GetSpecialTokenIds() const;
   const std::vector<std::pair<int32_t, std::string>>& GetSortedDecodedVocab() const;
+  const DynamicBitset& GetAllStringTokensBitset() const;
   const std::vector<int32_t>& GetTrieSubtreeNodesRange() const;
   std::string DumpMetadata() const;
 

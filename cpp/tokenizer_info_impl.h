@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "support/dynamic_bitset.h"
 #include "support/reflection.h"
 #include "xgrammar/tokenizer_info.h"
 
@@ -36,6 +37,7 @@ class TokenizerInfo::Impl {
   const std::vector<std::pair<int32_t, std::string>>& GetSortedDecodedVocab() const {
     return sorted_decoded_vocab_;
   }
+  const DynamicBitset& GetAllStringTokensBitset() const { return all_string_tokens_bitset_; }
   const std::vector<int32_t>& GetTrieSubtreeNodesRange() const { return trie_subtree_nodes_range_; }
 
   std::string DumpMetadata() const;
@@ -76,6 +78,8 @@ class TokenizerInfo::Impl {
   /*! \brief The special tokens. These tokens are ignored (masked out) during the grammar-guided
    * generation. */
   std::vector<int32_t> special_token_ids_;
+
+  DynamicBitset all_string_tokens_bitset_;
 
   /*!
    * \brief The tokens used to detect stop tokens from the vocabulary.
