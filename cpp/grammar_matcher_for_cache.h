@@ -85,7 +85,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   int GetForceLength(
       int current_state,
       const std::bitset<256>& character_ranges,
-      std::unordered_set<int32_t>& visited_states
+      std::unordered_set<int32_t>& visited_states,
+      std::unordered_set<int32_t>& accepted_str_size,
+      int accepted_character
   );
 
   // The id of the initial rule.

@@ -322,7 +322,9 @@ std::bitset<256> GrammarMatcherForTokenMaskCache::GetCurrentAcceptedCharacters(i
 int GrammarMatcherForTokenMaskCache::GetForceLength(
     int current_state,
     const std::bitset<256>& character_ranges,
-    std::unordered_set<int32_t>& visited_states
+    std::unordered_set<int32_t>& visited_states,
+    std::unordered_set<int32_t>& accepted_str_size,
+    int accepted_character
 ) {
   if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
     return 0;
@@ -330,6 +332,9 @@ int GrammarMatcherForTokenMaskCache::GetForceLength(
   const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
   if (visited_states.count(current_state) > 0) {
     return 1024;
+  }
+  if (fsm.IsEndState(current_state)) {
+    accepted_str_size.insert(accepted_character);
   }
   int target_id = -1;
   visited_states.insert(current_state);
@@ -350,7 +355,10 @@ int GrammarMatcherForTokenMaskCache::GetForceLength(
   if (target_id == -1 || accepted_characters != character_ranges) {
     return 0;
   }
-  return 1 + GetForceLength(target_id, character_ranges, visited_states);
+  return 1 +
+         GetForceLength(
+             target_id, character_ranges, visited_states, accepted_str_size, accepted_character + 1
+         );
 }
 
 bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
@@ -414,11 +422,17 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
   const auto& ended_by_quote = tokenizer_info_.GetEndedByQuote();
   const auto& token_length = tokenizer_info_.GetTokenCharacterNumber();
+  std::unordered_set<int32_t> accepted_str_size_for_repetition;
   std::bitset<256> current_accepted_characters =
       GetCurrentAcceptedCharacters(initial_state_.element_id);
   std::unordered_set<int32_t> visited_states;
-  int max_repetition_length =
-      GetForceLength(initial_state_.element_id, current_accepted_characters, visited_states);
+  int max_repetition_length = GetForceLength(
+      initial_state_.element_id,
+      current_accepted_characters,
+      visited_states,
+      accepted_str_size_for_repetition,
+      0
+  );
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -464,14 +478,25 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (max_repetition_length != 0 &&
           static_cast<int32_t>(token.size()) <= max_repetition_length) {
         bool all_accepted = true;
+        int accepted_character = 0;
+        bool ended_by_quote = false;
         for (char ch : token) {
           if (!current_accepted_characters[static_cast<uint8_t>(ch)]) {
             all_accepted = false;
+            ended_by_quote = ch == '"';
             break;
+          } else {
+            accepted_character += 1;
           }
         }
         if (all_accepted) {
           tmp_accepted_indices_.push_back(i);
+          continue;
+        } else if (is_string_quotation && !ended_by_quote) {
+          if (accepted_str_size_for_repetition.count(accepted_character)) {
+            tmp_rejected_by_lookahead_indices_.push_back(i);
+          }
+          tmp_rejected_indices_.push_back(i);
           continue;
         }
       }
@@ -655,6 +680,7 @@ void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& fi
 }
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_root_rule) {
+  auto start_time = std::chrono::high_resolution_clock::now();
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
@@ -713,6 +739,13 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   bool rejected_filled = GetTokenMaskWithFirstCharacterCheck(
       first_character_mask, is_root_rule, crossing_cache_is_available
   );
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  XGRAMMAR_LOG(INFO
+  ) << "GetAdaptiveTokenMask time: "
+    << std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count()
+    << " us for the state: " << initial_state_.ToString();
+
   if (rejected_filled) {
     auto return_value = AdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),
