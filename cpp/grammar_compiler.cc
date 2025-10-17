@@ -392,8 +392,11 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
             tmp_accepted_indices_.push_back(i);
             continue;
           } else if (is_string_quotation) {
-            tmp_rejected_indices_.push_back(i);
-            tmp_rejected_by_lookahead_indices_.push_back(i);
+            for (int j = i; j < subtree_nodes_range[i]; j++) {
+              tmp_rejected_indices_.push_back(j);
+              tmp_rejected_by_lookahead_indices_.push_back(j);
+            }
+            i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
             continue;
           }
         }
