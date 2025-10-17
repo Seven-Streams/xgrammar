@@ -363,7 +363,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
   const auto& token_length = tokenizer_info_.GetTokenCharacterNumber();
-  const auto& ended_by_other = tokenizer_info_.GetEndedByOther();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -400,12 +399,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
             i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
             continue;
           }
-        } else if (is_string_quotation && ended_by_other[i] != -1) {
-          if (accepted_str_size.count(ended_by_other[i] - 1)) {
-            tmp_rejected_by_lookahead_indices_.push_back(i);
-          }
-          tmp_rejected_indices_.push_back(i);
-          continue;
         }
       }
       // This optimization is useful for simple self-recursive rules, like string content.
