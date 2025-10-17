@@ -516,7 +516,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     // Only check Impossible accepted string lengths.
     const auto& [accepted_tokens, need_to_be_checked_tokens] =
         tokenizer_info_.GetAcceptedTokenAndNeedToBeCheckedToken(current_length);
-    for (const auto& i : accepted_tokens) {
+    for (const auto& i : need_to_be_checked_tokens) {
       // Check if the current token is in the rejected range. i.e. check if the current token
       // is on the subtree of the rejected token.
       if (i < last_rejected_range) {
