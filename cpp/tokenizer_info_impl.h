@@ -39,6 +39,9 @@ class TokenizerInfo::Impl {
     return sorted_decoded_vocab_;
   }
   const DynamicBitset& GetAllStringTokensBitset() const { return all_string_tokens_bitset_; }
+  const DynamicBitset& GetNotPureStringTokensBitset() const {
+    return not_pure_string_tokens_bitset_;
+  }
   const std::vector<int32_t>& GetTrieSubtreeNodesRange() const { return trie_subtree_nodes_range_; }
   const std::vector<int32_t>& GetEndedByQuote() const { return ended_by_quote_; }
   const std::vector<int32_t>& GetTokenCharacterNumber() const { return token_character_number_; }
@@ -88,6 +91,7 @@ class TokenizerInfo::Impl {
   std::vector<int32_t> special_token_ids_;
 
   DynamicBitset all_string_tokens_bitset_;
+  DynamicBitset not_pure_string_tokens_bitset_;
   std::vector<int32_t> ended_by_quote_;
   std::vector<int32_t> token_character_number_;
   std::vector<int32_t> ended_by_other_;

@@ -328,6 +328,7 @@ TokenizerInfo::Impl::Impl(
   }
 
   all_string_tokens_bitset_ = DynamicBitset(sorted_decoded_vocab_.size());
+  not_pure_string_tokens_bitset_ = DynamicBitset(sorted_decoded_vocab_.size());
   ended_by_quote_.resize(sorted_decoded_vocab_.size(), -1);
   ended_by_other_.resize(sorted_decoded_vocab_.size(), -1);
   token_character_number_.resize(sorted_decoded_vocab_.size(), 0);
@@ -341,6 +342,7 @@ TokenizerInfo::Impl::Impl(
         if (ch == '"') {
           ended_by_quote_[i] = token_character_number_[i];
         } else {
+          not_pure_string_tokens_bitset_.Set(i);
           ended_by_other_[i] = token_character_number_[i];
         }
         break;
@@ -533,6 +535,10 @@ const std::vector<std::pair<int32_t, std::string>>& TokenizerInfo::GetSortedDeco
 
 const DynamicBitset& TokenizerInfo::GetAllStringTokensBitset() const {
   return pimpl_->GetAllStringTokensBitset();
+}
+
+const DynamicBitset& TokenizerInfo::GetNotPureStringTokensBitset() const {
+  return pimpl_->GetNotPureStringTokensBitset();
 }
 
 const std::vector<int32_t>& TokenizerInfo::GetEndedByQuote() const {

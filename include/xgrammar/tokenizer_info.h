@@ -50,6 +50,7 @@ class TokenizerInfo {
   const std::vector<int32_t>& GetEndedByOther() const;
   const std::vector<int32_t>& GetTrieSubtreeNodesRange() const;
   const std::vector<int32_t>& GetTokenCharacterNumber() const;
+  const DynamicBitset& GetNotPureStringTokensBitset() const;
   const std::pair<std::vector<int32_t>, std::vector<int32_t>>&
   GetAcceptedTokenAndNeedToBeCheckedToken(int32_t index) const;
   std::string DumpMetadata() const;

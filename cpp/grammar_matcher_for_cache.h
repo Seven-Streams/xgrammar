@@ -75,7 +75,10 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   );
 
   int GetLengthOfString(
-      int current_state, std::unordered_set<int32_t>& accepted_str_size, int accepted_character
+      int current_state,
+      std::unordered_set<int32_t>& accepted_str_size,
+      int accepted_character,
+      bool& is_pure_string
   );
 
   // The id of the initial rule.

@@ -259,7 +259,10 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
 }
 
 int GrammarMatcherForTokenMaskCache::GetLengthOfString(
-    int current_state, std::unordered_set<int32_t>& accepted_str_size, int accepted_character
+    int current_state,
+    std::unordered_set<int32_t>& accepted_str_size,
+    int accepted_character,
+    bool& is_pure_string
 ) {
   // If the initial rule doesn't have a FSM, we can't get the length of string.
   if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
@@ -283,8 +286,10 @@ int GrammarMatcherForTokenMaskCache::GetLengthOfString(
   }
   for (const auto& [state, mask] : possible_first_char_masks) {
     bool accepted = true;
+    int cnt = 0;
     for (int i = 0; i < 128; i++) {
       if (i == '"' || i == '\\' || i == '\n' || i == '\r') {
+        cnt++;
         continue;
       }
       if (!mask[i]) {
@@ -293,10 +298,14 @@ int GrammarMatcherForTokenMaskCache::GetLengthOfString(
       }
     }
     if (accepted) {
+      if (cnt == 4) {
+        is_pure_string = true;
+      }
       if (state == current_state) {
         return 1024;
       } else {
-        return 1 + GetLengthOfString(state, accepted_str_size, accepted_character + 1);
+        return 1 +
+               GetLengthOfString(state, accepted_str_size, accepted_character + 1, is_pure_string);
       }
     }
   }
@@ -340,8 +349,10 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   int32_t current_length = 0;
   std::unordered_set<int32_t> accepted_str_size;
+  bool is_pure_string = false;
   if (grammar_->per_rule_fsms[init_rule_id_].has_value()) {
-    current_length = GetLengthOfString(initial_state_.element_id, accepted_str_size, 0);
+    current_length =
+        GetLengthOfString(initial_state_.element_id, accepted_str_size, 0, is_pure_string);
   }
 
   int prev_matched_size = 0;
@@ -363,6 +374,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
   const auto& token_length = tokenizer_info_.GetTokenCharacterNumber();
+  const auto& ended_by_other = tokenizer_info_.GetEndedByOther();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -526,6 +538,13 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         continue;
       }
       const auto& token = sorted_decoded_vocab[i].second;
+      if (is_pure_string && ended_by_other[i]) {
+        tmp_rejected_indices_.push_back(i);
+        if (!accepted_str_size.count(ended_by_other[i])) {
+          tmp_rejected_by_lookahead_indices_.push_back(i);
+        }
+        continue;
+      }
       if (string_bitset[i] && is_string_quotation) {
         tmp_rejected_indices_.push_back(i);
         tmp_rejected_by_lookahead_indices_.push_back(i);
