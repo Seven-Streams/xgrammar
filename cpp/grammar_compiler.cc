@@ -358,6 +358,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   bool is_string_quotation = false;
+  bool quotation_lookahead_is_single = false;
   const bool& is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
   if (is_exact_lookahead && current_length != 0) {
     const auto& lookahead_assertion_id = grammar_->GetRule(init_rule_id_).lookahead_assertion_id;
@@ -368,12 +369,16 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (first_lookahead_element_expr.type == Grammar::Impl::GrammarExprType::kByteString &&
           first_lookahead_element_expr[0] == '"') {
         is_string_quotation = true;
+        if (lookahead_expr.size() == 1) {
+          quotation_lookahead_is_single = true;
+        }
       }
     }
   }
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
   const auto& ended_by_other = tokenizer_info_.GetEndedByOther();
+  const auto& ended_by_quote = tokenizer_info_.GetEndedByQuote();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -535,6 +540,38 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           tmp_rejected_by_lookahead_indices_.push_back(i);
         }
         continue;
+      }
+
+      if (ended_by_quote[i] != -1 && is_string_quotation) {
+        // ended_by_quote[i] means: the token is interrupted by \", \\. And before the
+        // ended_by_quote[i] th character(1-based), it's still a valid string.
+        // If before the interruption, the string is still too long, we can reject it directly.
+        if (*accepted_str_size.begin() > ended_by_quote[i]) {
+          tmp_rejected_indices_.push_back(i);
+          last_rejected_range = subtree_nodes_range[i];
+          continue;
+        } else {
+          // Can reach end, but cannot pass the lookahead assertion.
+          if (accepted_str_size.count(ended_by_quote[i]) == 0) {
+            tmp_rejected_indices_.push_back(i);
+            tmp_rejected_by_lookahead_indices_.push_back(i);
+            continue;
+          }
+
+          // Can reach end, and the quotation is the last element.
+          auto qutation_index = token.find('"');
+          if (qutation_index == static_cast<size_t>(ended_by_quote[i] - 1)) {
+            tmp_accepted_indices_.push_back(i);
+            tmp_accepted_by_lookahead_indices_.push_back(i);
+            continue;
+          }
+
+          // The left part is uncertain.
+          if (quotation_lookahead_is_single) {
+            tmp_uncertain_indices_.push_back(i);
+            continue;
+          }
+        }
       }
 
       if (string_bitset[i] && is_string_quotation) {
