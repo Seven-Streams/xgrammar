@@ -425,13 +425,15 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   std::bitset<256> current_accepted_characters =
       GetCurrentAcceptedCharacters(initial_state_.element_id);
   std::unordered_set<int32_t> visited_states;
-  int max_repetition_length = GetForceLength(
-      initial_state_.element_id,
-      current_accepted_characters,
-      visited_states,
-      accepted_str_size_for_repetition,
-      0
-  );
+  int max_repetition_length = current_accepted_characters.count() > 40
+                                  ? GetForceLength(
+                                        initial_state_.element_id,
+                                        current_accepted_characters,
+                                        visited_states,
+                                        accepted_str_size_for_repetition,
+                                        0
+                                    )
+                                  : 0;
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
