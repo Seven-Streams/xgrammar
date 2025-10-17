@@ -40,6 +40,7 @@ class TokenizerInfo::Impl {
   const DynamicBitset& GetAllStringTokensBitset() const { return all_string_tokens_bitset_; }
   const std::vector<int32_t>& GetTrieSubtreeNodesRange() const { return trie_subtree_nodes_range_; }
   const std::vector<int32_t>& GetEndedByQuote() const { return ended_by_quote_; }
+  const std::vector<int32_t>& GetTokenCharacterNumber() const { return token_character_number_; }
 
   std::string DumpMetadata() const;
   picojson::value DumpMetadataValue() const;
@@ -82,6 +83,7 @@ class TokenizerInfo::Impl {
 
   DynamicBitset all_string_tokens_bitset_;
   std::vector<int32_t> ended_by_quote_;
+  std::vector<int32_t> token_character_number_;
 
   /*!
    * \brief The tokens used to detect stop tokens from the vocabulary.

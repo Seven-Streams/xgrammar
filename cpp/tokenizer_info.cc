@@ -329,18 +329,35 @@ TokenizerInfo::Impl::Impl(
 
   all_string_tokens_bitset_ = DynamicBitset(sorted_decoded_vocab_.size());
   ended_by_quote_.resize(sorted_decoded_vocab_.size(), -1);
+  token_character_number_.resize(sorted_decoded_vocab_.size(), 0);
   for (size_t i = 0; i < sorted_decoded_vocab_.size(); ++i) {
     const auto& token = sorted_decoded_vocab_[i].second;
     bool is_string = true;
     for (int idx = 0; idx < static_cast<int>(token.size()); ++idx) {
       unsigned char ch = static_cast<unsigned char>(token[idx]);
-      if (isascii(ch) == 0 || ch == '\n' || ch == '\r' || ch == '\\' || ch == '"') {
+      if (ch == '\n' || ch == '\r' || ch == '\\' || ch == '"') {
         is_string = false;
         if (ch == '"') {
-          ended_by_quote_[i] = idx;
+          ended_by_quote_[i] = token_character_number_[i];
         }
         break;
       }
+      if (isascii(ch) == 0) {
+        auto [accepted, length, _] = HandleUTF8FirstByte(ch);
+        if (!accepted) {
+          is_string = false;
+          break;
+        }
+        for (int j = 1; j < length && idx + j < static_cast<int>(token.size()); j++) {
+          ch = static_cast<unsigned char>(token[idx + j]);
+          if ((ch & 0xC0) != 0x80) {
+            is_string = false;
+            break;
+          }
+        }
+        idx += length - 1;
+      }
+      token_character_number_[i] += 1;
     }
     if (is_string) {
       all_string_tokens_bitset_.Set(i);
@@ -511,6 +528,10 @@ const std::vector<int32_t>& TokenizerInfo::GetEndedByQuote() const {
 
 const std::vector<int32_t>& TokenizerInfo::GetTrieSubtreeNodesRange() const {
   return pimpl_->GetTrieSubtreeNodesRange();
+}
+
+const std::vector<int32_t>& TokenizerInfo::GetTokenCharacterNumber() const {
+  return pimpl_->GetTokenCharacterNumber();
 }
 
 std::string TokenizerInfo::DumpMetadata() const { return pimpl_->DumpMetadata(); }

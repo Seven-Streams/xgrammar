@@ -363,6 +363,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
   const auto& ended_by_quote = tokenizer_info_.GetEndedByQuote();
+  const auto& token_length = tokenizer_info_.GetTokenCharacterNumber();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -388,7 +389,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       if (current_length != 0) {
         if (string_bitset[i]) {
           // Can be accepted directly.
-          if (static_cast<int32_t>(token.size()) <= current_length) {
+          if (token_length[i] <= current_length) {
             tmp_accepted_indices_.push_back(i);
             continue;
           } else if (is_string_quotation) {
