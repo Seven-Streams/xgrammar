@@ -365,14 +365,14 @@ TokenizerInfo::Impl::Impl(
     if (is_string) {
       all_string_tokens_bitset_.Set(i);
       for (int j = 0; j <= token_character_number_[i] && j < 16; j++) {
-        accepted_token_and_need_to_be_checked_token_[i].first.push_back(j);
+        accepted_token_and_need_to_be_checked_token_[j].first.push_back(i);
       }
       for (int j = token_character_number_[i] + 1; j < 16; j++) {
-        accepted_token_and_need_to_be_checked_token_[i].second.push_back(j);
+        accepted_token_and_need_to_be_checked_token_[j].second.push_back(i);
       }
     } else {
       for (int j = 0; j < 16; j++) {
-        accepted_token_and_need_to_be_checked_token_[i].second.push_back(j);
+        accepted_token_and_need_to_be_checked_token_[j].second.push_back(i);
       }
     }
   }
