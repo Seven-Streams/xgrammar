@@ -303,6 +303,56 @@ int GrammarMatcherForTokenMaskCache::GetLengthOfString(
   return 0;
 }
 
+std::bitset<256> GrammarMatcherForTokenMaskCache::GetCurrentAcceptedCharacters(int current_state) {
+  std::bitset<256> accepted_characters;
+  if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
+    return accepted_characters;
+  }
+  const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+  for (const auto& edge : fsm.GetFsm().GetEdges(current_state)) {
+    if (edge.IsCharRange()) {
+      for (int ch = edge.min; ch <= edge.max; ++ch) {
+        accepted_characters.set(ch);
+      }
+    }
+  }
+  return accepted_characters;
+}
+
+int GrammarMatcherForTokenMaskCache::GetForceLength(
+    int current_state,
+    const std::bitset<256>& character_ranges,
+    std::unordered_set<int32_t>& visited_states
+) {
+  if (!grammar_->per_rule_fsms[init_rule_id_].has_value()) {
+    return 0;
+  }
+  const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+  if (visited_states.count(current_state) > 0) {
+    return 1024;
+  }
+  int target_id = -1;
+  visited_states.insert(current_state);
+  std::bitset<256> accepted_characters;
+  for (const auto& edge : fsm.GetFsm().GetEdges(current_state)) {
+    if (!edge.IsCharRange()) {
+      return 0;
+    }
+    for (int ch = edge.min; ch <= edge.max; ++ch) {
+      accepted_characters.set(ch);
+    }
+    if (target_id == -1) {
+      target_id = edge.target;
+    } else if (target_id != edge.target) {
+      return 0;
+    }
+  }
+  if (target_id == -1 || accepted_characters != character_ranges) {
+    return 0;
+  }
+  return 1 + GetForceLength(target_id, character_ranges, visited_states);
+}
+
 bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const std::bitset<256>& first_char_mask, bool is_root_rule, bool crossing_cache_is_available
 ) {
@@ -364,6 +414,11 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
   const auto& ended_by_quote = tokenizer_info_.GetEndedByQuote();
   const auto& token_length = tokenizer_info_.GetTokenCharacterNumber();
+  std::bitset<256> current_accepted_characters =
+      GetCurrentAcceptedCharacters(initial_state_.element_id);
+  std::unordered_set<int32_t> visited_states;
+  int max_repetition_length =
+      GetForceLength(initial_state_.element_id, current_accepted_characters, visited_states);
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -405,6 +460,22 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           }
         }
       }
+
+      if (max_repetition_length != 0 &&
+          static_cast<int32_t>(token.size()) <= max_repetition_length) {
+        bool all_accepted = true;
+        for (char ch : token) {
+          if (!current_accepted_characters[static_cast<uint8_t>(ch)]) {
+            all_accepted = false;
+            break;
+          }
+        }
+        if (all_accepted) {
+          tmp_accepted_indices_.push_back(i);
+          continue;
+        }
+      }
+
       // This optimization is useful for simple self-recursive rules, like string content.
       if (speculative_calculation) {
         // Optimization for tag dispatch rules.

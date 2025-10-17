@@ -8,6 +8,8 @@
 #define XGRAMMAR_GRAMMAR_MATCHER_FOR_CACHE_H_
 
 #include <bitset>
+#include <cstdint>
+#include <unordered_set>
 
 #include "compiled_grammar_impl.h"
 #include "earley_parser.h"
@@ -76,6 +78,14 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 
   int GetLengthOfString(
       int current_state, std::unordered_set<int32_t>& accepted_str_size, int accepted_character
+  );
+
+  std::bitset<256> GetCurrentAcceptedCharacters(int current_state);
+
+  int GetForceLength(
+      int current_state,
+      const std::bitset<256>& character_ranges,
+      std::unordered_set<int32_t>& visited_states
   );
 
   // The id of the initial rule.
