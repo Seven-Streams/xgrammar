@@ -374,6 +374,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
   const auto& ended_by_other = tokenizer_info_.GetEndedByOther();
+  const auto& ended_by_quote = tokenizer_info_.GetEndedByQuote();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
       Grammar::Impl::GrammarExprType::kTagDispatch;
@@ -536,6 +537,18 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         }
         continue;
       }
+
+      if (ended_by_quote[i] != -1 && is_string_quotation) {
+        // ended_by_quote[i] means: the token is interrupted by \", \\. And before the
+        // ended_by_quote[i] th character(1-based), it's still a valid string.
+        // If before the interruption, the string is still too long, we can reject it directly.
+        if (*accepted_str_size.begin() > ended_by_quote[i]) {
+          tmp_rejected_indices_.push_back(i);
+          last_rejected_range = subtree_nodes_range[i];
+          continue;
+        }
+      }
+
       if (string_bitset[i] && is_string_quotation) {
         // The token is too long string that has been accepted.
         tmp_rejected_indices_.push_back(i);
