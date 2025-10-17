@@ -8,6 +8,7 @@
 #define XGRAMMAR_GRAMMAR_MATCHER_FOR_CACHE_H_
 
 #include <bitset>
+#include <set>
 
 #include "compiled_grammar_impl.h"
 #include "earley_parser.h"
@@ -76,7 +77,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 
   int GetLengthOfString(
       int current_state,
-      std::unordered_set<int32_t>& accepted_str_size,
+      std::set<int32_t>& accepted_str_size,
       int accepted_character,
       bool& is_pure_string
   );

@@ -260,7 +260,7 @@ std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativ
 
 int GrammarMatcherForTokenMaskCache::GetLengthOfString(
     int current_state,
-    std::unordered_set<int32_t>& accepted_str_size,
+    std::set<int32_t>& accepted_str_size,
     int accepted_character,
     bool& is_pure_string
 ) {
@@ -348,7 +348,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   }
 
   int32_t current_length = 0;
-  std::unordered_set<int32_t> accepted_str_size;
+  std::set<int32_t> accepted_str_size;
   bool is_pure_string = false;
   if (grammar_->per_rule_fsms[init_rule_id_].has_value()) {
     current_length =
@@ -540,7 +540,9 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       const auto& token = sorted_decoded_vocab[i].second;
       if (is_pure_string && ended_by_other[i]) {
         tmp_rejected_indices_.push_back(i);
-        if (!accepted_str_size.count(ended_by_other[i])) {
+        if (std::upper_bound(
+                accepted_str_size.begin(), accepted_str_size.end(), ended_by_other[i]
+            ) != accepted_str_size.begin()) {
           tmp_rejected_by_lookahead_indices_.push_back(i);
         }
         continue;
