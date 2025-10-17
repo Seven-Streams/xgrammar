@@ -373,7 +373,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   }
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
-  const auto& token_length = tokenizer_info_.GetTokenCharacterNumber();
   const auto& ended_by_other = tokenizer_info_.GetEndedByOther();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
@@ -397,22 +396,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           continue;
         }
         const auto& token = sorted_decoded_vocab[i].second;
-        if (current_length != 0) {
-          if (string_bitset[i]) {
-            // Can be accepted directly.
-            if (token_length[i] <= current_length) {
-              tmp_accepted_indices_.push_back(i);
-              continue;
-            } else if (is_string_quotation) {
-              for (int j = i; j < subtree_nodes_range[i]; j++) {
-                tmp_rejected_indices_.push_back(j);
-                tmp_rejected_by_lookahead_indices_.push_back(j);
-              }
-              i = subtree_nodes_range[i] - 1;  // Skip the subtree nodes.
-              continue;
-            }
-          }
-        }
         // This optimization is useful for simple self-recursive rules, like string content.
         if (speculative_calculation) {
           // Optimization for tag dispatch rules.
@@ -540,9 +523,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       const auto& token = sorted_decoded_vocab[i].second;
       if (is_pure_string && ended_by_other[i]) {
         tmp_rejected_indices_.push_back(i);
-        if (std::upper_bound(
-                accepted_str_size.begin(), accepted_str_size.end(), ended_by_other[i]
-            ) != accepted_str_size.begin()) {
+        if (*accepted_str_size.begin() <= ended_by_other[i]) {
           tmp_rejected_by_lookahead_indices_.push_back(i);
         }
         continue;
