@@ -46,6 +46,7 @@ class TokenizerInfo {
   const std::vector<std::pair<int32_t, std::string>>& GetSortedDecodedVocab() const;
   const DynamicBitset& GetAllStringTokensBitset() const;
   const std::vector<int32_t>& GetEndedByQuote() const;
+  const std::vector<int32_t>& GetEndedByOther() const;
   const std::vector<int32_t>& GetTrieSubtreeNodesRange() const;
   const std::vector<int32_t>& GetTokenCharacterNumber() const;
   std::string DumpMetadata() const;
