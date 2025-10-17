@@ -3,6 +3,7 @@
 
 #include <picojson.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <unordered_set>
@@ -42,6 +43,10 @@ class TokenizerInfo::Impl {
   const std::vector<int32_t>& GetEndedByQuote() const { return ended_by_quote_; }
   const std::vector<int32_t>& GetTokenCharacterNumber() const { return token_character_number_; }
   const std::vector<int32_t>& GetEndedByOther() const { return ended_by_other_; }
+  const std::pair<std::vector<int32_t>, std::vector<int32_t>>&
+  GetAcceptedTokenAndNeedToBeCheckedToken(int32_t index) const {
+    return accepted_token_and_need_to_be_checked_token_[std::min(index, 15)];
+  }
 
   std::string DumpMetadata() const;
   picojson::value DumpMetadataValue() const;
@@ -86,6 +91,8 @@ class TokenizerInfo::Impl {
   std::vector<int32_t> ended_by_quote_;
   std::vector<int32_t> token_character_number_;
   std::vector<int32_t> ended_by_other_;
+  std::pair<std::vector<int32_t>, std::vector<int32_t>>
+      accepted_token_and_need_to_be_checked_token_[16];
 
   /*!
    * \brief The tokens used to detect stop tokens from the vocabulary.

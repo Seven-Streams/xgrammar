@@ -364,6 +364,16 @@ TokenizerInfo::Impl::Impl(
     }
     if (is_string) {
       all_string_tokens_bitset_.Set(i);
+      for (int j = 0; j <= token_character_number_[i] && j < 16; j++) {
+        accepted_token_and_need_to_be_checked_token_[i].first.push_back(j);
+      }
+      for (int j = token_character_number_[i] + 1; j < 16; j++) {
+        accepted_token_and_need_to_be_checked_token_[i].second.push_back(j);
+      }
+    } else {
+      for (int j = 0; j < 16; j++) {
+        accepted_token_and_need_to_be_checked_token_[i].second.push_back(j);
+      }
     }
   }
 }
@@ -539,6 +549,11 @@ const std::vector<int32_t>& TokenizerInfo::GetTrieSubtreeNodesRange() const {
 
 const std::vector<int32_t>& TokenizerInfo::GetTokenCharacterNumber() const {
   return pimpl_->GetTokenCharacterNumber();
+}
+
+const std::pair<std::vector<int32_t>, std::vector<int32_t>>&
+TokenizerInfo::GetAcceptedTokenAndNeedToBeCheckedToken(int32_t index) const {
+  return pimpl_->GetAcceptedTokenAndNeedToBeCheckedToken(index);
 }
 
 std::string TokenizerInfo::DumpMetadata() const { return pimpl_->DumpMetadata(); }
