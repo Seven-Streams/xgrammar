@@ -526,19 +526,11 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         continue;
       }
       const auto& token = sorted_decoded_vocab[i].second;
-      if (current_length != 0) {
-        if (string_bitset[i]) {
-          // Can be accepted directly.
-          if (token_length[i] <= current_length) {
-            tmp_accepted_indices_.push_back(i);
-            continue;
-          } else if (is_string_quotation) {
-            tmp_rejected_indices_.push_back(i);
-            tmp_rejected_by_lookahead_indices_.push_back(i);
-            last_rejected_range = subtree_nodes_range[i];
-            continue;
-          }
-        }
+      if (string_bitset[i] && is_string_quotation) {
+        tmp_rejected_indices_.push_back(i);
+        tmp_rejected_by_lookahead_indices_.push_back(i);
+        last_rejected_range = subtree_nodes_range[i];
+        continue;
       }
       // This optimization is useful for simple self-recursive rules, like string content.
       if (speculative_calculation) {
