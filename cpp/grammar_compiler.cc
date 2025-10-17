@@ -384,6 +384,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   const std::string* prev_token = nullptr;
   if (current_length == 0) {
+    // Not string. Use basic matching.
     for (size_t interval_idx = 0; interval_idx < possible_intervals.size(); ++interval_idx) {
       const auto& interval = possible_intervals[interval_idx];
       for (int i = interval.first; i < interval.second; ++i) {
@@ -508,9 +509,10 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       }
     }
   } else {
-    // Only check Impossible accepted string lengths.
+    // Only check Impossible accepted string lengths, is a string with repetition.
     const auto& [accepted_tokens, need_to_be_checked_tokens] =
         tokenizer_info_.GetAcceptedTokenAndNeedToBeCheckedToken(current_length);
+    // accepted_tokens are accepted by previous check. Only need to check need_to_be_checked_tokens.
     for (const auto& i : need_to_be_checked_tokens) {
       // Check if the current token is in the rejected range. i.e. check if the current token
       // is on the subtree of the rejected token.
@@ -521,14 +523,21 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
         continue;
       }
       const auto& token = sorted_decoded_vocab[i].second;
-      if (is_pure_string && ended_by_other[i]) {
+      if (is_pure_string && ended_by_other[i] != -1 && is_string_quotation) {
+        // is_pure_string means: no \r, \n, \", \\ in the string.
+        // ended_by_other[i] means: the token is interrupted by \r, \n, \\. And before the
+        // ended_by_other[i] th character(1-based), it's still a valid string.
         tmp_rejected_indices_.push_back(i);
+
+        // It means that the string can reach the end before the interruption.
+        // It should be seen as rejected by lookahead assertion.
         if (*accepted_str_size.begin() <= ended_by_other[i]) {
           tmp_rejected_by_lookahead_indices_.push_back(i);
         }
         continue;
       }
       if (string_bitset[i] && is_string_quotation) {
+        // The token is too long string that has been accepted.
         tmp_rejected_indices_.push_back(i);
         tmp_rejected_by_lookahead_indices_.push_back(i);
         last_rejected_range = subtree_nodes_range[i];
