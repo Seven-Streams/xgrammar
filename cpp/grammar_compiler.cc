@@ -512,8 +512,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     // Only check Impossible accepted string lengths, is a string with repetition.
     const auto& [accepted_tokens, need_to_be_checked_tokens] =
         tokenizer_info_.GetAcceptedTokenAndNeedToBeCheckedToken(current_length);
-    XGRAMMAR_LOG(INFO) << initial_state_ << " " << current_length << " " << accepted_tokens.size()
-                       << " " << need_to_be_checked_tokens.size();
     // accepted_tokens are accepted by previous check. Only need to check need_to_be_checked_tokens.
     for (const auto& i : need_to_be_checked_tokens) {
       // Check if the current token is in the rejected range. i.e. check if the current token
@@ -718,7 +716,6 @@ void GrammarMatcherForTokenMaskCache::GetFirstCharacterMask(std::bitset<256>& fi
 }
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_root_rule) {
-  auto time_start = std::chrono::high_resolution_clock::now();
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
@@ -777,11 +774,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   bool rejected_filled = GetTokenMaskWithFirstCharacterCheck(
       first_character_mask, is_root_rule, crossing_cache_is_available
   );
-  auto time_end = std::chrono::high_resolution_clock::now();
-  XGRAMMAR_LOG(INFO
-  ) << "GetAdaptiveTokenMask time: "
-    << std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start).count()
-    << " us for the state: " << initial_state_.ToString();
   if (rejected_filled) {
     auto return_value = AdaptiveTokenMask(
         tokenizer_info_.GetVocabSize(),
