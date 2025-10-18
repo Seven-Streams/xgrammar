@@ -358,6 +358,7 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int prev_matched_size = 0;
   int last_rejected_range = 0;
   bool is_string_quotation = false;
+  bool is_string_repetition = false;
   const bool& is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
   if (is_exact_lookahead && current_length != 0) {
     const auto& lookahead_assertion_id = grammar_->GetRule(init_rule_id_).lookahead_assertion_id;
@@ -369,10 +370,61 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
           first_lookahead_element_expr[0] == '"') {
         is_string_quotation = true;
       }
+      if (lookahead_expr.size() == 15) {
+        bool all_str_element = true;
+        for (int i = 0; i < lookahead_expr.size(); i++) {
+          const auto& element = grammar_->GetGrammarExpr(lookahead_expr[i]);
+          if (element.type != Grammar::Impl::GrammarExprType::kCharacterClass) {
+            all_str_element = false;
+            break;
+          }
+          if (!element[0]) {
+            all_str_element = false;
+            break;
+          }
+          int repetition_flag = 0;
+          for (int j = 1; j < element.size(); j += 2) {
+            if (element[j] != element[j + 1]) {
+              all_str_element = false;
+              break;
+            }
+            switch (element[j]) {
+              case '"': {
+                repetition_flag |= 1;
+                break;
+              }
+              case '\\': {
+                repetition_flag |= 2;
+                break;
+              }
+              case '\n': {
+                repetition_flag |= 4;
+                break;
+              }
+              case '\r': {
+                repetition_flag |= 8;
+                break;
+              }
+              default: {
+                all_str_element = false;
+                break;
+              }
+            }
+          }
+          if (repetition_flag != 15 || !all_str_element) {
+            all_str_element = false;
+            break;
+          }
+        }
+        if (all_str_element) {
+          is_string_repetition = true;
+        }
+      }
     }
   }
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
   const auto& string_bitset = tokenizer_info_.GetAllStringTokensBitset();
+  const auto& token_character_number = tokenizer_info_.GetTokenCharacterNumber();
   const auto& ended_by_other = tokenizer_info_.GetEndedByOther();
   const bool is_tag_dispatch_rule =
       grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
@@ -513,137 +565,265 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
     const auto& [accepted_tokens, need_to_be_checked_tokens] =
         tokenizer_info_.GetAcceptedTokenAndNeedToBeCheckedToken(current_length);
     // accepted_tokens are accepted by previous check. Only need to check need_to_be_checked_tokens.
-    for (const auto& i : need_to_be_checked_tokens) {
-      // Check if the current token is in the rejected range. i.e. check if the current token
-      // is on the subtree of the rejected token.
-      if (i < last_rejected_range) {
-        if (fill_reject_indices) {
-          tmp_rejected_indices_.push_back(i);
+    if (is_string_repetition) {
+      for (const auto& i : need_to_be_checked_tokens) {
+        // Check if the current token is in the rejected range. i.e. check if the current token
+        // is on the subtree of the rejected token.
+        if (i < last_rejected_range) {
+          if (fill_reject_indices) {
+            tmp_rejected_indices_.push_back(i);
+          }
+          continue;
         }
-        continue;
-      }
-      const auto& token = sorted_decoded_vocab[i].second;
-      if (is_pure_string && ended_by_other[i] != -1 && is_string_quotation) {
-        // is_pure_string means: no \r, \n, \", \\ in the string.
-        // ended_by_other[i] means: the token is interrupted by \r, \n, \\. And before the
-        // ended_by_other[i] th character(1-based), it's still a valid string.
-        tmp_rejected_indices_.push_back(i);
+        const auto& token = sorted_decoded_vocab[i].second;
 
-        // It means that the string can reach the end before the interruption.
-        // It should be seen as rejected by lookahead assertion.
-        if (*accepted_str_size.begin() <= ended_by_other[i]) {
-          tmp_rejected_by_lookahead_indices_.push_back(i);
-        }
-        continue;
-      }
-
-      if (string_bitset[i] && is_string_quotation) {
-        // The token is too long string that has been accepted.
-        tmp_rejected_indices_.push_back(i);
-        tmp_rejected_by_lookahead_indices_.push_back(i);
-        last_rejected_range = subtree_nodes_range[i];
-        continue;
-      }
-      // This optimization is useful for simple self-recursive rules, like string content.
-      if (speculative_calculation) {
-        // Optimization for tag dispatch rules.
-        if (definite_accepted_bitset.has_value()) {
-          // If the token is empty, it must be accepted.
-          if (token.empty()) {
-            tmp_accepted_indices_.push_back(i);
+        if (string_bitset[i]) {
+          if (token_character_number[i] > 16) {
+            tmp_uncertain_indices_.push_back(i);
             continue;
           }
-          // If the token doesn't contain tags or stop strings since the second character, and it
-          // will transit to the start state after consuming the first character, it must be
-          // accepted.
-          if (speculative_mask[static_cast<uint8_t>(token[0])] &&
-              (*definite_accepted_bitset.value())[i]) {
-            tmp_accepted_indices_.push_back(i);
+          if (token_character_number[i] > 1) {
+            tmp_accepted_by_lookahead_indices_.push_back(i);
             continue;
           }
-        } else {
-          bool all_accepted = true;
-          for (char ch : token) {
-            // If the first character is not the ascii character or can't be accepted by the
-            // first character mask, we need to check them in the parser.
-            if (isascii(ch) == 0 || !speculative_mask[static_cast<uint8_t>(ch)]) {
-              all_accepted = false;
-              break;
+          tmp_accepted_indices_.push_back(i);
+          continue;
+        }
+
+        // This optimization is useful for simple self-recursive rules, like string content.
+        if (speculative_calculation) {
+          // Optimization for tag dispatch rules.
+          if (definite_accepted_bitset.has_value()) {
+            // If the token is empty, it must be accepted.
+            if (token.empty()) {
+              tmp_accepted_indices_.push_back(i);
+              continue;
+            }
+            // If the token doesn't contain tags or stop strings since the second character, and
+            // it will transit to the start state after consuming the first character, it must be
+            // accepted.
+            if (speculative_mask[static_cast<uint8_t>(token[0])] &&
+                (*definite_accepted_bitset.value())[i]) {
+              tmp_accepted_indices_.push_back(i);
+              continue;
+            }
+          } else {
+            bool all_accepted = true;
+            for (char ch : token) {
+              // If the first character is not the ascii character or can't be accepted by the
+              // first character mask, we need to check them in the parser.
+              if (isascii(ch) == 0 || !speculative_mask[static_cast<uint8_t>(ch)]) {
+                all_accepted = false;
+                break;
+              }
+            }
+            if (all_accepted) {
+              tmp_accepted_indices_.push_back(i);
+              continue;
             }
           }
-          if (all_accepted) {
-            tmp_accepted_indices_.push_back(i);
-            continue;
-          }
         }
-      }
-      // Many tokens may contain the same prefix, so we will avoid unnecessary matching
-      // by finding the longest common prefix with the previous token.
-      bool accepted = true;
-      if (prev_token != nullptr) {
-        int lcp_len =
-            std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
-                .first -
-            token.begin();
-        if (lcp_len > prev_matched_size) {
-          // Case 1. The common prefix is rejected by the matcher in the last token. Reject
-          // directly.
-          accepted = false;
-        } else if (lcp_len < prev_matched_size) {
-          // Case 2. The common prefix is shorter than the previous matched size. Rollback
-          // the non-common part.
-          PopLastStates(prev_matched_size - lcp_len);
-          tmp_can_reach_end_stack_.erase(
-              tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
-              tmp_can_reach_end_stack_.end()
-          );
-          tmp_can_reach_end_prefix_or_stack_.erase(
-              tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
-              tmp_can_reach_end_prefix_or_stack_.end()
-          );
-        }
-        prev_matched_size = std::min(prev_matched_size, lcp_len);
-      }
-
-      prev_token = &token;
-
-      if (accepted) {
-        // Accept the rest chars one by one.
-        for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
-          if (!Advance(token[j])) {
+        // Many tokens may contain the same prefix, so we will avoid unnecessary matching
+        // by finding the longest common prefix with the previous token.
+        bool accepted = true;
+        if (prev_token != nullptr) {
+          int lcp_len =
+              std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
+                  .first -
+              token.begin();
+          if (lcp_len > prev_matched_size) {
+            // Case 1. The common prefix is rejected by the matcher in the last token. Reject
+            // directly.
             accepted = false;
-            break;
+          } else if (lcp_len < prev_matched_size) {
+            // Case 2. The common prefix is shorter than the previous matched size. Rollback
+            // the non-common part.
+            PopLastStates(prev_matched_size - lcp_len);
+            tmp_can_reach_end_stack_.erase(
+                tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
+                tmp_can_reach_end_stack_.end()
+            );
+            tmp_can_reach_end_prefix_or_stack_.erase(
+                tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
+                tmp_can_reach_end_prefix_or_stack_.end()
+            );
           }
-          tmp_can_reach_end_stack_.push_back(IsCompleted());
-          tmp_can_reach_end_prefix_or_stack_.push_back(
-              tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
-          );
-          prev_matched_size = j + 1;
+          prev_matched_size = std::min(prev_matched_size, lcp_len);
         }
-      }
 
-      bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+        prev_token = &token;
 
-      if (accepted) {
-        tmp_accepted_indices_.push_back(i);
-      } else if (can_reach_end && prev_matched_size > 0) {
-        auto [lookahead_accepted, lookahead_completed] =
-            IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
-        if ((!is_root_rule) && lookahead_accepted) {
-          if (lookahead_completed || !is_exact_lookahead) {
-            tmp_uncertain_indices_.push_back(i);
+        if (accepted) {
+          // Accept the rest chars one by one.
+          for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
+            if (!Advance(token[j])) {
+              accepted = false;
+              break;
+            }
+            tmp_can_reach_end_stack_.push_back(IsCompleted());
+            tmp_can_reach_end_prefix_or_stack_.push_back(
+                tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
+            );
+            prev_matched_size = j + 1;
+          }
+        }
+
+        bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+
+        if (accepted) {
+          tmp_accepted_indices_.push_back(i);
+        } else if (can_reach_end && prev_matched_size > 0) {
+          auto [lookahead_accepted, lookahead_completed] =
+              IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
+          if ((!is_root_rule) && lookahead_accepted) {
+            if (lookahead_completed || !is_exact_lookahead) {
+              tmp_uncertain_indices_.push_back(i);
+            } else {
+              tmp_accepted_indices_.push_back(i);
+              tmp_accepted_by_lookahead_indices_.push_back(i);
+            }
           } else {
-            tmp_accepted_indices_.push_back(i);
-            tmp_accepted_by_lookahead_indices_.push_back(i);
+            tmp_rejected_indices_.push_back(i);
+            tmp_rejected_by_lookahead_indices_.push_back(i);
+            last_rejected_range = subtree_nodes_range[i];
           }
         } else {
+          tmp_rejected_indices_.push_back(i);
+          last_rejected_range = subtree_nodes_range[i];
+        }
+      }
+    } else {
+      for (const auto& i : need_to_be_checked_tokens) {
+        // Check if the current token is in the rejected range. i.e. check if the current token
+        // is on the subtree of the rejected token.
+        if (i < last_rejected_range) {
+          if (fill_reject_indices) {
+            tmp_rejected_indices_.push_back(i);
+          }
+          continue;
+        }
+        const auto& token = sorted_decoded_vocab[i].second;
+        if (is_pure_string && ended_by_other[i] != -1 && is_string_quotation) {
+          // is_pure_string means: no \r, \n, \", \\ in the string.
+          // ended_by_other[i] means: the token is interrupted by \r, \n, \\. And before the
+          // ended_by_other[i] th character(1-based), it's still a valid string.
+          tmp_rejected_indices_.push_back(i);
+
+          // It means that the string can reach the end before the interruption.
+          // It should be seen as rejected by lookahead assertion.
+          if (*accepted_str_size.begin() <= ended_by_other[i]) {
+            tmp_rejected_by_lookahead_indices_.push_back(i);
+          }
+          continue;
+        }
+        if (string_bitset[i] && is_string_quotation) {
+          // The token is too long string that has been accepted.
           tmp_rejected_indices_.push_back(i);
           tmp_rejected_by_lookahead_indices_.push_back(i);
           last_rejected_range = subtree_nodes_range[i];
+          continue;
         }
-      } else {
-        tmp_rejected_indices_.push_back(i);
-        last_rejected_range = subtree_nodes_range[i];
+        // This optimization is useful for simple self-recursive rules, like string content.
+        if (speculative_calculation) {
+          // Optimization for tag dispatch rules.
+          if (definite_accepted_bitset.has_value()) {
+            // If the token is empty, it must be accepted.
+            if (token.empty()) {
+              tmp_accepted_indices_.push_back(i);
+              continue;
+            }
+            // If the token doesn't contain tags or stop strings since the second character, and
+            // it will transit to the start state after consuming the first character, it must be
+            // accepted.
+            if (speculative_mask[static_cast<uint8_t>(token[0])] &&
+                (*definite_accepted_bitset.value())[i]) {
+              tmp_accepted_indices_.push_back(i);
+              continue;
+            }
+          } else {
+            bool all_accepted = true;
+            for (char ch : token) {
+              // If the first character is not the ascii character or can't be accepted by the
+              // first character mask, we need to check them in the parser.
+              if (isascii(ch) == 0 || !speculative_mask[static_cast<uint8_t>(ch)]) {
+                all_accepted = false;
+                break;
+              }
+            }
+            if (all_accepted) {
+              tmp_accepted_indices_.push_back(i);
+              continue;
+            }
+          }
+        }
+        // Many tokens may contain the same prefix, so we will avoid unnecessary matching
+        // by finding the longest common prefix with the previous token.
+        bool accepted = true;
+        if (prev_token != nullptr) {
+          int lcp_len =
+              std::mismatch(token.begin(), token.end(), prev_token->begin(), prev_token->end())
+                  .first -
+              token.begin();
+          if (lcp_len > prev_matched_size) {
+            // Case 1. The common prefix is rejected by the matcher in the last token. Reject
+            // directly.
+            accepted = false;
+          } else if (lcp_len < prev_matched_size) {
+            // Case 2. The common prefix is shorter than the previous matched size. Rollback
+            // the non-common part.
+            PopLastStates(prev_matched_size - lcp_len);
+            tmp_can_reach_end_stack_.erase(
+                tmp_can_reach_end_stack_.end() - (prev_matched_size - lcp_len),
+                tmp_can_reach_end_stack_.end()
+            );
+            tmp_can_reach_end_prefix_or_stack_.erase(
+                tmp_can_reach_end_prefix_or_stack_.end() - (prev_matched_size - lcp_len),
+                tmp_can_reach_end_prefix_or_stack_.end()
+            );
+          }
+          prev_matched_size = std::min(prev_matched_size, lcp_len);
+        }
+
+        prev_token = &token;
+
+        if (accepted) {
+          // Accept the rest chars one by one.
+          for (int j = prev_matched_size; j < static_cast<int>(token.size()); ++j) {
+            if (!Advance(token[j])) {
+              accepted = false;
+              break;
+            }
+            tmp_can_reach_end_stack_.push_back(IsCompleted());
+            tmp_can_reach_end_prefix_or_stack_.push_back(
+                tmp_can_reach_end_stack_.back() || tmp_can_reach_end_prefix_or_stack_.back()
+            );
+            prev_matched_size = j + 1;
+          }
+        }
+
+        bool can_reach_end = tmp_can_reach_end_prefix_or_stack_.back();
+
+        if (accepted) {
+          tmp_accepted_indices_.push_back(i);
+        } else if (can_reach_end && prev_matched_size > 0) {
+          auto [lookahead_accepted, lookahead_completed] =
+              IsTokenPassLookaheadAssertion(token, tmp_can_reach_end_stack_);
+          if ((!is_root_rule) && lookahead_accepted) {
+            if (lookahead_completed || !is_exact_lookahead) {
+              tmp_uncertain_indices_.push_back(i);
+            } else {
+              tmp_accepted_indices_.push_back(i);
+              tmp_accepted_by_lookahead_indices_.push_back(i);
+            }
+          } else {
+            tmp_rejected_indices_.push_back(i);
+            tmp_rejected_by_lookahead_indices_.push_back(i);
+            last_rejected_range = subtree_nodes_range[i];
+          }
+        } else {
+          tmp_rejected_indices_.push_back(i);
+          last_rejected_range = subtree_nodes_range[i];
+        }
       }
     }
     IntsetUnion(&tmp_accepted_indices_, accepted_tokens);
@@ -1004,9 +1184,9 @@ void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
   // 2. The original cache is rejected_indices, and accepted_indices is also small.
   // After adapting with lookahead, |accepted_indices| + |accepted_by_lookahead_indices| <
   // |rejected_indices| + |rejected_by_lookahead_indices|, and |accepted_indices| +
-  // |accepted_by_lookahead_indices| < AdaptiveiveTokenMask::USE_BITSET_THRESHOLD. In this case, it
-  // should be kAccepted, but ignored. These two cases are very rare in practice, and the impact is
-  // very limited, so we ignore them for simplicity.
+  // |accepted_by_lookahead_indices| < AdaptiveiveTokenMask::USE_BITSET_THRESHOLD. In this case,
+  // it should be kAccepted, but ignored. These two cases are very rare in practice, and the
+  // impact is very limited, so we ignore them for simplicity.
   cache.uncertain_indices = tmp_uncertain_indices_;
   switch (cache.store_type) {
     case AdaptiveTokenMask::StoreType::kAccepted: {
@@ -1274,8 +1454,8 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
           }
         }
       }
-      // Generate partial adaptive token mask cache for the states with the biggest first character
-      // mask size(kPartialJitThreshold * max_threads).
+      // Generate partial adaptive token mask cache for the states with the biggest first
+      // character mask size(kPartialJitThreshold * max_threads).
       int cnt = 0;
       for (const auto& [first_character_size, state] : first_character_size_to_states) {
         if (cnt >= kPartialJitThreshold * max_threads_) {
