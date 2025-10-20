@@ -1121,6 +1121,9 @@ CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar gramma
   RepetitionNormalizer::Apply(&compiled_grammar_impl->grammar);
   GrammarFSMBuilder::Apply(&compiled_grammar_impl->grammar);
   // GrammarFSMHasher::Apply(&compiled_grammar_impl->grammar);
+  compiled_grammar_impl->grammar->per_rule_fsm_hashes.resize(
+      compiled_grammar_impl->grammar->NumRules(), std::nullopt
+  );
   if (tokenizer_info_.GetVocabSize() == 0) {
     return CompiledGrammar(compiled_grammar_impl);
   }
