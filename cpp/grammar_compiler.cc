@@ -1099,7 +1099,7 @@ class GrammarCompilerNoCache {
   /*! \brief The maximum number of threads to use. */
   const int max_threads_;
   /*! \brief Whether the jit mode is enabled.*/
-  const bool is_jit_;
+  bool is_jit_;
   /*! \brief Mapping from the rule_id to the definite accepted token mask. */
   std::unordered_map<int32_t, DynamicBitset> tag_dispatch_rule_id_to_second_slicing_bitset;
 
@@ -1113,6 +1113,7 @@ class GrammarCompilerNoCache {
 CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar grammar) {
   using GrammarExprType = Grammar::Impl::GrammarExprType;
 
+  is_jit_ = true;
   auto compiled_grammar_impl = std::make_shared<CompiledGrammar::Impl>();
 
   compiled_grammar_impl->grammar = grammar;
