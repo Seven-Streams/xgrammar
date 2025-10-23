@@ -28,7 +28,6 @@ jobs:
           ./emsdk install latest
           ./emsdk activate latest
           source ./emsdk_env.sh
-          export Python_EXECUTABLE=$(which python3)
           cd ..
           cd web
           npm install
