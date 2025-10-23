@@ -126,10 +126,6 @@ EMSCRIPTEN_BINDINGS(xgrammar) {
   register_optional<int>();
   register_optional<std::pair<std::string, std::string>>();
 
-  enum_<xgrammar::JSONFormat>("JSONFormat")
-      .value("kJSON", xgrammar::JSONFormat::kJSON)
-      .value("kXML", xgrammar::JSONFormat::kXML);
-
   // Register std::vector<std::string> for TokenizerInfo.GetDecodedVocab()
   register_vector<std::string>("VectorString");
   function(
