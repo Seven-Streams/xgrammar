@@ -23,15 +23,11 @@ jobs:
           ./emsdk install latest
           ./emsdk activate latest
 
-      - name: Build Web-XGrammar
+      - name: Build Web-XGrammar and run tests
         run: |
           source ./emsdk/emsdk_env.sh
           echo "set(XGRAMMAR_BUILD_PYTHON_BINDINGS OFF)" >> cmake/config.cmake
           cd web
           npm install
           npm run build
-
-      - name: Run Tests
-        run: |
-          cd web
           npm test
