@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
   push:
+  # branches:
+  #   - main
 
 jobs:
   build:
@@ -17,32 +19,21 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip python3-dev cmake ninja-build
+          sudo apt-get install -y python3 python3-pip python3-dev
 
-      - name: Setup Emscripten
+      - name: Build Web-XGrammar
         run: |
           git clone https://github.com/emscripten-core/emsdk.git
           cd emsdk
           ./emsdk install latest
           ./emsdk activate latest
-          echo "source $(pwd)/emsdk_env.sh" >> $GITHUB_ENV
-
-      - name: Build Web-XGrammar
-        run: |
+          source ./emsdk_env.sh
+          export Python_EXECUTABLE=$(which python3)
+          cd ..
           cd web
           npm install
-          mkdir -p build
-          cd build
-          emcmake cmake ../.. \
-            -DBUILD_PYTHON_BINDINGS=OFF \
-            -DXGRAMMAR_BUILD_PYTHON_BINDINGS=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_FLAGS="-O3 -DCOMPILE_WASM_RUNTIME -DXGRAMMAR_LOG_CUSTOMIZE=1"
-          emmake make -j$(nproc)
-          cd ..
-          npx rollup -c
+          npm run build
 
       - name: Run Tests
         run: |
-          cd web
           npm test
