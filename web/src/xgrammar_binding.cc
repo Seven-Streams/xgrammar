@@ -122,11 +122,10 @@ emscripten::val vecIntToView(const std::vector<int>& vec) {
 }
 
 EMSCRIPTEN_BINDINGS(xgrammar) {
-  enum_<xgrammar::JSONFormat>("JSONFormat")
-      .value("kJSON", xgrammar::JSONFormat::kJSON)
-      .value("kXML", xgrammar::JSONFormat::kXML);
-
   // Register std::optional used in Grammar::FromJSONSchema
+  value_array<std::pair<std::string, std::string>>("StringPair")
+      .element(&std::pair<std::string, std::string>::first)
+      .element(&std::pair<std::string, std::string>::second);
   register_optional<int>();
   register_optional<std::pair<std::string, std::string>>();
 
