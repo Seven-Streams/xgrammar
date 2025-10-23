@@ -40,6 +40,8 @@ export class Testings {
         `Argument separators is not supported yet, please leave it as undefined, and the ` +
         `default value (",", ": ") will be used.`
       );
+    } else {
+      separators = [",", ": "];
     }
     await asyncInitBinding();
     // indent being -1 is equivalent to not having a value for the std::optional arg in C++.
