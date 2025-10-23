@@ -9,22 +9,17 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-14, macos-15-intel]
-        python: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
-        exclude:
-          - os: macos-15-intel
-            python: '3.13'
-            # The reason for the exclusion is that pytorch distribution
-            # can't be found by pip on macos-15-intel with python 3.13.
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip python3-dev
 
       - name: Build Web-XGrammar
         run: |
@@ -33,6 +28,7 @@ jobs:
           ./emsdk install latest
           ./emsdk activate latest
           source ./emsdk_env.sh
+          apt
           cd ..
           cd web
           npm install
