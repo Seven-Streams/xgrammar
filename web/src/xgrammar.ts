@@ -168,7 +168,7 @@ export class Grammar {
     // user specifies indent to be undefined, it still becomes 2.
     let optionalIndent: number | undefined = indent == -1 ? undefined : indent;
     return new Grammar(
-      new binding.Grammar.FromJSONSchema(schema, optionalIndent, separators, strictMode, JSONFormat.kJSON));
+      new binding.Grammar.FromJSONSchema(schema, optionalIndent, separators, strictMode, mod.JSONFormat.kJSON));
   }
 
   /**
