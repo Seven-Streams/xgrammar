@@ -27,6 +27,7 @@ jobs:
 
       - name: Build Web-XGrammar
         run: |
+          source ./emsdk/emsdk_env.sh
           cd web
           npm install
           npm run build
