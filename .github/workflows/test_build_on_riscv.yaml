@@ -21,7 +21,7 @@ jobs:
           python-version: '3.13'
 
       - name: Test build on riscv
-      - uses: uraimo/run-on-arch-action@v3
+        uses: uraimo/run-on-arch-action@v3
         with:
           arch: riscv64
           distro: ubuntu24.04
