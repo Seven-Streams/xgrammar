@@ -12,9 +12,8 @@ jobs:
     name: ubuntu-24.04-riscv
     runs-on: ubuntu-latest
     steps:
-
       - name: Checkout
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
