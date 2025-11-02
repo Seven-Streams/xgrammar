@@ -31,8 +31,8 @@ jobs:
           npm install
           npm run build
 
-    # TODO(Linzhang): Tests will fail currently. Need further maintenance.
-    # - name: Run tests
-    #   run: |
-    #     cd web
-    #     npm test
+        # TODO(Linzhang): Tests will fail currently. Need further maintenance.
+      - name: Run tests
+        run: |
+          cd web
+          npm test
