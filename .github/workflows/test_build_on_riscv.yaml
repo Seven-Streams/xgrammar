@@ -21,7 +21,8 @@ jobs:
           arch: riscv64
           distro: ubuntu24.04
           run: |
-            apt install python3
+            apt update
+            apt install python
             echo "set(XGRAMMAR_BUILD_CXX_TESTS ON)" >> cmake/config.cmake
             echo "set(XGRAMMAR_ENABLE_INTERNAL_CHECK ON)" >> cmake/config.cmake
             python -m pip install --upgrade pip
