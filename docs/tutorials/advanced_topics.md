@@ -58,7 +58,7 @@ vocab_size = config.vocab_size
 
 ## Generate Token Masks in a Batch
 
-XGrammar provides a new class [`xgr.BatchGrammarMatcher`](xgrammar.BatchGrammarMatcher) for users to generate token masks in a batch.
+XGrammar provides a new class [`xgr.BatchGrammarMatcher`](xgrammar.BatchGrammarMatcher) for users to generate token masks in a batch in v0.1.26.
 
 ```python
 batch_grammar_matcher = xgr.BatchGrammarMatcher(max_threads=8)
