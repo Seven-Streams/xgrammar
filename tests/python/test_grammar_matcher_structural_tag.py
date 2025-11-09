@@ -346,30 +346,32 @@ def test_pressure_structural_tag():
     model = "meta-llama/Llama-3.1-8B-Instruct"
     tokenizer = AutoTokenizer.from_pretrained(model, use_fast=True, trust_remote_code=True)
     tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer)
-    compiler = xgr.GrammarCompiler(tokenizer_info, max_threads=1)
-    threads = []
     start = "start"
     schema = {"type": "object", "properties": {"arg": {"type": "string"}}}
     end = "end"
 
-    def worker(idx: int):
+    def worker(compiler: xgr.GrammarCompiler, idx: int):
         tag = xgr.StructuralTagItem(begin=start, schema=schema, end=end)
         triggers = [start]
         stag_grammar = xgr.Grammar.from_structural_tag([tag], triggers)
         start_grammar = xgr.Grammar.from_ebnf("root ::= [a-z] root | [a-z]")
-        grammar = start_grammar
-        for _ in range(idx):
-            grammar = grammar.union(grammar, start_grammar)
-        final_grammar = xgr.Grammar.union(grammar, stag_grammar)
-        _ = compiler.compile_grammar(final_grammar)
+        if idx % 2 == 0:
+            _ = compiler.compile_grammar(stag_grammar)
+        else:
+            grammar = xgr.Grammar.union(start_grammar, stag_grammar)
+            _ = compiler.compile_grammar(grammar)
 
-    for i in range(128):
-        t = threading.Thread(target=worker, args=(i,))
-        threads.append(t)
-        t.start()
+    for _ in range(30):
+        compiler = xgr.GrammarCompiler(tokenizer_info, max_threads=1)
+        threads = []
 
-    for t in threads:
-        t.join()
+        for i in range(2):
+            t = threading.Thread(target=worker, args=(compiler, i))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
 
 
 if __name__ == "__main__":
