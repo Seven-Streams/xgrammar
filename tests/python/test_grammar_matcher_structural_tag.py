@@ -352,7 +352,7 @@ def test_pressure_structural_tag():
     schema = {"type": "object", "properties": {"arg": {"type": "string"}}}
     end = "end"
 
-    def worker(compiler: xgr.GrammarCompiler, idx: int):
+    def worker(idx: int):
         tag = xgr.StructuralTagItem(begin=start, schema=schema, end=end)
         triggers = [start]
         stag = xgr.Grammar.from_structural_tag([tag], triggers)
@@ -365,7 +365,7 @@ def test_pressure_structural_tag():
         _ = compiler.compile_grammar(final_grammar)
 
     for i in range(128):
-        t = threading.Thread(target=worker, args=(compiler, i))
+        t = threading.Thread(target=worker, args=(i))
         threads.append(t)
         t.start()
 
