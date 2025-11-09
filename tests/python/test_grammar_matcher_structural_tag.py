@@ -359,7 +359,7 @@ def test_pressure_structural_tag():
         triggers = [start]
         _ = compiler.compile_structural_tag([tag], triggers)
 
-    for i in range(32):
+    for i in range(128):
         t = threading.Thread(target=worker, args=(compiler, i))
         threads.append(t)
         t.start()
