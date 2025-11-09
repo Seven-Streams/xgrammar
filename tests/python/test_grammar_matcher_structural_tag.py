@@ -348,16 +348,21 @@ def test_pressure_structural_tag():
     tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer)
     compiler = xgr.GrammarCompiler(tokenizer_info, max_threads=1)
     threads = []
+    start = "start"
     schema = {"type": "object", "properties": {"arg": {"type": "string"}}}
     end = "end"
 
     def worker(compiler: xgr.GrammarCompiler, idx: int):
-        start = ""
-        for i in range(idx % 8 + 1):
-            start += chr(ord("a") + int(idx / 8))
         tag = xgr.StructuralTagItem(begin=start, schema=schema, end=end)
         triggers = [start]
-        _ = compiler.compile_structural_tag([tag], triggers)
+        stag = xgr.Grammar.from_structural_tag([tag], triggers)
+        start_grammar = xgr.Grammar.from_regex(start)
+        grammars = []
+        for _ in range(idx):
+            grammars.append(start_grammar)
+        grammars.append(stag)
+        final_grammar = xgr.Grammar.union(grammars)
+        _ = compiler.compile_grammar(final_grammar)
 
     for i in range(128):
         t = threading.Thread(target=worker, args=(compiler, i))
