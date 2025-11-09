@@ -355,13 +355,12 @@ def test_pressure_structural_tag():
     def worker(idx: int):
         tag = xgr.StructuralTagItem(begin=start, schema=schema, end=end)
         triggers = [start]
-        stag = xgr.Grammar.from_structural_tag([tag], triggers)
-        start_grammar = xgr.Grammar.from_regex(start)
-        grammars = []
+        stag_grammar = xgr.Grammar.from_structural_tag([tag], triggers)
+        start_grammar = xgr.Grammar.from_ebnf("root ::= [a-z] root | [a-z]")
+        grammar = start_grammar
         for _ in range(idx):
-            grammars.append(start_grammar)
-        grammars.append(stag)
-        final_grammar = xgr.Grammar.union(grammars)
+            grammar = grammar.union(grammar, start_grammar)
+        final_grammar = xgr.Grammar.union(grammar, stag_grammar)
         _ = compiler.compile_grammar(final_grammar)
 
     for i in range(128):
