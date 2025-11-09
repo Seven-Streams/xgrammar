@@ -353,8 +353,8 @@ def test_pressure_structural_tag():
 
     def worker(compiler: xgr.GrammarCompiler, idx: int):
         start = ""
-        for i in range(idx + 1):
-            start += "a"
+        for i in range(idx % 8 + 1):
+            start += chr(ord("a") + int(idx / 8))
         tag = xgr.StructuralTagItem(begin=start, schema=schema, end=end)
         triggers = [start]
         _ = compiler.compile_structural_tag([tag], triggers)
