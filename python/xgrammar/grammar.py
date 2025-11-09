@@ -368,7 +368,7 @@ class Grammar(XGRObject):
 
         Parameters
         ----------
-        grammars : List[Grammar]
+        grammars: Tuple[Grammar, ...]
             The grammars to create the concatenation of.
 
         Returns
@@ -386,7 +386,7 @@ class Grammar(XGRObject):
 
         Parameters
         ----------
-        grammars : List[Grammar]
+        grammars: Tuple[Grammar, ...]
             The grammars to create the union of.
 
         Returns
