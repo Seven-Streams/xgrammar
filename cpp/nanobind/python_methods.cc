@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "../grammar_impl.h"
+#include "../structural_tag.h"
 #include "../support/logging.h"
 #include "../support/utils.h"
 #include "xgrammar/exception.h"

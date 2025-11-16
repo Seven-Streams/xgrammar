@@ -12,8 +12,10 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
+#include "../structural_tag.h"
 #include "xgrammar/tokenizer_info.h"
 
 namespace xgrammar {

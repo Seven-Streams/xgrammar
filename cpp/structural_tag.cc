@@ -7,8 +7,16 @@
 #include <picojson.h>
 #include <xgrammar/exception.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <optional>
+#include <regex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
+#include <variant>
+#include <vector>
 
 #include "grammar_functor.h"
 #include "grammar_impl.h"
@@ -22,6 +30,8 @@ namespace xgrammar {
 
 // Short alias for the error type.
 using ISTError = InvalidStructuralTagError;
+
+std::optional<std::string> FullyTemplatePlaceholder(const std::string& str);
 
 /************** StructuralTag Parser **************/
 
@@ -189,6 +199,10 @@ Result<JSONSchemaFormat, ISTError> StructuralTagParser::ParseJSONSchemaFormat(
   auto json_schema_it = obj.find("json_schema");
   if (json_schema_it == obj.end() ||
       !(json_schema_it->second.is<picojson::object>() || json_schema_it->second.is<bool>())) {
+    if (json_schema_it != obj.end() && json_schema_it->second.is<std::string>() &&
+        FullyTemplatePlaceholder(json_schema_it->second.to_str()).has_value()) {
+      return ResultOk<JSONSchemaFormat>(json_schema_it->second.to_str());
+    }
     return ResultErr<ISTError>(
         "JSON schema format must have a json_schema field with a object or boolean value"
     );
@@ -204,6 +218,10 @@ Result<QwenXmlParameterFormat, ISTError> StructuralTagParser::ParseQwenXmlParame
   auto json_schema_it = obj.find("json_schema");
   if (json_schema_it == obj.end() ||
       !(json_schema_it->second.is<picojson::object>() || json_schema_it->second.is<bool>())) {
+    if (json_schema_it != obj.end() && json_schema_it->second.is<std::string>() &&
+        FullyTemplatePlaceholder(json_schema_it->second.to_str()).has_value()) {
+      return ResultOk<QwenXmlParameterFormat>(json_schema_it->second.to_str());
+    }
     return ResultErr<ISTError>(
         "Qwen XML Parameter format must have a json_schema field with a object or boolean value"
     );
@@ -1057,6 +1075,1131 @@ Result<int, ISTError> StructuralTagGrammarConverter::VisitSub(const TagsWithSepa
   return ResultOk(rule_id);
 }
 
+/************** StructuralTag Template Filler **************/
+
+/*!
+ * \brief Detect all template placeholder names in the given string.
+ * \param str The string to detect.
+ * \return The detected template placeholder name. If no placeholder is found, return std::nullopt.
+ * \details A template placeholder is in the format of {function_name[].arg_name}.
+ */
+Result<std::optional<std::string>, StructuralTagError> DetectTemplatePlaceholderNames(
+    const std::string& str
+) {
+  static const std::regex placeholder_regex(
+      R"(\{([a-zA-Z_][a-zA-Z0-9_]*)\[\]\.([a-zA-Z_][a-zA-Z0-9_]*)\})"
+  );
+
+  std::optional<std::string> placeholder_name_opt = std::nullopt;
+  auto iter = std::sregex_iterator(str.begin(), str.end(), placeholder_regex);
+  for (; iter != std::sregex_iterator(); ++iter) {
+    const auto& match = *iter;
+    std::string function_name = match[1].str();
+    if (placeholder_name_opt.has_value() && placeholder_name_opt.value() != function_name) {
+      return ResultErr(InvalidStructuralTagError(
+          "Multiple different placeholder names found in the same string: '" + str + "'"
+      ));
+    } else {
+      placeholder_name_opt = function_name;
+    }
+  }
+  return ResultOk<std::optional<std::string>>(placeholder_name_opt);
+}
+
+std::optional<std::string> FullyTemplatePlaceholder(const std::string& str) {
+  static const std::regex full_placeholder_regex(
+      R"(^\{([a-zA-Z_][a-zA-Z0-9_]*)\[\]\.([a-zA-Z_][a-zA-Z0-9_]*)\}$)"
+  );
+  std::smatch match;
+  if (std::regex_match(str, match, full_placeholder_regex)) {
+    return match[1].str();
+  } else {
+    return std::nullopt;
+  }
+}
+
+const auto FormatToString = [](const Format& format) -> std::string {
+  return std::visit([&](auto&& arg) -> std::string { return arg.ToString(); }, format);
+};
+
+/*!
+ * \brief A structural tag template filler, used to fill the strcutrual tags with the given values.
+ */
+class StructuralTagTemplateFiller {
+ public:
+  Result<StructuralTag, StructuralTagError> Apply(
+      const StructuralTag& template_structural_tag,
+      const std::unordered_map<
+          std::string,
+          std::vector<std::unordered_map<std::string, std::string>>>& values
+  );
+
+  bool HasUnfilledPlaceholders(const StructuralTag& structural_tag);
+
+  const std::regex placeholder_regex =
+      std::regex(R"(\{([a-zA-Z_][a-zA-Z0-9_]*)\[\]\.([a-zA-Z_][a-zA-Z0-9_]*)\})");
+
+ private:
+  static const int kDefaultExpansionMode = -1;
+  std::unordered_map<std::string, std::vector<std::string>> format_to_placeholder_names_;
+  const std::unordered_map<std::string, std::vector<std::unordered_map<std::string, std::string>>>*
+      values_ = nullptr;
+
+  Result<std::vector<std::string>, StructuralTagError> Visit(const Format& format);
+  Result<std::vector<Format>, StructuralTagError> VisitExpand(
+      const Format& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const ConstStringFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const JSONSchemaFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const QwenXmlParameterFormat& format
+  );
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const AnyTextFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const GrammarFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const RegexFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const SequenceFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const OrFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const TagFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(const TriggeredTagsFormat& format);
+  Result<std::vector<std::string>, StructuralTagError> VisitSub(
+      const TagsWithSeparatorFormat& format
+  );
+
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const ConstStringFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const JSONSchemaFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const QwenXmlParameterFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const AnyTextFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const GrammarFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const RegexFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const SequenceFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const OrFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const TagFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const TriggeredTagsFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+  Result<std::vector<Format>, StructuralTagError> VisitExpandSub(
+      const TagsWithSeparatorFormat& format_template_to_expand,
+      const int index = kDefaultExpansionMode,
+      const std::string& current_placeholder_name = ""
+  );
+
+  Result<std::string, StructuralTagError> ReplacePlaceHolder(
+      const std::string& str, const std::string& placeholder_name, int index
+  );
+};
+
+Result<std::string, StructuralTagError> StructuralTagTemplateFiller::ReplacePlaceHolder(
+    const std::string& str, const std::string& placeholder_name, int index
+) {
+  XGRAMMAR_DCHECK(values_->find(placeholder_name) != values_->end());
+  const auto& placeholder_values_vector = values_->at(placeholder_name);
+  XGRAMMAR_DCHECK(static_cast<size_t>(index) < placeholder_values_vector.size());
+  const auto& placeholder_values = placeholder_values_vector[index];
+  const std::regex placeholder_regex(
+      R"(\{)" + placeholder_name + R"(\[\]\.([a-zA-Z_][a-zA-Z0-9_]*)\})"
+  );
+  std::string result_str = "";
+  int last_match_pos = 0;
+
+  // Replace each placeholder, and add the left part.
+  auto iter = std::sregex_iterator(str.begin(), str.end(), placeholder_regex);
+  for (; iter != std::sregex_iterator(); ++iter) {
+    result_str.append(str.begin() + last_match_pos, str.begin() + iter->position());
+    const auto& arg_name = (*iter)[1];
+    if (placeholder_values.find(arg_name) == placeholder_values.end()) {
+      return ResultErr(InvalidStructuralTagError(
+          "The value " + std::string(arg_name) + " is not defined in the array " + placeholder_name
+      ));
+    }
+    result_str.append(placeholder_values.at(arg_name));
+    last_match_pos = iter->position() + iter->length();
+  }
+
+  // Add the last piece.
+  result_str.append(str.begin() + last_match_pos, str.end());
+  return ResultOk(result_str);
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::Visit(
+    const Format& format
+) {
+  auto result = std::visit(
+      [&](auto&& arg) -> Result<std::vector<std::string>, StructuralTagError> {
+        return VisitSub(arg);
+      },
+      format
+  );
+  if (result.IsErr()) {
+    return result;
+  }
+  auto placeholder_names = std::move(result).Unwrap();
+  auto serialized_format =
+      std::visit([&](auto&& arg) -> std::string { return arg.ToString(); }, format);
+  format_to_placeholder_names_[serialized_format] = placeholder_names;
+  return ResultOk<std::vector<std::string>>(placeholder_names);
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const ConstStringFormat& format
+) {
+  auto result = DetectTemplatePlaceholderNames(format.value);
+  if (result.IsErr()) {
+    return ResultErr(std::move(result).UnwrapErr());
+  }
+  auto placeholder_name_opt = std::move(result).Unwrap();
+  if (placeholder_name_opt.has_value()) {
+    return ResultOk<std::vector<std::string>>({placeholder_name_opt.value()});
+  } else {
+    return ResultOk<std::vector<std::string>>({});
+  }
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const JSONSchemaFormat& format
+) {
+  auto placeholder_name_opt = FullyTemplatePlaceholder(format.json_schema);
+  if (placeholder_name_opt.has_value()) {
+    return ResultOk<std::vector<std::string>>({placeholder_name_opt.value()});
+  } else {
+    return ResultOk<std::vector<std::string>>({});
+  }
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const QwenXmlParameterFormat& format
+) {
+  auto placeholder_name_opt = FullyTemplatePlaceholder(format.xml_schema);
+  if (placeholder_name_opt.has_value()) {
+    return ResultOk<std::vector<std::string>>({placeholder_name_opt.value()});
+  } else {
+    return ResultOk<std::vector<std::string>>({});
+  }
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const AnyTextFormat& format
+) {
+  return ResultOk<std::vector<std::string>>({});
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const GrammarFormat& format
+) {
+  auto placeholder_name_opt = FullyTemplatePlaceholder(format.grammar);
+  if (placeholder_name_opt.has_value()) {
+    return ResultOk<std::vector<std::string>>({placeholder_name_opt.value()});
+  } else {
+    return ResultOk<std::vector<std::string>>({});
+  }
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const RegexFormat& format
+) {
+  auto placeholder_name_opt = FullyTemplatePlaceholder(format.pattern);
+  if (placeholder_name_opt.has_value()) {
+    return ResultOk<std::vector<std::string>>({placeholder_name_opt.value()});
+  } else {
+    return ResultOk<std::vector<std::string>>({});
+  }
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const SequenceFormat& format
+) {
+  std::unordered_map<std::string, int> placeholder_names;
+
+  for (const auto& element : format.elements) {
+    auto result = Visit(element);
+    if (result.IsErr()) {
+      return result;
+    }
+    auto sub_placeholder_names = std::move(result).Unwrap();
+    for (const auto& sub_place_holder_name : sub_placeholder_names) {
+      if (placeholder_names.find(sub_place_holder_name) == placeholder_names.end()) {
+        placeholder_names[sub_place_holder_name] = 1;
+      } else {
+        placeholder_names[sub_place_holder_name]++;
+      }
+    }
+  }
+  if (placeholder_names.size() > 1) {
+    bool multiple_defined = false;
+    std::string multiple_defined_name = "";
+    for (const auto& [placeholder_name, times] : placeholder_names) {
+      if (times > 1) {
+        if (multiple_defined) {
+          return ResultErr(InvalidStructuralTagError(
+              "Mingled template detected: " + multiple_defined_name + " and " + placeholder_name
+          ));
+        } else {
+          multiple_defined = true;
+          multiple_defined_name = placeholder_name;
+        }
+      }
+    }
+  }
+
+  std::vector<std::string> return_value;
+  return_value.reserve(placeholder_names.size());
+  for (const auto& [placeholder_name, _] : placeholder_names) {
+    return_value.push_back(placeholder_name);
+  }
+  return ResultOk<std::vector<std::string>>(return_value);
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const OrFormat& format
+) {
+  std::vector<std::string> placeholder_names;
+  for (const auto& element : format.elements) {
+    auto result = Visit(element);
+    if (result.IsErr()) {
+      return result;
+    }
+    auto sub_placeholder_names = std::move(result).Unwrap();
+    placeholder_names.insert(
+        placeholder_names.end(), sub_placeholder_names.begin(), sub_placeholder_names.end()
+    );
+  }
+  return ResultOk<std::vector<std::string>>(placeholder_names);
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const TagFormat& format
+) {
+  std::unordered_map<std::string, int> placeholder_names;
+
+  auto result = Visit(*format.content);
+  if (result.IsErr()) {
+    return result;
+  }
+  auto sub_placeholder_names = std::move(result).Unwrap();
+  for (const auto& sub_place_holder_name : sub_placeholder_names) {
+    if (placeholder_names.find(sub_place_holder_name) == placeholder_names.end()) {
+      placeholder_names[sub_place_holder_name] = 1;
+    } else {
+      placeholder_names[sub_place_holder_name]++;
+    }
+  }
+
+  auto begin_result = DetectTemplatePlaceholderNames(format.begin);
+  if (begin_result.IsErr()) {
+    return ResultErr(std::move(begin_result).UnwrapErr());
+  }
+  auto begin_placeholder_names = std::move(begin_result).Unwrap();
+  if (begin_placeholder_names.has_value()) {
+    placeholder_names[begin_placeholder_names.value()]++;
+  }
+
+  auto end_result = DetectTemplatePlaceholderNames(format.end);
+  if (end_result.IsErr()) {
+    return ResultErr(std::move(end_result).UnwrapErr());
+  }
+  auto end_placeholder_names = std::move(end_result).Unwrap();
+  if (end_placeholder_names.has_value()) {
+    placeholder_names[end_placeholder_names.value()]++;
+  }
+
+  if (begin_placeholder_names.has_value() && end_placeholder_names.has_value() &&
+      begin_placeholder_names.value() != end_placeholder_names.value()) {
+    return ResultErr(InvalidStructuralTagError(
+        "Multiple different placeholder names found in the tag format: '" +
+        begin_placeholder_names.value() + "' and '" + end_placeholder_names.value() + "'"
+    ));
+  }
+
+  if (placeholder_names.size() > 1) {
+    bool multiple_defined = false;
+    std::string multiple_defined_name = "";
+    for (const auto& [placeholder_name, times] : placeholder_names) {
+      if (times > 1) {
+        if (multiple_defined) {
+          return ResultErr(InvalidStructuralTagError(
+              "Mingled template detected: " + multiple_defined_name + " and " + placeholder_name
+          ));
+        } else {
+          multiple_defined = true;
+          multiple_defined_name = placeholder_name;
+        }
+      }
+    }
+  }
+  std::vector<std::string> return_value;
+  return_value.reserve(placeholder_names.size());
+  for (const auto& [placeholder_name, _] : placeholder_names) {
+    return_value.push_back(placeholder_name);
+  }
+  return ResultOk<std::vector<std::string>>(return_value);
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const TriggeredTagsFormat& format
+) {
+  std::vector<std::string> placeholder_names;
+  for (const auto& tag : format.tags) {
+    auto result = Visit(tag);
+    if (result.IsErr()) {
+      return result;
+    }
+    auto sub_placeholder_names = std::move(result).Unwrap();
+    placeholder_names.insert(
+        placeholder_names.end(), sub_placeholder_names.begin(), sub_placeholder_names.end()
+    );
+  }
+  return ResultOk<std::vector<std::string>>(placeholder_names);
+}
+
+Result<std::vector<std::string>, StructuralTagError> StructuralTagTemplateFiller::VisitSub(
+    const TagsWithSeparatorFormat& format
+) {
+  std::vector<std::string> placeholder_names;
+  for (const auto& tag : format.tags) {
+    auto result = Visit(tag);
+    if (result.IsErr()) {
+      return result;
+    }
+    auto sub_placeholder_names = std::move(result).Unwrap();
+    placeholder_names.insert(
+        placeholder_names.end(), sub_placeholder_names.begin(), sub_placeholder_names.end()
+    );
+  }
+  return ResultOk<std::vector<std::string>>(placeholder_names);
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpand(
+    const Format& format_template_to_expand,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  XGRAMMAR_DCHECK(
+      format_to_placeholder_names_.find(FormatToString(format_template_to_expand)) !=
+      format_to_placeholder_names_.end()
+  );
+  const auto& placeholder_names =
+      format_to_placeholder_names_[FormatToString(format_template_to_expand)];
+  bool is_dummy_placeholder =
+      std::all_of(placeholder_names.begin(), placeholder_names.end(), [&](const std::string& name) {
+        return name != current_placeholder_name;
+      });
+  if (is_dummy_placeholder) {
+    return std::visit(
+        [&](auto&& arg) -> Result<std::vector<Format>, StructuralTagError> {
+          return VisitExpandSub(arg);
+        },
+        format_template_to_expand
+    );
+  } else {
+    return std::visit(
+        [&](auto&& arg) -> Result<std::vector<Format>, StructuralTagError> {
+          return VisitExpandSub(arg, index, current_placeholder_name);
+        },
+        format_template_to_expand
+    );
+  }
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const ConstStringFormat& format_template_to_expand,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  auto serialized_format = format_template_to_expand.ToString();
+  XGRAMMAR_DCHECK(
+      format_to_placeholder_names_.find(serialized_format) != format_to_placeholder_names_.end()
+  ) << "Format not visited before expansion";
+  const auto& placeholder_names = format_to_placeholder_names_[serialized_format];
+  // If there are no placeholders, return the original format as the only expansion.
+  if (placeholder_names.empty()) {
+    return ResultOk<std::vector<Format>>({format_template_to_expand});
+  }
+  XGRAMMAR_DCHECK(placeholder_names.size() == 1)
+      << "Multiple different placeholders in ConstStringFormat is not supported";
+
+  const auto& placeholder_name = placeholder_names[0];
+  std::vector<Format> expansions;
+  if (index == kDefaultExpansionMode) {
+    const auto& value = values_->at(placeholder_name);
+    expansions.reserve(value.size());
+    for (int i = 0; i < static_cast<int>(value.size()); ++i) {
+      auto result = ReplacePlaceHolder(format_template_to_expand.value, placeholder_name, i);
+      if (result.IsErr()) {
+        return ResultErr(std::move(result).UnwrapErr());
+      }
+      expansions.push_back(ConstStringFormat(std::move(result).Unwrap()));
+    }
+  } else {
+    XGRAMMAR_DCHECK(current_placeholder_name == placeholder_name)
+        << "Index provided for a different placeholder name";
+    auto result = ReplacePlaceHolder(format_template_to_expand.value, placeholder_name, index);
+    if (result.IsErr()) {
+      return ResultErr(std::move(result).UnwrapErr());
+    }
+    expansions.push_back(ConstStringFormat(std::move(result).Unwrap()));
+  }
+  return ResultOk<std::vector<Format>>(expansions);
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const JSONSchemaFormat& format_template,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  auto serialized_format = format_template.ToString();
+  XGRAMMAR_DCHECK(
+      format_to_placeholder_names_.find(serialized_format) != format_to_placeholder_names_.end()
+  ) << "Format not visited before expansion";
+  const auto& placeholder_names = format_to_placeholder_names_[serialized_format];
+  // If there are no placeholders, return the original format as the only expansion.
+  if (placeholder_names.empty()) {
+    return ResultOk<std::vector<Format>>({format_template});
+  }
+  XGRAMMAR_DCHECK(placeholder_names.size() == 1)
+      << "Multiple different placeholders in JSONSchemaFormat is not supported";
+  const auto& placeholder_name = placeholder_names[0];
+  std::vector<Format> expansions;
+  if (index == kDefaultExpansionMode) {
+    const auto& value = values_->at(placeholder_name);
+    expansions.reserve(value.size());
+    for (int i = 0; i < static_cast<int>(value.size()); ++i) {
+      auto result = ReplacePlaceHolder(format_template.json_schema, placeholder_name, i);
+      if (result.IsErr()) {
+        return ResultErr(std::move(result).UnwrapErr());
+      }
+      expansions.push_back(JSONSchemaFormat(std::move(result).Unwrap()));
+    }
+  } else {
+    XGRAMMAR_DCHECK(current_placeholder_name == placeholder_name)
+        << "Index provided for a different placeholder name";
+    auto result = ReplacePlaceHolder(format_template.json_schema, placeholder_name, index);
+    if (result.IsErr()) {
+      return ResultErr(std::move(result).UnwrapErr());
+    }
+    expansions.push_back(JSONSchemaFormat(std::move(result).Unwrap()));
+  }
+  return ResultOk<std::vector<Format>>(expansions);
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const QwenXmlParameterFormat& format_template,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  auto serialized_format = format_template.ToString();
+  XGRAMMAR_DCHECK(
+      format_to_placeholder_names_.find(serialized_format) != format_to_placeholder_names_.end()
+  ) << "Format not visited before expansion";
+  const auto& placeholder_names = format_to_placeholder_names_[serialized_format];
+  // If there are no placeholders, return the original format as the only expansion.
+  if (placeholder_names.empty()) {
+    return ResultOk<std::vector<Format>>({format_template});
+  }
+  XGRAMMAR_DCHECK(placeholder_names.size() == 1)
+      << "Multiple different placeholders in QwenXmlParameterFormat is not supported";
+
+  const auto& placeholder_name = placeholder_names[0];
+  std::vector<Format> expansions;
+  if (index == kDefaultExpansionMode) {
+    const auto& value = values_->at(placeholder_name);
+    expansions.reserve(value.size());
+    for (int i = 0; i < static_cast<int>(value.size()); ++i) {
+      auto result = ReplacePlaceHolder(format_template.xml_schema, placeholder_name, i);
+      if (result.IsErr()) {
+        return ResultErr(std::move(result).UnwrapErr());
+      }
+      expansions.push_back(QwenXmlParameterFormat(std::move(result).Unwrap()));
+    }
+  } else {
+    XGRAMMAR_DCHECK(current_placeholder_name == placeholder_name)
+        << "Index provided for a different placeholder name";
+    auto result = ReplacePlaceHolder(format_template.xml_schema, placeholder_name, index);
+    if (result.IsErr()) {
+      return ResultErr(std::move(result).UnwrapErr());
+    }
+    expansions.push_back(QwenXmlParameterFormat(std::move(result).Unwrap()));
+  }
+  return ResultOk<std::vector<Format>>(expansions);
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const AnyTextFormat& format_template,
+    const int /*index*/,
+    const std::string& /*current_placeholder_name*/
+) {
+  return ResultOk<std::vector<Format>>({format_template});
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const GrammarFormat& format_template,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  auto serialized_format = format_template.ToString();
+  XGRAMMAR_DCHECK(
+      format_to_placeholder_names_.find(serialized_format) != format_to_placeholder_names_.end()
+  ) << "Format not visited before expansion";
+  const auto& placeholder_names = format_to_placeholder_names_[serialized_format];
+  // If there are no placeholders, return the original format as the only expansion.
+  if (placeholder_names.empty()) {
+    return ResultOk<std::vector<Format>>({format_template});
+  }
+  XGRAMMAR_DCHECK(placeholder_names.size() == 1)
+      << "Multiple different placeholders in GrammarFormat is not supported";
+
+  const auto& placeholder_name = placeholder_names[0];
+  std::vector<Format> expansions;
+  if (index == kDefaultExpansionMode) {
+    const auto& value = values_->at(placeholder_name);
+    expansions.reserve(value.size());
+    for (int i = 0; i < static_cast<int>(value.size()); ++i) {
+      auto result = ReplacePlaceHolder(format_template.grammar, placeholder_name, i);
+      if (result.IsErr()) {
+        return ResultErr(std::move(result).UnwrapErr());
+      }
+      expansions.push_back(GrammarFormat(std::move(result).Unwrap()));
+    }
+  } else {
+    XGRAMMAR_DCHECK(current_placeholder_name == placeholder_name)
+        << "Index provided for a different placeholder name";
+    auto result = ReplacePlaceHolder(format_template.grammar, placeholder_name, index);
+    if (result.IsErr()) {
+      return ResultErr(std::move(result).UnwrapErr());
+    }
+    expansions.push_back(GrammarFormat(std::move(result).Unwrap()));
+  }
+  return ResultOk<std::vector<Format>>(expansions);
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const RegexFormat& format_template, const int index, const std::string& current_placeholder_name
+) {
+  auto serialized_format = format_template.ToString();
+  XGRAMMAR_DCHECK(
+      format_to_placeholder_names_.find(serialized_format) != format_to_placeholder_names_.end()
+  ) << "Format not visited before expansion";
+  const auto& placeholder_names = format_to_placeholder_names_[serialized_format];
+  // If there are no placeholders, return the original format as the only expansion.
+  if (placeholder_names.empty()) {
+    return ResultOk<std::vector<Format>>({format_template});
+  }
+  XGRAMMAR_DCHECK(placeholder_names.size() == 1)
+      << "Multiple different placeholders in RegexFormat is not supported";
+
+  const auto& placeholder_name = placeholder_names[0];
+  std::vector<Format> expansions;
+  if (index == kDefaultExpansionMode) {
+    const auto& value = values_->at(placeholder_name);
+    expansions.reserve(value.size());
+    for (int i = 0; i < static_cast<int>(value.size()); ++i) {
+      auto result = ReplacePlaceHolder(format_template.pattern, placeholder_name, i);
+      if (result.IsErr()) {
+        return ResultErr(std::move(result).UnwrapErr());
+      }
+      expansions.push_back(RegexFormat(std::move(result).Unwrap()));
+    }
+  } else {
+    XGRAMMAR_DCHECK(current_placeholder_name == placeholder_name)
+        << "Index provided for a different placeholder name";
+    auto result = ReplacePlaceHolder(format_template.pattern, placeholder_name, index);
+    if (result.IsErr()) {
+      return ResultErr(std::move(result).UnwrapErr());
+    }
+    expansions.push_back(RegexFormat(std::move(result).Unwrap()));
+  }
+  return ResultOk<std::vector<Format>>(expansions);
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const SequenceFormat& format_template,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  auto serialized_format = format_template.ToString();
+  XGRAMMAR_DCHECK(
+      format_to_placeholder_names_.find(serialized_format) != format_to_placeholder_names_.end()
+  ) << "Format not visited before expansion";
+
+  // Check each subformat's placeholder names.
+  bool multiple_defined = false;
+  std::string multiple_defined_name = "";
+  std::unordered_set<std::string> placeholder_name_set;
+  std::vector<decltype(format_to_placeholder_names_.cbegin())> element_iterators;
+  for (const auto& subformat : format_template.elements) {
+    auto serialized_subformat = FormatToString(subformat);
+    XGRAMMAR_DCHECK(
+        format_to_placeholder_names_.find(serialized_subformat) !=
+        format_to_placeholder_names_.end()
+    );
+    element_iterators.push_back(format_to_placeholder_names_.find(serialized_subformat));
+    const auto& sub_placeholder_names = format_to_placeholder_names_[serialized_subformat];
+    for (const auto& sub_placeholder_name : sub_placeholder_names) {
+      if (placeholder_name_set.find(sub_placeholder_name) != placeholder_name_set.end()) {
+        multiple_defined = true;
+        multiple_defined_name = sub_placeholder_name;
+      } else {
+        placeholder_name_set.insert(sub_placeholder_name);
+      }
+    }
+  }
+
+  // Step 1. If not multiple defined, or multiple defined placeholder is expanded in the
+  // previous level, expand normally.
+  if ((!multiple_defined) ||
+      (multiple_defined && multiple_defined_name == current_placeholder_name)) {
+    std::vector<Format> expansions;
+    for (int i = 0; i < static_cast<int>(format_template.elements.size()); i++) {
+      if (element_iterators[i]->second.size() == 0) {
+        // Simple subformat.
+        expansions.push_back(format_template.elements[i]);
+        continue;
+      }
+
+      // Expand subformat.
+      auto sub_expansions_result =
+          VisitExpand(format_template.elements[i], index, current_placeholder_name);
+      if (sub_expansions_result.IsErr()) {
+        return ResultErr(std::move(sub_expansions_result).UnwrapErr());
+      }
+      auto sub_expansions = std::move(sub_expansions_result).Unwrap();
+      if (sub_expansions.size() == 1) {
+        expansions.push_back(sub_expansions[0]);
+      } else if (sub_expansions.size() > 1) {
+        OrFormat or_format(std::move(sub_expansions));
+        expansions.push_back(or_format);
+      }
+    }
+    if (expansions.empty()) {
+      return ResultOk<std::vector<Format>>();
+    } else {
+      return ResultOk<std::vector<Format>>(std::vector<Format>{SequenceFormat(std::move(expansions))
+      });
+    }
+  }
+
+  // Step 2. multiple defined, and the multiple defined placeholder is not expanded in the previous
+  // level.
+
+  // Initialization for expansion.
+  std::vector<Format> all_expansions;
+  std::vector<bool> is_multiple_defined_in_subformat;
+  std::vector<bool> is_current_placeholder_in_subformat;
+  const auto& values = values_->at(multiple_defined_name);
+  for (const auto& element_iterator : element_iterators) {
+    bool is_multiple_defined =
+        std::all_of(
+            element_iterator->second.begin(),
+            element_iterator->second.end(),
+            [&](const std::string& name) { return name != multiple_defined_name; }
+        ) == false;
+    is_multiple_defined_in_subformat.push_back(is_multiple_defined);
+    bool is_current_placeholder =
+        std::all_of(
+            element_iterator->second.begin(),
+            element_iterator->second.end(),
+            [&](const std::string& name) { return name != current_placeholder_name; }
+        ) == false;
+    is_current_placeholder_in_subformat.push_back(is_current_placeholder);
+    if (is_current_placeholder && is_multiple_defined) {
+      return ResultErr(InvalidStructuralTagError(
+          "Mingled template detected when expanding multiple defined placeholder: " +
+          multiple_defined_name + " and " + current_placeholder_name
+      ));
+    }
+  }
+
+  for (int value_index = 0; value_index < static_cast<int>(values.size()); ++value_index) {
+    std::vector<Format> expansions;
+    for (int i = 0; i < static_cast<int>(format_template.elements.size()); i++) {
+      if (element_iterators[i]->second.size() == 0) {
+        // Simple subformat.
+        expansions.push_back(format_template.elements[i]);
+        continue;
+      }
+
+      // Expand subformat.
+      auto sub_expansions_result =
+          is_multiple_defined_in_subformat[i]
+              ? VisitExpand(format_template.elements[i], value_index, multiple_defined_name)
+              : VisitExpand(format_template.elements[i], index, current_placeholder_name);
+
+      if (sub_expansions_result.IsErr()) {
+        return ResultErr(std::move(sub_expansions_result).UnwrapErr());
+      }
+      auto sub_expansions = std::move(sub_expansions_result).Unwrap();
+      if (sub_expansions.size() == 1) {
+        expansions.push_back(sub_expansions[0]);
+      } else {
+        OrFormat or_format(std::move(sub_expansions));
+        expansions.push_back(or_format);
+      }
+    }
+    all_expansions.push_back(SequenceFormat(std::move(expansions)));
+  }
+  return ResultOk<std::vector<Format>>(std::move(all_expansions));
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const OrFormat& format_template, const int index, const std::string& current_placeholder_name
+) {
+  std::vector<Format> all_expansions;
+  for (const auto& element : format_template.elements) {
+    auto sub_expansions_result = VisitExpand(element, index, current_placeholder_name);
+    if (sub_expansions_result.IsErr()) {
+      return ResultErr(std::move(sub_expansions_result).UnwrapErr());
+    }
+    auto sub_expansions = std::move(sub_expansions_result).Unwrap();
+    all_expansions.insert(all_expansions.end(), sub_expansions.begin(), sub_expansions.end());
+  }
+  return ResultOk<std::vector<Format>>(all_expansions);
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const TagFormat& format_template, const int index, const std::string& current_placeholder_name
+) {
+  auto begin_result = DetectTemplatePlaceholderNames(format_template.begin);
+  auto end_result = DetectTemplatePlaceholderNames(format_template.end);
+  XGRAMMAR_DCHECK(begin_result.IsOk() && end_result.IsOk());
+  auto begin_placeholder_name_opt = std::move(begin_result).Unwrap();
+  auto end_placeholder_name_opt = std::move(end_result).Unwrap();
+
+  if (begin_placeholder_name_opt == std::nullopt && end_placeholder_name_opt == std::nullopt) {
+    // No placeholders in begin and end, only expand content.
+    auto content_expansions_result =
+        VisitExpand(*format_template.content, index, current_placeholder_name);
+    if (content_expansions_result.IsErr()) {
+      return ResultErr(std::move(content_expansions_result).UnwrapErr());
+    }
+    auto content_expansions = std::move(content_expansions_result).Unwrap();
+    std::vector<Format> expanded_formats;
+    for (const auto& content_expansion : content_expansions) {
+      TagFormat expanded_format{
+          format_template.begin,
+          std::make_shared<Format>(content_expansion),
+          format_template.end,
+      };
+      expanded_formats.push_back(expanded_format);
+    }
+    return ResultOk<std::vector<Format>>(expanded_formats);
+  }
+
+  // Otherwise, if the placeholder has been expanded in the previous level, expand normally.
+  std::string placeholder_name = begin_placeholder_name_opt.has_value()
+                                     ? begin_placeholder_name_opt.value()
+                                     : end_placeholder_name_opt.value();
+  if (placeholder_name == current_placeholder_name) {
+    auto begin_result = ReplacePlaceHolder(format_template.begin, placeholder_name, index);
+    if (begin_result.IsErr()) {
+      return ResultErr(std::move(begin_result).UnwrapErr());
+    }
+    std::string replaced_begin = std::move(begin_result).Unwrap();
+
+    auto end_result = ReplacePlaceHolder(format_template.end, placeholder_name, index);
+    if (end_result.IsErr()) {
+      return ResultErr(std::move(end_result).UnwrapErr());
+    }
+    std::string replaced_end = std::move(end_result).Unwrap();
+
+    auto content_expansions_result =
+        VisitExpand(*format_template.content, index, current_placeholder_name);
+    if (content_expansions_result.IsErr()) {
+      return ResultErr(std::move(content_expansions_result).UnwrapErr());
+    }
+    auto content_expansions = std::move(content_expansions_result).Unwrap();
+    if (content_expansions.size() == 1) {
+      TagFormat expanded_format{
+          replaced_begin,
+          std::make_shared<Format>(content_expansions[0]),
+          replaced_end,
+      };
+      return ResultOk<std::vector<Format>>({expanded_format});
+    } else {
+      TagFormat expanded_format{
+          replaced_begin,
+          std::make_shared<Format>(OrFormat{std::move(content_expansions)}),
+          replaced_end
+      };
+      return ResultOk<std::vector<Format>>({expanded_format});
+    }
+  }
+
+  // Otherwise, if it is expanding a different placeholder, raise an error.
+  if (index != kDefaultExpansionMode) {
+    return ResultErr(InvalidStructuralTagError(
+        "Mingled Template Expansion: " + placeholder_name + " and " + current_placeholder_name
+    ));
+  }
+
+  // Expand for all values of the placeholder.
+  std::vector<Format> expanded_formats;
+  const auto& values = values_->at(placeholder_name);
+  for (int value_index = 0; value_index < static_cast<int>(values.size()); ++value_index) {
+    auto begin_result = ReplacePlaceHolder(format_template.begin, placeholder_name, value_index);
+    if (begin_result.IsErr()) {
+      return ResultErr(std::move(begin_result).UnwrapErr());
+    }
+    std::string replaced_begin = std::move(begin_result).Unwrap();
+
+    auto end_result = ReplacePlaceHolder(format_template.end, placeholder_name, value_index);
+    if (end_result.IsErr()) {
+      return ResultErr(std::move(end_result).UnwrapErr());
+    }
+    std::string replaced_end = std::move(end_result).Unwrap();
+
+    auto content_expansions_result =
+        VisitExpand(*format_template.content, value_index, placeholder_name);
+    if (content_expansions_result.IsErr()) {
+      return ResultErr(std::move(content_expansions_result).UnwrapErr());
+    }
+    auto content_expansions = std::move(content_expansions_result).Unwrap();
+    if (content_expansions.size() == 1) {
+      TagFormat expanded_format{
+          replaced_begin,
+          std::make_shared<Format>(content_expansions[0]),
+          replaced_end,
+      };
+      expanded_formats.push_back(expanded_format);
+    } else {
+      TagFormat expanded_format{
+          replaced_begin,
+          std::make_shared<Format>(OrFormat{std::move(content_expansions)}),
+          replaced_end
+      };
+      expanded_formats.push_back(expanded_format);
+    }
+  }
+  return ResultOk<std::vector<Format>>(std::move(expanded_formats));
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const TriggeredTagsFormat& format_template,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  std::vector<TagFormat> expanded_tags;
+  for (const auto& tag : format_template.tags) {
+    auto sub_expansions_result = VisitExpand(tag, index, current_placeholder_name);
+    if (sub_expansions_result.IsErr()) {
+      return ResultErr(std::move(sub_expansions_result).UnwrapErr());
+    }
+    auto sub_expansions = std::move(sub_expansions_result).Unwrap();
+    for (const auto& sub_expansion : sub_expansions) {
+      expanded_tags.push_back(std::get<TagFormat>(sub_expansion));
+    }
+  }
+  // If no tags are expanded, return an empty vector.
+  if (expanded_tags.empty()) {
+    XGRAMMAR_LOG(WARNING) << "No tags expanded in TriggeredTagsFormat, possibly due to no values "
+                             "provided for the triggers.";
+    return ResultOk<std::vector<Format>>({});
+  }
+  TriggeredTagsFormat expanded_format{
+      format_template.triggers,
+      std::move(expanded_tags),
+      format_template.at_least_one,
+      format_template.stop_after_first
+  };
+  return ResultOk<std::vector<Format>>({expanded_format});
+}
+
+Result<std::vector<Format>, StructuralTagError> StructuralTagTemplateFiller::VisitExpandSub(
+    const TagsWithSeparatorFormat& format_template,
+    const int index,
+    const std::string& current_placeholder_name
+) {
+  std::vector<TagFormat> expanded_tags;
+  for (const auto& tag : format_template.tags) {
+    auto sub_expansions_result = VisitExpand(tag, index, current_placeholder_name);
+    if (sub_expansions_result.IsErr()) {
+      return ResultErr(std::move(sub_expansions_result).UnwrapErr());
+    }
+    auto sub_expansions = std::move(sub_expansions_result).Unwrap();
+    for (const auto& sub_expansion : sub_expansions) {
+      expanded_tags.push_back(std::get<TagFormat>(sub_expansion));
+    }
+  }
+  // If no tags are expanded, return an empty vector.
+  if (expanded_tags.empty()) {
+    XGRAMMAR_LOG(WARNING
+    ) << "No tags expanded in TagsWithSeparatorFormat, possibly due to no values "
+         "provided for the tags.";
+    return ResultOk<std::vector<Format>>({});
+  }
+  TagsWithSeparatorFormat expanded_format{
+      std::move(expanded_tags),
+      format_template.separator,
+      format_template.at_least_one,
+      format_template.stop_after_first
+  };
+  return ResultOk<std::vector<Format>>({expanded_format});
+}
+
+Result<StructuralTag, StructuralTagError> StructuralTagTemplateFiller::Apply(
+    const StructuralTag& template_structural_tag,
+    const std::unordered_map<
+        std::string,
+        std::vector<std::unordered_map<std::string, std::string>>>& values
+) {
+  format_to_placeholder_names_.clear();
+  values_ = &values;
+
+  // Step 1. Visit the template structural tag to collect all placeholder names.
+  auto result = Visit(template_structural_tag.format);
+  if (result.IsErr()) {
+    return ResultErr(std::move(result).UnwrapErr());
+  }
+
+  // Step 2. Analyze if all placeholder names have corresponding values.
+  auto placeholder_names = std::move(result).Unwrap();
+  for (const auto& placeholder_name : placeholder_names) {
+    if (values.find(placeholder_name) == values.end()) {
+      return ResultErr(InvalidStructuralTagError(
+          "No values provided for template placeholder: " + placeholder_name
+      ));
+    }
+  }
+
+  // Step 3. Fill the template structural tag with the values.
+  auto expanded_formats_result = VisitExpand(template_structural_tag.format);
+  if (expanded_formats_result.IsErr()) {
+    return ResultErr(std::move(expanded_formats_result).UnwrapErr());
+  }
+  auto expanded_formats = std::move(expanded_formats_result).Unwrap();
+  if (expanded_formats.size() == 1) {
+    return ResultOk<StructuralTag>(StructuralTag{std::move(expanded_formats[0])});
+  } else if (expanded_formats.size() > 1) {
+    OrFormat or_format(std::move(expanded_formats));
+    return ResultOk<StructuralTag>(StructuralTag{std::move(or_format)});
+  }
+  XGRAMMAR_LOG(WARNING
+  ) << "No formats expanded from the template structural tag, any text will be allowed.";
+  return ResultOk<StructuralTag>({StructuralTag{AnyTextFormat()}});
+}
+
+bool StructuralTagTemplateFiller::HasUnfilledPlaceholders(const StructuralTag& structural_tag) {
+  auto result = Visit(structural_tag.format);
+  if (result.IsErr()) {
+    return false;
+  }
+  auto placeholder_names = std::move(result).Unwrap();
+  return !placeholder_names.empty();
+}
+
+Result<StructuralTag, StructuralTagError> FillTemplateWithValues(
+    const StructuralTag& template_structural_tag,
+    const std::unordered_map<
+        std::string,
+        std::vector<std::unordered_map<std::string, std::string>>>& values
+) {
+  return StructuralTagTemplateFiller().Apply(template_structural_tag, values);
+}
+
+/************** StructuralTag To Strings **************/
+
+std::string SequenceFormat::ToString() const {
+  std::string repr = "{type: sequence, elements: [";
+  for (size_t i = 0; i < elements.size(); ++i) {
+    repr += std::visit([&](auto&& arg) -> std::string { return arg.ToString(); }, elements[i]);
+    if (i != elements.size() - 1) {
+      repr += ", ";
+    }
+  }
+  repr += "]}";
+  return repr;
+}
+
+std::string OrFormat::ToString() const {
+  std::string repr = "{type: or, elements: [";
+  for (size_t i = 0; i < elements.size(); ++i) {
+    repr += std::visit([&](auto&& arg) -> std::string { return arg.ToString(); }, elements[i]);
+    if (i != elements.size() - 1) {
+      repr += ", ";
+    }
+  }
+  repr += "]}";
+  return repr;
+}
+
+std::string TagFormat::ToString() const {
+  std::string repr = "{type: tag, begin: " + begin + ", end: " + end + ", content: ";
+  repr += std::visit([&](auto&& arg) -> std::string { return arg.ToString(); }, *content);
+  repr += "}";
+  return repr;
+}
+
+std::string TriggeredTagsFormat::ToString() const {
+  std::string repr = "{type: triggered_tags, triggers: [";
+  for (size_t i = 0; i < triggers.size(); ++i) {
+    repr += triggers[i];
+    if (i != triggers.size() - 1) {
+      repr += ", ";
+    }
+  }
+  repr += "], tags: [";
+  for (size_t i = 0; i < tags.size(); ++i) {
+    repr += tags[i].ToString();
+    if (i != tags.size() - 1) {
+      repr += ", ";
+    }
+  }
+  repr += "], at_least_one: " + std::string(at_least_one ? "true" : "false");
+  repr += ", stop_after_first: " + std::string(stop_after_first ? "true" : "false") + "}";
+  return repr;
+}
+
+std::string TagsWithSeparatorFormat::ToString() const {
+  std::string repr = "{type: tags_with_separator, tags: [";
+  for (size_t i = 0; i < tags.size(); ++i) {
+    repr += tags[i].ToString();
+    if (i != tags.size() - 1) {
+      repr += ", ";
+    }
+  }
+  repr += "], separator: " + separator;
+  repr += ", at_least_one: " + std::string(at_least_one ? "true" : "false");
+  repr += ", stop_after_first: " + std::string(stop_after_first ? "true" : "false") + "}";
+  return repr;
+}
+
 /************** StructuralTag Conversion Public API **************/
 
 Result<Grammar, StructuralTagError> StructuralTagToGrammar(const std::string& structural_tag_json) {
@@ -1070,6 +2213,35 @@ Result<Grammar, StructuralTagError> StructuralTagToGrammar(const std::string& st
     return ResultErr(std::move(err).value());
   }
   auto result = StructuralTagGrammarConverter().Convert(structural_tag);
+  if (result.IsErr()) {
+    return ResultErr(std::move(result).UnwrapErr());
+  }
+  return ResultOk(GrammarNormalizer::Apply(std::move(result).Unwrap()));
+}
+
+Result<Grammar, StructuralTagError> ApplyStructuralTagTemplate(
+    const std::string& structural_tag_template_json,
+    const std::unordered_map<
+        std::string,
+        std::vector<std::unordered_map<std::string, std::string>>>& values
+) {
+  // Step 1. Parse the template.
+  auto structural_tag_result_raw = StructuralTagParser::FromJSON(structural_tag_template_json);
+  if (structural_tag_result_raw.IsErr()) {
+    return ResultErr(std::move(structural_tag_result_raw).UnwrapErr());
+  }
+  auto structural_tag_raw = std::move(structural_tag_result_raw).Unwrap();
+  // Step 2. Replace the elements.
+  auto filled_stag_result = FillTemplateWithValues(structural_tag_raw, values);
+  if (filled_stag_result.IsErr()) {
+    return ResultErr(std::move(filled_stag_result).UnwrapErr());
+  }
+  auto filled_stag = std::move(filled_stag_result).Unwrap();
+  auto err = StructuralTagAnalyzer().Analyze(&filled_stag);
+  if (err.has_value()) {
+    return ResultErr(std::move(err).value());
+  }
+  auto result = StructuralTagGrammarConverter().Convert(filled_stag);
   if (result.IsErr()) {
     return ResultErr(std::move(result).UnwrapErr());
   }

@@ -1,6 +1,7 @@
 """This module provides classes representing grammars."""
 
 import json
+import sys
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, overload
 
 from pydantic import BaseModel
@@ -431,3 +432,34 @@ class Grammar(XGRObject):
             When the __VERSION__ field in the JSON string is not the same as the current version.
         """
         return Grammar._create_from_handle(_core.Grammar.deserialize_json(json_string))
+
+    @staticmethod
+    def apply_structural_tag_template(
+        template_json_str: Union[str, Dict[str, Any]], **kwargs: List[Dict[str, any]]
+    ) -> "StructuralTag":
+        if isinstance(template_json_str, dict):
+            template_json_str = json.dumps(template_json_str)
+        if not isinstance(template_json_str, str):
+            raise ValueError("template_json_str must be a string or a dictionary")
+        for key, values in kwargs.items():
+            if not isinstance(values, list):
+                raise TypeError(f"Value for {key} must be a list, got {type(values)}")
+            for item in values:
+                if not isinstance(item, dict):
+                    raise TypeError(f"Items in {key} must be dictionaries, got {type(item)}")
+                for key, value in item.items():
+                    if isinstance(value, str):
+                        continue
+                    if isinstance(value, dict):
+                        item[key] = json.dumps(value)
+                    else:
+                        item[key] = str(value)
+                        # warning
+                        print(
+                            f"Warning: {key} value {value} is not a string or dict, converted to string",
+                            file=sys.stderr,
+                        )
+
+        return Grammar._create_from_handle(
+            _core.Grammar.apply_structural_tag_template(template_json_str, **kwargs)
+        )

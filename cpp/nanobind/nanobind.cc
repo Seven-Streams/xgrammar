@@ -25,11 +25,60 @@
 #include "../testing.h"
 #include "python_methods.h"
 #include "xgrammar/exception.h"
+#include "xgrammar/grammar.h"
 #include "xgrammar/matcher.h"
 
 namespace nb = nanobind;
 
 namespace xgrammar {
+
+Grammar Grammar_ApplyStructuralTagTemplate(
+    const std::string& structural_tag_template, const nb::kwargs& kwargs
+) {
+  std::unordered_map<std::string, std::vector<std::unordered_map<std::string, std::string>>> values;
+  for (const auto& [key, value] : kwargs) {
+    nb::str key_str;
+    if (!nb::try_cast(key, key_str)) {
+      throw nb::type_error("Expected a string key for structural tag template values");
+    }
+    nb::list value_list;
+    if (!nb::try_cast(value, value_list)) {
+      throw nb::type_error("Expected a list of dictionaries for structural tag template values");
+    }
+    std::vector<std::unordered_map<std::string, std::string>> value_vec;
+    value_vec.reserve(value_list.size());
+    for (const auto& item : value_list) {
+      nb::dict item_dict;
+      if (!nb::try_cast(item, item_dict)) {
+        throw nb::type_error(
+            "Expected a dictionary for each item in the list of structural tag template values"
+        );
+      }
+      std::unordered_map<std::string, std::string> item_map;
+      for (const auto& [item_key, item_value] : item_dict) {
+        nb::str item_key_str, item_value_str;
+        if (!nb::try_cast(item_key, item_key_str)) {
+          throw nb::type_error(
+              "Expected a string key for each item in the structural tag template dictionary"
+          );
+        }
+        if (!nb::try_cast(item_value, item_value_str)) {
+          throw nb::type_error(
+              "Expected a string for each value in the structural tag template dictionary"
+          );
+        }
+        item_map[item_key_str.c_str()] = item_value_str.c_str();
+      }
+      value_vec.push_back(std::move(item_map));
+    }
+    values[key_str.c_str()] = std::move(value_vec);
+  }
+  auto result = ApplyStructuralTagTemplate(structural_tag_template, values).ToVariant();
+  if (std::holds_alternative<StructuralTagError>(result)) {
+    ThrowVariantError(std::get<StructuralTagError>(result));
+  }
+  return std::get<Grammar>(result);
+}
 
 std::vector<std::string> CommonEncodedVocabType(
     const nb::typed<nb::list, std::variant<std::string, nb::bytes>> encoded_vocab
@@ -203,6 +252,7 @@ NB_MODULE(xgrammar_bindings, m) {
           &Grammar_FromStructuralTag,
           nb::call_guard<nb::gil_scoped_release>()
       )
+      .def_static("apply_structural_tag_template", &Grammar_ApplyStructuralTagTemplate)
       .def_static("builtin_json_grammar", &Grammar::BuiltinJSONGrammar)
       .def_static("union", &Grammar::Union, nb::call_guard<nb::gil_scoped_release>())
       .def_static("concat", &Grammar::Concat, nb::call_guard<nb::gil_scoped_release>())
