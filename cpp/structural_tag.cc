@@ -1123,7 +1123,7 @@ const auto FormatToString = [](const Format& format) -> std::string {
 };
 
 /*!
- * \brief A structural tag template filler, used to fill the strcutrual tags with the given values.
+ * \brief A structural tag template filler, used to fill the structral tags with the given values.
  */
 class StructuralTagTemplateFiller {
  public:

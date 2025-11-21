@@ -435,8 +435,8 @@ class Grammar(XGRObject):
 
     @staticmethod
     def apply_structural_tag_template(
-        template_json_str: Union[str, Dict[str, Any]], **kwargs: List[Dict[str, any]]
-    ) -> "StructuralTag":
+        template_json_str: Union[str, Dict[str, Any]], **kwargs: List[Dict[str, Any]]
+    ) -> "Grammar":
         if isinstance(template_json_str, dict):
             template_json_str = json.dumps(template_json_str)
         if not isinstance(template_json_str, str):
@@ -447,16 +447,16 @@ class Grammar(XGRObject):
             for item in values:
                 if not isinstance(item, dict):
                     raise TypeError(f"Items in {key} must be dictionaries, got {type(item)}")
-                for key, value in item.items():
+                for item_key, value in item.items():
                     if isinstance(value, str):
                         continue
                     if isinstance(value, dict):
-                        item[key] = json.dumps(value)
+                        item[item_key] = json.dumps(value)
                     else:
-                        item[key] = str(value)
+                        item[item_key] = str(value)
                         # warning
                         print(
-                            f"Warning: {key} value {value} is not a string or dict, converted to string",
+                            f"Warning: {item_key} value {value} is not a string or dict, converted to string",
                             file=sys.stderr,
                         )
 

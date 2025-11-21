@@ -378,7 +378,7 @@ def get_builtin_template_structural_tag(format_type: str) -> Dict:
         template_structural_tag = structural_tag.get_builtin_template_structural_tag("Harmony")
         grammar = Grammar.apply_template_structural_tag(template_structural_tag, tools=tools, builtin_tools=builtin_tools)
 
-    The abolve grammar can be used to consruct a grammar that matches the function calling
+    The above grammar can be used to construct a grammar that matches the function calling
     format of the specified model.
 
 
