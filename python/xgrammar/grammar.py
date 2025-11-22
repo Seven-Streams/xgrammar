@@ -437,10 +437,41 @@ class Grammar(XGRObject):
     def apply_structural_tag_template(
         template_json_str: Union[str, Dict[str, Any]], **kwargs: List[Dict[str, Any]]
     ) -> "Grammar":
+        """Apply a structural tag template to create a grammar. The template is a JSON string
+        representing a structural tag, with placeholders for the tag items, or a dictionary.
+        The placeholders are specified as keyword arguments, where the key is the placeholder
+        name, and the value is a list of tag items to replace the placeholder.
+
+        Parameters
+        ----------
+        template_json_str : Union[str, Dict[str, Any]]
+            The structural tag template as a JSON string or a dictionary.
+        **kwargs : List[Dict[str, Any]]
+            The placeholders and their corresponding tag items.
+
+        Returns
+        -------
+        grammar : Grammar
+            The constructed grammar from the structural tag template.
+
+        Raises
+        ------
+        ValueError
+            When the template_json_str is not a string or a dictionary.
+        TypeError
+            When the values in kwargs are not lists of dictionaries.
+        InvalidJSONError
+            When the template_json_str is not a valid JSON string.
+        InvalidStructuralTagError
+            When the structural tag template is not valid, or the values for
+            the placeholders are not found in kwargs.
+        """
+
         if isinstance(template_json_str, dict):
             template_json_str = json.dumps(template_json_str)
         if not isinstance(template_json_str, str):
             raise ValueError("template_json_str must be a string or a dictionary")
+
         for key, values in kwargs.items():
             if not isinstance(values, list):
                 raise TypeError(f"Value for {key} must be a list, got {type(values)}")
