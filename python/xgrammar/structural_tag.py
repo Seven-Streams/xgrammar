@@ -341,10 +341,12 @@ __all__ = [
     "StructuralTag",
 ]
 
+# ---------- Template Structural Tag ----------
+
 _structural_tag_registry = {}
 
 
-def register_template_structural_tag_format(name: str):
+def _register_template_structural_tag_format(name: str):
     """Register a structural tag format."""
 
     def decorator(func):
@@ -366,6 +368,7 @@ def get_builtin_template_structural_tag(format_type: str) -> Dict:
     --------
 
     .. code-block:: python
+
         from xgrammar import structural_tag, Grammar
         tools = [
             {"name": "tool1", "parameters": {"param1": {"type": "string"}}},
@@ -401,7 +404,7 @@ def get_builtin_template_structural_tag(format_type: str) -> Dict:
     return func()
 
 
-@register_template_structural_tag_format("Llama")
+@_register_template_structural_tag_format("Llama")
 def get_llama_style_template_structural_tag() -> Dict:
     """Get Llama style structural tag format.
 
@@ -427,7 +430,7 @@ def get_llama_style_template_structural_tag() -> Dict:
     }
 
 
-@register_template_structural_tag_format("Kimi")
+@_register_template_structural_tag_format("Kimi")
 def get_kimi_style_template_structural_tag() -> Dict:
     """Get Kimi style structural tag format.
 
@@ -453,7 +456,7 @@ def get_kimi_style_template_structural_tag() -> Dict:
     }
 
 
-@register_template_structural_tag_format("Deepseek")
+@_register_template_structural_tag_format("Deepseek")
 def get_deepseek_style_template_structural_tag() -> Dict:
     """Get Deepseek style structural tag format.
 
@@ -479,7 +482,7 @@ def get_deepseek_style_template_structural_tag() -> Dict:
     }
 
 
-@register_template_structural_tag_format("Qwen_Coder")
+@_register_template_structural_tag_format("Qwen_Coder")
 def get_qwen_coder_style_template_structural_tag() -> Dict:
     """Get Qwen Coder style structural tag format.
 
@@ -508,7 +511,7 @@ def get_qwen_coder_style_template_structural_tag() -> Dict:
     }
 
 
-@register_template_structural_tag_format("Qwen")
+@_register_template_structural_tag_format("Qwen")
 def get_qwen_style_template_structural_tag() -> Dict:
     """Get Qwen style structural tag format.
 
@@ -534,7 +537,7 @@ def get_qwen_style_template_structural_tag() -> Dict:
     }
 
 
-@register_template_structural_tag_format("Harmony")
+@_register_template_structural_tag_format("Harmony")
 def get_harmony_style_template_structural_tag() -> Dict:
     """Get harmony style structural tag format.
 

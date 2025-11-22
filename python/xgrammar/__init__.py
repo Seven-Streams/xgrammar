@@ -23,5 +23,5 @@ from .matcher import (
     get_bitmask_shape,
     reset_token_bitmask,
 )
-from .structural_tag import StructuralTag
+from .structural_tag import StructuralTag, get_builtin_template_structural_tag
 from .tokenizer_info import TokenizerInfo, VocabType

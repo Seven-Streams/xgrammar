@@ -72,3 +72,8 @@ Combinatorial Formats
 .. autoclass:: TagsWithSeparatorFormat
    :show-inheritance:
    :exclude-members: model_config
+
+Template Structural Tag
+-----------------------
+
+.. autofunction:: get_builtin_template_structural_tag
