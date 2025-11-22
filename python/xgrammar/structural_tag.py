@@ -356,7 +356,7 @@ def _register_template_structural_tag_format(name: str):
     return decorator
 
 
-def get_builtin_template_structural_tag(format_type: str) -> Dict:
+def get_builtin_template_structural_tag(format_type: str) -> Dict[str, Any]:
     """Get builtin template structural tag format by format type.
     In all the template structural tag formats, users should provide
     a list of tools, each tool should have a "name" and "parameters" field.
@@ -394,23 +394,29 @@ def get_builtin_template_structural_tag(format_type: str) -> Dict:
 
     Returns
     -------
-    Dict
+    Dict[str, Any]
         A template structural tag format dictionary.
+
+    Raises
+    ------
+    ValueError
+        If the format type is unknown.
 
     """
     func = _structural_tag_registry.get(format_type)
     if func is None:
-        raise ValueError(f"Unknown format type: {format_type}")
+        support_types = list(_structural_tag_registry.keys())
+        raise ValueError(f"Unknown format type: {format_type}, support types: {support_types}")
     return func()
 
 
 @_register_template_structural_tag_format("Llama")
-def get_llama_style_template_structural_tag() -> Dict:
+def get_llama_style_template_structural_tag() -> Dict[str, Any]:
     """Get Llama style structural tag format.
 
     Returns
     -------
-    Dict
+    Dict[str, Any]
         A template structural tag format dictionary.
         This format is used by Llama 3 and other models that follow the same style.
     """
@@ -431,12 +437,12 @@ def get_llama_style_template_structural_tag() -> Dict:
 
 
 @_register_template_structural_tag_format("Kimi")
-def get_kimi_style_template_structural_tag() -> Dict:
+def get_kimi_style_template_structural_tag() -> Dict[str, Any]:
     """Get Kimi style structural tag format.
 
     Returns
     -------
-    Dict
+    Dict[str, Any]
         A template structural tag format dictionary.
         This format is used by Kimi-v2 and other models that follow the same style.
     """
@@ -457,12 +463,12 @@ def get_kimi_style_template_structural_tag() -> Dict:
 
 
 @_register_template_structural_tag_format("Deepseek")
-def get_deepseek_style_template_structural_tag() -> Dict:
+def get_deepseek_style_template_structural_tag() -> Dict[str, Any]:
     """Get Deepseek style structural tag format.
 
     Returns
     -------
-    Dict
+    Dict[str, Any]
         A template structural tag format dictionary.
         This format is used by Deepseek-v3.1 and other models that follow the same style.
     """
@@ -488,7 +494,7 @@ def get_qwen_coder_style_template_structural_tag() -> Dict:
 
     Returns
     -------
-    Dict
+    Dict[str, Any]
         A template structural tag format dictionary.
         This format is used by Qwen3 Coder and other models that follow the same style.
     """
@@ -517,7 +523,7 @@ def get_qwen_style_template_structural_tag() -> Dict:
 
     Returns
     -------
-    Dict
+    Dict[str, Any]
         A template structural tag format dictionary.
         This format is used by Qwen3 and other models that follow the same style.
     """
@@ -543,7 +549,7 @@ def get_harmony_style_template_structural_tag() -> Dict:
 
     Returns
     -------
-    Dict
+    Dict[str, Any]
         A template structural tag format dictionary.
         This format is in OpenAI Harmony Response Format, which is used by GPT-oss
         and other models that follow the same style.
