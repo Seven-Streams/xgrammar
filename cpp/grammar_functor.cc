@@ -2296,7 +2296,9 @@ std::optional<AdaptiveTokenMask> RuleLevelCache::Impl::GetCache(
   }
 
   // Move the node to the back of the list.
-  cache_list_.MoveBack(it->second);
+  if (max_cache_memory_size_ != kUnlimitedSize) {
+    cache_list_.MoveBack(it->second);
+  }
   return List<NodeType>::iterator(it->second, cache_list_)->second;
 }
 
@@ -2330,11 +2332,13 @@ bool RuleLevelCache::Impl::AddCache(
   }
 
   // Evict old entries if needed.
-  while (current_cache_memory_size_ + MemorySize(token_mask) > max_cache_memory_size_) {
-    auto oldest_it = cache_list_.begin();
-    current_cache_memory_size_ -= MemorySize(oldest_it->second);
-    cache_.erase(oldest_it->first);
-    cache_list_.Erase(oldest_it);
+  if (max_cache_memory_size_ != kUnlimitedSize) {
+    while (current_cache_memory_size_ + MemorySize(token_mask) > max_cache_memory_size_) {
+      auto oldest_it = cache_list_.begin();
+      current_cache_memory_size_ -= MemorySize(oldest_it->second);
+      cache_.erase(oldest_it->first);
+      cache_list_.Erase(oldest_it);
+    }
   }
 
   // Add to the cache.
