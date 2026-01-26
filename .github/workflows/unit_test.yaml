@@ -83,7 +83,7 @@ jobs:
           HF_HUB_DOWNLOAD_TIMEOUT: 60
         if: env.HF_TOKEN != ''
         run: |
-          pytest ./tests/python/test_grammar_matcher_json_schema.py
+          pytest -p no:unraisableexception ./tests/python/test_grammar_matcher_json_schema.py
       - name: Run Python tests without HF_TOKEN
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
