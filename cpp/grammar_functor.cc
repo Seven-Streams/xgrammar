@@ -2243,7 +2243,7 @@ class RuleLevelCache::Impl {
   // The cache map: fsm_hash -> fsm_new_node_id -> AdaptiveTokenMask
   std::mutex mutex_;
   const size_t max_cache_memory_size_;
-  int64_t current_cache_memory_size_ = 0;
+  size_t current_cache_memory_size_ = 0;
   List<NodeType> cache_list_;
   std::unordered_map<NodeKey, int> cache_;
 };
@@ -2297,7 +2297,9 @@ std::optional<AdaptiveTokenMask> RuleLevelCache::Impl::GetCache(
 
   // Move the node to the back of the list.
   cache_list_.MoveBack(it->second);
-  return List<NodeType>::iterator(it->second, cache_list_)->second;
+  // Create iterator and get the value to avoid temporary object issues
+  List<NodeType>::iterator cache_it(it->second, cache_list_);
+  return cache_it->second;
 }
 
 bool RuleLevelCache::Impl::AddCache(
@@ -2330,14 +2332,21 @@ bool RuleLevelCache::Impl::AddCache(
   }
 
   // Evict old entries if needed.
-  while (current_cache_memory_size_ + MemorySize(token_mask) > max_cache_memory_size_) {
+  while (max_cache_memory_size_ != kUnlimitedSize &&
+         current_cache_memory_size_ + MemorySize(token_mask) > max_cache_memory_size_) {
     auto oldest_it = cache_list_.begin();
     if (oldest_it == cache_list_.end()) {
       // This should not happen if the size of the new item is smaller than max_cache_memory_size_,
       // but this is a safeguard.
       break;
     }
-    current_cache_memory_size_ -= MemorySize(oldest_it->second);
+    size_t item_size = MemorySize(oldest_it->second);
+    // Prevent underflow: ensure we don't subtract more than current size
+    if (item_size > current_cache_memory_size_) {
+      current_cache_memory_size_ = 0;
+    } else {
+      current_cache_memory_size_ -= item_size;
+    }
     cache_.erase(oldest_it->first);
     cache_list_.Erase(oldest_it);
   }
