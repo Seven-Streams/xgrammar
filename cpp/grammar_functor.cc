@@ -2319,6 +2319,7 @@ bool RuleLevelCache::Impl::AddCache(
     const int32_t edge_cnt,
     AdaptiveTokenMask&& token_mask
 ) {
+  return true;
   // Check if we can add to the cache.
   std::lock_guard<std::mutex> lock(mutex_);
   NodeKey key = std::make_tuple(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
