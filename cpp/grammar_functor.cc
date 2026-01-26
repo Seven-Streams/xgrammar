@@ -2405,7 +2405,8 @@ void GrammarFSMHasher::Apply(Grammar* grammar) { GrammarFSMHasherImpl().Apply(gr
 std::optional<uint64_t> GrammarFSMHasher::HashSequence(
     const Grammar& grammar, int32_t sequence_id
 ) {
-  return GrammarFSMHasherImpl().HashSequence(grammar, sequence_id);
+  return 0;
+  // return GrammarFSMHasherImpl().HashSequence(grammar, sequence_id);
 }
 
 FSMWithStartEnd GrammarFSMBuilder::RuleRef(const GrammarExpr& expr) {
