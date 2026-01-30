@@ -507,7 +507,6 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
 
   // Check if the type of the mask can be rejected.
   tmp_accepted_indices_.reserve(possible_token_num);
-  tmp_uncertain_indices_.reserve(possible_token_num);
   bool fill_reject_indices =
       (sorted_decoded_vocab.size() - possible_token_num) < AdaptiveTokenMask::USE_BITSET_THRESHOLD;
 
