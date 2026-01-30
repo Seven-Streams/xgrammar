@@ -12,7 +12,6 @@
 #include <map>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <queue>
 #include <set>
 #include <stack>
@@ -1019,7 +1018,7 @@ class GrammarFSMBuilderImpl {
         XGRAMMAR_DCHECK(grammar_expr.type == Grammar::Impl::GrammarExprType::kChoices);
         auto rule_fsm = Choices(grammar_expr, *grammar);
         if (rule_fsm.has_value()) {
-          per_rule_fsms[i] = std::nullopt;  // Testing.
+          per_rule_fsms[i] = rule_fsm->AddToCompleteFSM(&complete_fsm, &state_mapping);
         }
       }
     }
@@ -2289,6 +2288,7 @@ std::optional<AdaptiveTokenMask> RuleLevelCache::Impl::GetCache(
     const int32_t edge_cnt
 ) {
   // Find in the cache.
+  return std::nullopt;  // Testing.
   std::lock_guard<std::mutex> lock(mutex_);
   NodeKey key = std::make_tuple(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
   auto it = cache_.find(key);
