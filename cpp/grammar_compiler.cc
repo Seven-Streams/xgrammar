@@ -1000,7 +1000,6 @@ CompiledGrammar GrammarCompilerSub::MultiThreadCompileGrammar(Grammar grammar_un
   using GrammarExprType = Grammar::Impl::GrammarExprType;
 
   auto compiled_grammar_impl = std::make_shared<CompiledGrammar::Impl>();
-  rule_level_cache_ = std::nullopt;
 
   compiled_grammar_impl->grammar = GrammarOptimizer::Apply(grammar_unoptimized);
   compiled_grammar_impl->tokenizer_info = tokenizer_info_;
