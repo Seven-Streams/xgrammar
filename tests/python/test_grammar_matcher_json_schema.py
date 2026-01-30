@@ -491,25 +491,25 @@ def test_mask_generation_format(value: str, format: str):
     assert matcher.is_terminated()
 
 
-# @pytest.mark.hf_token_required
-# def test_implicit_left_recursion_schema():
-#     model_name = "meta-llama/Llama-3.2-1B-Instruct"
-#     tokenizer = AutoTokenizer.from_pretrained(model_name)
-#     config = AutoConfig.from_pretrained(model_name)
+@pytest.mark.hf_token_required
+def test_implicit_left_recursion_schema():
+    model_name = "meta-llama/Llama-3.2-1B-Instruct"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    config = AutoConfig.from_pretrained(model_name)
 
-#     json_schema = {
-#         "$schema": "http://json-schema.org/draft-04/schema#",
-#         "type": "object",
-#         "properties": {
-#             "url": {
-#                 "type": "string",
-#                 "pattern": "^(https?://)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([/\\w \\.-]*)*/?",
-#             }
-#         },
-#     }
-#     tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=config.vocab_size)
-#     grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-#     _ = grammar_compiler.compile_json_schema(schema=json.dumps(json_schema))
+    json_schema = {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "pattern": "^(https?://)?([\\da-z\\.-]+)\\.([a-z\\.]{2,6})([/\\w \\.-]*)*/?",
+            }
+        },
+    }
+    tokenizer_info = xgr.TokenizerInfo.from_huggingface(tokenizer, vocab_size=config.vocab_size)
+    grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+    _ = grammar_compiler.compile_json_schema(schema=json.dumps(json_schema))
 
 
 @pytest.mark.hf_token_required
