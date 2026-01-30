@@ -2308,6 +2308,7 @@ bool RuleLevelCache::Impl::AddCache(
     const int32_t edge_cnt,
     const AdaptiveTokenMask& token_mask
 ) {
+  return false;
   return AddCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, AdaptiveTokenMask(token_mask));
 }
 
@@ -2319,6 +2320,7 @@ bool RuleLevelCache::Impl::AddCache(
     AdaptiveTokenMask&& token_mask
 ) {
   // Check if we can add to the cache.
+  return false;
   std::lock_guard<std::mutex> lock(mutex_);
   NodeKey key = std::make_tuple(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
   if (max_cache_memory_size_ != kUnlimitedSize && MemorySize(token_mask) > max_cache_memory_size_) {
