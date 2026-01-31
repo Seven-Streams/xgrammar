@@ -771,7 +771,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   std::optional<uint64_t> lookahead_hash = std::nullopt;
   if (rule_level_cache_is_available) {
     lookahead_hash = GrammarFSMHasher::HashSequence(grammar_, lookahead_id);
-    lookahead_hash = std::nullopt;  // (Linzhang): Testing
     fsm_hash = grammar_->per_rule_fsm_hashes[init_rule_id_].value();
     auto get_new_state_id = std::find_if(
         original_to_new_id->begin(),
@@ -780,7 +779,8 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
           return original_new_pair.first == initial_state_.element_id;
         }
     );
-    XGRAMMAR_DCHECK(new_state_id.has_value());
+    XGRAMMAR_DCHECK(get_new_state_id != original_to_new_id->end());
+    new_state_id = get_new_state_id->second;
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
     if (lookahead_hash.has_value()) {
       auto crossing_cache = rule_level_cache_->GetCache(
