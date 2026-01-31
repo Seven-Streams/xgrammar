@@ -851,7 +851,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
           tmp_accepted_by_lookahead_indices_.end(),
           std::back_inserter(accepted_indices_without_lookahead)
       );
-      auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+      // auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
       // rule_level_cache_->AddCache(
       //     fsm_hash_value,
       //     new_state_id_value,
