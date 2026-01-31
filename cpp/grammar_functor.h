@@ -408,7 +408,12 @@ class RuleLevelCache {
  public:
   static const size_t kUnlimitedSize = static_cast<size_t>(-1);
 
-  std::optional<AdaptiveTokenMask> GetCache(const uint64_t& fsm_hash);
+  std::optional<AdaptiveTokenMask> GetCache(
+      const uint64_t& fsm_hash,
+      int32_t fsm_new_node_id,
+      const int32_t& state_cnt,
+      const int32_t edge_cnt
+  );
   bool AddCache(
       const uint64_t& fsm_hash,
       int32_t fsm_new_node_id,
