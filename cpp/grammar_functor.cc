@@ -2248,12 +2248,7 @@ class RuleLevelCache::Impl {
   std::unordered_map<NodeKey, int> cache_;
 };
 
-std::optional<AdaptiveTokenMask> RuleLevelCache::GetCache(
-    const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
-    const int32_t& state_cnt,
-    const int32_t edge_cnt
-) {
+std::optional<AdaptiveTokenMask> RuleLevelCache::GetCache(const uint64_t& fsm_hash) {
   return std::nullopt;  // (Linzhang): Testing
   // return pimpl_->GetCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
 }
