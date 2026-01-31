@@ -97,5 +97,4 @@ jobs:
           PYTHON_GIL: 0
         if: matrix.python == '3.14t'
         run: |
-          python -m pip install pytest-run-parallel
-          pytest -m "not hf_token_required" --parallel-threads=8
+          pytest -m "not hf_token_required"
