@@ -782,7 +782,12 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
     // XGRAMMAR_DCHECK(new_state_id.has_value());
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
     if (lookahead_hash.has_value()) {
-      crossing_cache = rule_level_cache_->GetCache(0, 0, fsm.NumStates(), fsm.GetNumEdges());
+      crossing_cache = rule_level_cache_->GetCache(
+          HashCombine(fsm_hash.value(), lookahead_hash.value(), is_exact_lookahead),
+          0,
+          fsm.NumStates(),
+          fsm.GetNumEdges()
+      );
       if (crossing_cache.has_value()) {
         // A perfect match.
         return crossing_cache.value();
