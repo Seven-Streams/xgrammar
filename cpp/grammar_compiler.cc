@@ -815,66 +815,66 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
         tmp_rejected_indices_,
         tmp_uncertain_indices_
     );
-    if (rule_level_cache_is_available) {
-      // if (lookahead_id == -1 && !is_root_rule) {
-      //   // If the rule doesn't have a lookahead, then it is exactly the same fsm.
-      //   auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
-      //   rule_level_cache_->AddCache(
-      //       fsm_hash_value, new_state_id_value, fsm.NumStates(), fsm.GetNumEdges(), return_value
-      //   );
-      //   return return_value;
-      // }
+    if (false) {
+      if (lookahead_id == -1 && !is_root_rule) {
+        // If the rule doesn't have a lookahead, then it is exactly the same fsm.
+        auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+        rule_level_cache_->AddCache(
+            fsm_hash_value, new_state_id_value, fsm.NumStates(), fsm.GetNumEdges(), return_value
+        );
+        return return_value;
+      }
 
-      // // We can add a cache for basic fsm, and a better one for lookahead.
-      // // All the tokens rejected by lookahead should be uncertain.
-      // IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
-      // IntsetUnion(&tmp_uncertain_indices_, tmp_accepted_by_lookahead_indices_);
-      // std::vector<int32_t> rejected_indices_without_lookahead;
-      // std::vector<int32_t> accepted_indices_without_lookahead;
-      // rejected_indices_without_lookahead.reserve(
-      //     tmp_rejected_indices_.size() - tmp_rejected_by_lookahead_indices_.size()
-      // );
-      // accepted_indices_without_lookahead.reserve(
-      //     tmp_accepted_indices_.size() - tmp_accepted_by_lookahead_indices_.size()
-      // );
-      // std::set_difference(
-      //     tmp_rejected_indices_.begin(),
-      //     tmp_rejected_indices_.end(),
-      //     tmp_rejected_by_lookahead_indices_.begin(),
-      //     tmp_rejected_by_lookahead_indices_.end(),
-      //     std::back_inserter(rejected_indices_without_lookahead)
-      // );
-      // std::set_difference(
-      //     tmp_accepted_indices_.begin(),
-      //     tmp_accepted_indices_.end(),
-      //     tmp_accepted_by_lookahead_indices_.begin(),
-      //     tmp_accepted_by_lookahead_indices_.end(),
-      //     std::back_inserter(accepted_indices_without_lookahead)
-      // );
-      // auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
-      // rule_level_cache_->AddCache(
-      //     fsm_hash_value,
-      //     new_state_id_value,
-      //     fsm.NumStates(),
-      //     fsm.GetNumEdges(),
-      //     AdaptiveTokenMask(
-      //         tokenizer_info_.GetVocabSize(),
-      //         tokenizer_info_.GetSortedDecodedVocab(),
-      //         accepted_indices_without_lookahead,
-      //         rejected_indices_without_lookahead,
-      //         tmp_uncertain_indices_
-      //     )
-      // );
-      // if (lookahead_hash.has_value()) {
-      //   auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
-      //   rule_level_cache_->AddCache(
-      //       HashCombine(fsm_hash_value, lookahead_hash.value(), is_exact_lookahead),
-      //       new_state_id_value,
-      //       fsm.NumStates(),
-      //       fsm.GetNumEdges(),
-      //       return_value
-      //   );
-      // }
+      // We can add a cache for basic fsm, and a better one for lookahead.
+      // All the tokens rejected by lookahead should be uncertain.
+      IntsetUnion(&tmp_uncertain_indices_, tmp_rejected_by_lookahead_indices_);
+      IntsetUnion(&tmp_uncertain_indices_, tmp_accepted_by_lookahead_indices_);
+      std::vector<int32_t> rejected_indices_without_lookahead;
+      std::vector<int32_t> accepted_indices_without_lookahead;
+      rejected_indices_without_lookahead.reserve(
+          tmp_rejected_indices_.size() - tmp_rejected_by_lookahead_indices_.size()
+      );
+      accepted_indices_without_lookahead.reserve(
+          tmp_accepted_indices_.size() - tmp_accepted_by_lookahead_indices_.size()
+      );
+      std::set_difference(
+          tmp_rejected_indices_.begin(),
+          tmp_rejected_indices_.end(),
+          tmp_rejected_by_lookahead_indices_.begin(),
+          tmp_rejected_by_lookahead_indices_.end(),
+          std::back_inserter(rejected_indices_without_lookahead)
+      );
+      std::set_difference(
+          tmp_accepted_indices_.begin(),
+          tmp_accepted_indices_.end(),
+          tmp_accepted_by_lookahead_indices_.begin(),
+          tmp_accepted_by_lookahead_indices_.end(),
+          std::back_inserter(accepted_indices_without_lookahead)
+      );
+      auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+      rule_level_cache_->AddCache(
+          fsm_hash_value,
+          new_state_id_value,
+          fsm.NumStates(),
+          fsm.GetNumEdges(),
+          AdaptiveTokenMask(
+              tokenizer_info_.GetVocabSize(),
+              tokenizer_info_.GetSortedDecodedVocab(),
+              accepted_indices_without_lookahead,
+              rejected_indices_without_lookahead,
+              tmp_uncertain_indices_
+          )
+      );
+      if (lookahead_hash.has_value()) {
+        auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+        rule_level_cache_->AddCache(
+            HashCombine(fsm_hash_value, lookahead_hash.value(), is_exact_lookahead),
+            new_state_id_value,
+            fsm.NumStates(),
+            fsm.GetNumEdges(),
+            return_value
+        );
+      }
     }
     return return_value;
   } else {
