@@ -910,28 +910,28 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
           tmp_accepted_by_lookahead_indices_.end(),
           std::back_inserter(accepted_indices_without_lookahead)
       );
-      rule_level_cache_->AddCache(
-          fsm_hash_value,
-          new_state_id_value,
-          fsm.NumStates(),
-          fsm.GetNumEdges(),
-          AdaptiveTokenMask(
-              tokenizer_info_.GetVocabSize(),
-              tokenizer_info_.GetSortedDecodedVocab(),
-              accepted_indices_without_lookahead,
-              tmp_uncertain_indices_
-          )
-      );
+      // rule_level_cache_->AddCache(
+      //     fsm_hash_value,
+      //     new_state_id_value,
+      //     fsm.NumStates(),
+      //     fsm.GetNumEdges(),
+      //     AdaptiveTokenMask(
+      //         tokenizer_info_.GetVocabSize(),
+      //         tokenizer_info_.GetSortedDecodedVocab(),
+      //         accepted_indices_without_lookahead,
+      //         tmp_uncertain_indices_
+      //     )
+      // );
 
-      if (lookahead_hash.has_value()) {
-        rule_level_cache_->AddCache(
-            HashCombine(fsm_hash_value, lookahead_hash.value(), is_exact_lookahead),
-            new_state_id_value,
-            fsm.NumStates(),
-            fsm.GetNumEdges(),
-            return_value
-        );
-      }
+      // if (lookahead_hash.has_value()) {
+      //   rule_level_cache_->AddCache(
+      //       HashCombine(fsm_hash_value, lookahead_hash.value(), is_exact_lookahead),
+      //       new_state_id_value,
+      //       fsm.NumStates(),
+      //       fsm.GetNumEdges(),
+      //       return_value
+      //   );
+      // }
     }
     return return_value;
   }
