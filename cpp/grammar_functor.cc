@@ -2250,16 +2250,16 @@ class RuleLevelCache::Impl {
 
 std::optional<AdaptiveTokenMask> RuleLevelCache::GetCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt
+    const int32_t& edge_cnt
 ) {
   return std::nullopt;  // (Linzhang): Testing
 }
 
 bool RuleLevelCache::AddCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
     const int32_t edge_cnt,
     const AdaptiveTokenMask& token_mask
@@ -2269,7 +2269,7 @@ bool RuleLevelCache::AddCache(
 
 bool RuleLevelCache::AddCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
     const int32_t edge_cnt,
     AdaptiveTokenMask&& token_mask
