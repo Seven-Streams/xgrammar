@@ -781,7 +781,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
           return original_new_pair.first == initial_state_.element_id;
         }
     );
-    XGRAMMAR_DCHECK(get_new_state_id != original_to_new_id->end());
+    XGRAMMAR_CHECK(get_new_state_id != original_to_new_id->end());
     new_state_id = get_new_state_id->second;
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
     if (lookahead_hash.has_value()) {
