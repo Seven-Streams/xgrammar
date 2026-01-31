@@ -926,7 +926,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
       if (lookahead_hash.has_value()) {
         rule_level_cache_->AddCache(
             HashCombine(fsm_hash.value(), lookahead_hash.value(), is_exact_lookahead),
-            new_state_id.value(),
+            new_state_id_value,
             fsm.NumStates(),
             fsm.GetNumEdges(),
             return_value
