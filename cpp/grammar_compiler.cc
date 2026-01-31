@@ -801,9 +801,9 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
         return crossing_cache.value();
       }
     }
-    // crossing_cache = rule_level_cache_->GetCache(
-    //     fsm_hash.value(), new_state_id.value(), fsm.NumStates(), fsm.GetNumEdges()
-    // );
+    crossing_cache = rule_level_cache_->GetCache(
+        fsm_hash.value(), new_state_id.value(), fsm.NumStates(), fsm.GetNumEdges()
+    );
     // // If the rule doesn't have a lookahead, then it is exactly the same fsm.
     // if (crossing_cache.has_value()) {
     //   AdaptCacheWithLookahead(&crossing_cache.value(), is_root_rule);
