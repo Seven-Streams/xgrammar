@@ -767,8 +767,6 @@ class CompactFSMWithStartEnd : public FSMWithStartEndBase<CompactFSM> {
   size_t GetNumEdges() const;
 
  private:
-  mutable std::optional<size_t> edge_num = std::nullopt;
-
   /*!
    * \brief Print the CompactFSMWithStartEnd.
    * \param os The output stream.
@@ -799,8 +797,7 @@ XGRAMMAR_MEMBER_ARRAY(
     &CompactFSMWithStartEnd::fsm_,
     &CompactFSMWithStartEnd::start_,
     &CompactFSMWithStartEnd::ends_,
-    &CompactFSMWithStartEnd::is_dfa_,
-    &CompactFSMWithStartEnd::edge_num
+    &CompactFSMWithStartEnd::is_dfa_
 );
 
 /****************** FSMWithStartEndBase Template Implementation ******************/
