@@ -766,9 +766,9 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
       rule_level_cache_.has_value() && grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
   const auto& original_to_new_id = grammar_->per_rule_fsm_new_state_ids[init_rule_id_];
   std::optional<uint64_t> fsm_hash = std::nullopt;
-  std::optional<int32_t> new_state_id = std::nullopt;
   int lookahead_id = grammar_->GetRule(initial_state_.rule_id).lookahead_assertion_id;
   bool is_exact_lookahead = grammar_->GetRule(initial_state_.rule_id).is_exact_lookahead;
+  int32_t new_state_id_value = -1;  // To avoid bugs in MSVC.
   std::optional<uint64_t> lookahead_hash = std::nullopt;
   if (rule_level_cache_is_available) {
     lookahead_hash = GrammarFSMHasher::HashSequence(grammar_, lookahead_id);
@@ -781,7 +781,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
         }
     );
     XGRAMMAR_DCHECK(get_new_state_id != original_to_new_id->end());
-    int32_t new_state_id_value = get_new_state_id->second;  // To avoid bugs in MSVC.
+    new_state_id_value = get_new_state_id->second;
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
     if (lookahead_hash.has_value()) {
       auto crossing_cache = rule_level_cache_->GetCache(
