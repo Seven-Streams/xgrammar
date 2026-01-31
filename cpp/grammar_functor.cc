@@ -2254,7 +2254,8 @@ std::optional<AdaptiveTokenMask> RuleLevelCache::GetCache(
     const int32_t& state_cnt,
     const int32_t edge_cnt
 ) {
-  return pimpl_->GetCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
+  return std::nullopt;  // (Linzhang): Testing
+  // return pimpl_->GetCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
 }
 
 bool RuleLevelCache::AddCache(
