@@ -410,22 +410,22 @@ class RuleLevelCache {
 
   std::optional<AdaptiveTokenMask> GetCache(
       const uint64_t& fsm_hash,
-      int32_t fsm_new_node_id,
+      const int32_t& fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt
+      const int32_t& edge_cnt
   );
   bool AddCache(
       const uint64_t& fsm_hash,
-      int32_t fsm_new_node_id,
+      const int32_t& fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt,
+      const int32_t& edge_cnt,
       const AdaptiveTokenMask& token_mask
   );
   bool AddCache(
       const uint64_t& fsm_hash,
-      int32_t fsm_new_node_id,
+      const int32_t& fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt,
+      const int32_t& edge_cnt,
       AdaptiveTokenMask&& token_mask
   );
   RuleLevelCache(size_t max_cache_memory_size = kUnlimitedSize);

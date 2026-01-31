@@ -2212,24 +2212,24 @@ class RuleLevelCache::Impl {
 
   std::optional<AdaptiveTokenMask> GetCache(
       const uint64_t& fsm_hash,
-      int32_t fsm_new_node_id,
+      const int32_t& fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt
+      const int32_t& edge_cnt
   );
 
   bool AddCache(
       const uint64_t& fsm_hash,
-      int32_t fsm_new_node_id,
+      const int32_t& fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt,
+      const int32_t& edge_cnt,
       const AdaptiveTokenMask& token_mask
   );
 
   bool AddCache(
       const uint64_t& fsm_hash,
-      int32_t fsm_new_node_id,
+      const int32_t& fsm_new_node_id,
       const int32_t& state_cnt,
-      const int32_t edge_cnt,
+      const int32_t& edge_cnt,
       AdaptiveTokenMask&& token_mask
   );
 
@@ -2250,18 +2250,18 @@ class RuleLevelCache::Impl {
 
 std::optional<AdaptiveTokenMask> RuleLevelCache::GetCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt
+    const int32_t& edge_cnt
 ) {
   return pimpl_->GetCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
 }
 
 bool RuleLevelCache::AddCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt,
+    const int32_t& edge_cnt,
     const AdaptiveTokenMask& token_mask
 ) {
   return pimpl_->AddCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, token_mask);
@@ -2269,9 +2269,9 @@ bool RuleLevelCache::AddCache(
 
 bool RuleLevelCache::AddCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt,
+    const int32_t& edge_cnt,
     AdaptiveTokenMask&& token_mask
 ) {
   return pimpl_->AddCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, std::move(token_mask));
@@ -2283,9 +2283,9 @@ size_t RuleLevelCache::GetMaxSize() const { return pimpl_->GetMaxSize(); }
 
 std::optional<AdaptiveTokenMask> RuleLevelCache::Impl::GetCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt
+    const int32_t& edge_cnt
 ) {
   // Find in the cache.
   std::lock_guard<std::mutex> lock(mutex_);
@@ -2302,9 +2302,9 @@ std::optional<AdaptiveTokenMask> RuleLevelCache::Impl::GetCache(
 
 bool RuleLevelCache::Impl::AddCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt,
+    const int32_t& edge_cnt,
     const AdaptiveTokenMask& token_mask
 ) {
   return AddCache(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt, AdaptiveTokenMask(token_mask));
@@ -2312,9 +2312,9 @@ bool RuleLevelCache::Impl::AddCache(
 
 bool RuleLevelCache::Impl::AddCache(
     const uint64_t& fsm_hash,
-    int32_t fsm_new_node_id,
+    const int32_t& fsm_new_node_id,
     const int32_t& state_cnt,
-    const int32_t edge_cnt,
+    const int32_t& edge_cnt,
     AdaptiveTokenMask&& token_mask
 ) {
   // Check if we can add to the cache.
