@@ -1542,6 +1542,6 @@ FSMWithStartEnd CompactFSMWithStartEnd::ToFSM() const {
   return FSMWithStartEnd(fsm_.ToFSM(), start_, ends_);
 }
 
-size_t CompactFSMWithStartEnd::GetNumEdges() const { return 0; }
+size_t CompactFSMWithStartEnd::GetNumEdges() const { return edge_num; }
 
 }  // namespace xgrammar

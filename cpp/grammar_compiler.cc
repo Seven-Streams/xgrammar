@@ -764,7 +764,6 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   // Try to get the crossing cache.
   bool rule_level_cache_is_available =
       rule_level_cache_.has_value() && grammar_->per_rule_fsm_hashes[init_rule_id_].has_value();
-  std::optional<AdaptiveTokenMask> crossing_cache = std::nullopt;
   const auto& original_to_new_id = grammar_->per_rule_fsm_new_state_ids[init_rule_id_];
   std::optional<uint64_t> fsm_hash = std::nullopt;
   std::optional<int32_t> new_state_id = std::nullopt;
@@ -785,7 +784,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
     new_state_id = get_new_state_id->second;
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
     if (lookahead_hash.has_value()) {
-      crossing_cache = rule_level_cache_->GetCache(
+      auto crossing_cache = rule_level_cache_->GetCache(
           HashCombine(fsm_hash.value(), lookahead_hash.value(), is_exact_lookahead),
           new_state_id.value(),
           fsm.NumStates(),
@@ -796,7 +795,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
         return crossing_cache.value();
       }
     }
-    crossing_cache = rule_level_cache_->GetCache(
+    auto crossing_cache = rule_level_cache_->GetCache(
         fsm_hash.value(), new_state_id.value(), fsm.NumStates(), fsm.GetNumEdges()
     );
     // If the rule doesn't have a lookahead, then it is exactly the same fsm.

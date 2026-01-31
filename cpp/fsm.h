@@ -747,6 +747,15 @@ class CompactFSMWithStartEnd : public FSMWithStartEndBase<CompactFSM> {
 
   using FSMWithStartEndBase<CompactFSM>::FSMWithStartEndBase;
 
+  CompactFSMWithStartEnd(
+      const CompactFSM& fsm, int start, const std::vector<bool>& ends, bool is_dfa = false
+  )
+      : FSMWithStartEndBase<CompactFSM>(fsm, start, ends, is_dfa) {
+    edge_num = 0;
+    for (int i = 0; i < fsm.NumStates(); i++) {
+      edge_num += fsm.GetEdges(i).size();
+    }
+  }
   /*!
    * \brief Convert the FSMWithStartEnd to a string. Only considers the nodes approachable from the
    * start state.
@@ -767,6 +776,7 @@ class CompactFSMWithStartEnd : public FSMWithStartEndBase<CompactFSM> {
   size_t GetNumEdges() const;
 
  private:
+  size_t edge_num = 0;
   /*!
    * \brief Print the CompactFSMWithStartEnd.
    * \param os The output stream.
@@ -797,7 +807,8 @@ XGRAMMAR_MEMBER_ARRAY(
     &CompactFSMWithStartEnd::fsm_,
     &CompactFSMWithStartEnd::start_,
     &CompactFSMWithStartEnd::ends_,
-    &CompactFSMWithStartEnd::is_dfa_
+    &CompactFSMWithStartEnd::is_dfa_,
+    &CompactFSMWithStartEnd::edge_num
 );
 
 /****************** FSMWithStartEndBase Template Implementation ******************/
