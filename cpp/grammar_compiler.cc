@@ -780,7 +780,13 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
       }
     }
     if (new_state_id == -1) {
-      XGRAMMAR_LOG(INFO) << "NEW STATE ID IS -1!!!";
+      XGRAMMAR_LOG(INFO) << "NEW STATE ID IS -1!!!" << "\n"
+                         << original_to_new_id.size() << "\n"
+                         << initial_state_.element_id;
+      for (const auto& original_new_pair : original_to_new_id) {
+        XGRAMMAR_LOG(INFO) << "original_new_pair.first: " << original_new_pair.first << "\n"
+                           << "original_new_pair.second: " << original_new_pair.second;
+      }
     }
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
     if (lookahead_hash.has_value()) {
