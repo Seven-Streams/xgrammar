@@ -779,7 +779,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
         break;
       }
     }
-    if (new_state_id != -1) {
+    if (new_state_id == -1) {
       XGRAMMAR_LOG(FATAL) << "new_state_id is -1";
     }
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
