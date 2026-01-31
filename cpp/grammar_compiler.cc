@@ -770,7 +770,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
   int lookahead_id = grammar_->GetRule(initial_state_.rule_id).lookahead_assertion_id;
   bool is_exact_lookahead = grammar_->GetRule(initial_state_.rule_id).is_exact_lookahead;
   std::optional<uint64_t> lookahead_hash = std::nullopt;
-  if (rule_level_cache_is_available) {
+  if (false) {
     lookahead_hash = GrammarFSMHasher::HashSequence(grammar_, lookahead_id);
     fsm_hash = grammar_->per_rule_fsm_hashes[init_rule_id_].value();
     auto get_new_state_id = std::find_if(
@@ -816,7 +816,7 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
         tmp_rejected_indices_,
         tmp_uncertain_indices_
     );
-    if (rule_level_cache_is_available) {
+    if (false) {
       if (lookahead_id == -1 && !is_root_rule) {
         // If the rule doesn't have a lookahead, then it is exactly the same fsm.
         auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
