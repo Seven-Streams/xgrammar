@@ -92,9 +92,6 @@ jobs:
         run: |
           pytest -m "not hf_token_required"
 
-      - name: Run tests under pytest-run-parallel
-        env:
-          PYTHON_GIL: 0
-        if: matrix.python == '3.14t'
+      - name: Run tests
         run: |
-          pytest -m "not hf_token_required"
+          pytest

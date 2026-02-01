@@ -2070,8 +2070,8 @@ uint64_t GrammarFSMHasherImpl::HashFsm(int fsm_index) {
 
   // Perform a bfs to hash all the edges.
   while (!bfs_queue.empty()) {
-    const int& current_old_state_id = std::move(bfs_queue.front());
-    const int& current_new_state_id = original_state_id_to_new_id[current_old_state_id];
+    int current_old_state_id = bfs_queue.front();
+    int current_new_state_id = original_state_id_to_new_id[current_old_state_id];
     bfs_queue.pop();
 
     // Check if the current state is an end state.

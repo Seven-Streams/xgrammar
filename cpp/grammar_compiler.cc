@@ -780,13 +780,10 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
       }
     }
     if (new_state_id == -1) {
-      XGRAMMAR_LOG(INFO) << "NEW STATE ID IS -1!!!" << "\n"
-                         << original_to_new_id.size() << "\n"
-                         << initial_state_.element_id;
-      for (const auto& original_new_pair : original_to_new_id) {
-        XGRAMMAR_LOG(INFO) << "original_new_pair.first: " << original_new_pair.first << "\n"
-                           << "original_new_pair.second: " << original_new_pair.second;
-      }
+      XGRAMMAR_LOG(FATAL) << "NEW STATE ID IS -1!!!" << "\n"
+                          << original_to_new_id.size() << "\n"
+                          << "rule_id: " << init_rule_id_ << "\n"
+                          << "element_id: " << initial_state_.element_id << "\n";
     }
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
     if (lookahead_hash.has_value()) {
@@ -1008,6 +1005,11 @@ CompiledGrammar GrammarCompilerSub::MultiThreadCompileGrammar(Grammar grammar_un
   auto compiled_grammar_impl = std::make_shared<CompiledGrammar::Impl>();
 
   compiled_grammar_impl->grammar = GrammarOptimizer::Apply(grammar_unoptimized);
+  for (const auto& fsm : compiled_grammar_impl->grammar->per_rule_fsms) {
+    if (fsm.has_value()) {
+      XGRAMMAR_LOG(INFO) << fsm->ToString();
+    }
+  }
   compiled_grammar_impl->tokenizer_info = tokenizer_info_;
   if (tokenizer_info_.GetVocabSize() == 0) {
     return CompiledGrammar(compiled_grammar_impl);
