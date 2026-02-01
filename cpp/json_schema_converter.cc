@@ -92,8 +92,15 @@ class SchemaParser {
 
 std::string SchemaParser::ComputeCacheKey(const picojson::value& schema) {
   static const std::unordered_set<std::string> kSkippedKeys = {
-      "title", "default", "description", "examples", "deprecated", "readOnly", "writeOnly",
-      "$comment", "$schema",
+      "title",
+      "default",
+      "description",
+      "examples",
+      "deprecated",
+      "readOnly",
+      "writeOnly",
+      "$comment",
+      "$schema",
   };
 
   if (schema.is<picojson::object>()) {
@@ -270,8 +277,8 @@ Result<IntegerSpec, SchemaError> SchemaParser::ParseInteger(const picojson::obje
   WarnUnsupportedKeywords(schema, {"multipleOf"});
   IntegerSpec spec;
 
-  auto checkAndConvertIntegerBound =
-      [](const picojson::value& value) -> Result<int64_t, SchemaError> {
+  auto checkAndConvertIntegerBound = [](const picojson::value& value
+                                     ) -> Result<int64_t, SchemaError> {
     if (!value.is<int64_t>() && !value.is<double>()) {
       return ResultErr<SchemaError>(SchemaErrorType::kInvalidSchema, "Value must be a number");
     }
@@ -1791,7 +1798,9 @@ std::string JSONSchemaConverter::GenerateRef(const RefSpec& spec, const std::str
     }
     return CreateRule(spec.resolved, rule_name);
   }
-  return GetBasicAnyRuleName();
+
+  // TODO(Linzhang):Otherwise, we need to resolve the reference.
+  XGRAMMAR_LOG(FATAL) << "Ref spec is not resolved: " << spec.uri;
 }
 
 std::string JSONSchemaConverter::GenerateAnyOf(
