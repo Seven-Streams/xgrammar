@@ -52,7 +52,9 @@ class SchemaParser {
       : config_(config), root_schema_(root_schema) {}
 
   Result<SchemaSpecPtr, SchemaError> Parse(
-      const picojson::value& schema, const std::string& rule_name_hint = "root"
+      const picojson::value& schema,
+      const std::string& rule_name_hint = "root",
+      std::optional<std::string> default_type = std::nullopt
   );
 
   const picojson::value& GetRootSchema() const { return root_schema_; }
@@ -152,7 +154,9 @@ void SchemaParser::WarnUnsupportedKeywords(
 }
 
 Result<SchemaSpecPtr, SchemaError> SchemaParser::Parse(
-    const picojson::value& schema, const std::string& rule_name_hint
+    const picojson::value& schema,
+    const std::string& rule_name_hint,
+    std::optional<std::string> default_type
 ) {
   std::string cache_key = ComputeCacheKey(schema);
   if (schema_cache_.count(cache_key)) {
@@ -211,16 +215,17 @@ Result<SchemaSpecPtr, SchemaError> SchemaParser::Parse(
     auto allof_result = ParseAllOf(schema_obj);
     if (allof_result.IsErr()) return ResultErr(std::move(allof_result).UnwrapErr());
     result = SchemaSpec::Make(std::move(allof_result).Unwrap(), cache_key, rule_name_hint);
-  } else if (schema_obj.count("type")) {
-    if (schema_obj.at("type").is<picojson::array>()) {
+  } else if (schema_obj.count("type") || default_type.has_value()) {
+    if (schema_obj.count("type") && schema_obj.at("type").is<picojson::array>()) {
       auto type_array_result = ParseTypeArray(schema_obj, rule_name_hint);
       if (type_array_result.IsErr()) return ResultErr(std::move(type_array_result).UnwrapErr());
       result = SchemaSpec::Make(std::move(type_array_result).Unwrap(), cache_key, rule_name_hint);
     } else {
-      if (!schema_obj.at("type").is<std::string>()) {
+      if (schema_obj.count("type") && !schema_obj.at("type").is<std::string>()) {
         return ResultErr<SchemaError>(SchemaErrorType::kInvalidSchema, "Type should be a string");
       }
-      const std::string& type = schema_obj.at("type").get<std::string>();
+      const std::string& type = schema_obj.count("type") ? schema_obj.at("type").get<std::string>()
+                                                         : default_type.value();
       if (type == "integer") {
         auto int_result = ParseInteger(schema_obj);
         if (int_result.IsErr()) return ResultErr(std::move(int_result).UnwrapErr());
@@ -584,7 +589,7 @@ Result<ObjectSpec, SchemaError> SchemaParser::ParseObject(const picojson::object
           SchemaErrorType::kInvalidSchema, "propertyNames must be an object"
       );
     }
-    auto prop_names_result = Parse(schema.at("propertyNames"), "property_name");
+    auto prop_names_result = Parse(schema.at("propertyNames"), "property_name", "string");
     if (prop_names_result.IsErr()) return ResultErr(std::move(prop_names_result).UnwrapErr());
     spec.property_names = std::move(prop_names_result).Unwrap();
   }
