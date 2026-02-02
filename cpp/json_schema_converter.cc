@@ -1581,11 +1581,12 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     }
 
     res = first_sep + " (" + res + ") " + last_sep;
-  } else {
-    // Case 2 & 3: With constraints - simplified implementation
-    // For complex cases, we fall back to a simpler approach
-    std::vector<std::string> rule_names(properties.size(), "");
-    std::vector<uint8_t> is_required(properties.size(), false);
+  } else if (max_properties == -1) {
+    // Case 2: With constraint on the lower bound of the properties number
+    const int properties_size = static_cast<int>(properties.size());
+    std::vector<std::vector<std::string>> rule_names(properties_size, std::vector<std::string>());
+    std::vector<int> key_matched_min(properties_size, 0);
+    std::vector<uint8_t> is_required(properties_size, false);
     bool allow_additional = additional != nullptr;
 
     std::string additional_prop_pattern;
@@ -1596,60 +1597,224 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
       );
     }
 
-    // Mark required properties
-    for (size_t i = 0; i < properties.size(); ++i) {
+    // Get the range of matched properties for each rule
+    bool get_first_required = required.count(properties[0].name);
+    key_matched_min[0] = 1;
+    for (int i = 1; i < properties_size; ++i) {
       if (required.count(properties[i].name)) {
         is_required[i] = true;
-      }
-    }
-
-    // Build rules from back to front
-    if (allow_additional) {
-      std::string last_rule_body = GetPropertyWithNumberConstraints(
-          mid_sep + " " + additional_prop_pattern,
-          min_properties,
-          max_properties,
-          static_cast<int>(properties.size())
-      );
-      std::string last_rule_name =
-          rule_name + "_part_" + std::to_string(static_cast<int>(properties.size()) - 1);
-      last_rule_name = ebnf_script_creator_.AddRule(last_rule_name, last_rule_body);
-      rule_names.back() = last_rule_name;
-    } else {
-      rule_names.back() = "\"\"";
-    }
-
-    for (int i = static_cast<int>(properties.size()) - 2; i >= 0; --i) {
-      const std::string& prop_pattern = prop_patterns[i + 1];
-      const std::string& next_rule_name = rule_names[i + 1];
-      std::string cur_rule_body;
-      if (is_required[i + 1]) {
-        cur_rule_body = mid_sep + " " + prop_pattern + " " + next_rule_name;
+        key_matched_min[i] = key_matched_min[i - 1] + 1;
       } else {
-        cur_rule_body =
-            next_rule_name + " | " + mid_sep + " " + prop_pattern + " " + next_rule_name;
+        key_matched_min[i] = key_matched_min[i - 1];
       }
-      std::string cur_rule_name = rule_name + "_part_" + std::to_string(i);
-      cur_rule_name = ebnf_script_creator_.AddRule(cur_rule_name, cur_rule_body);
-      rule_names[i] = cur_rule_name;
+      if (!get_first_required) {
+        key_matched_min[i] = 1;
+      }
+      if (is_required[i]) {
+        get_first_required = true;
+      }
+    }
+    if (required.count(properties[0].name)) {
+      is_required[0] = true;
+    }
+    if (allow_additional) {
+      key_matched_min.back() = std::max(1, key_matched_min.back());
+    } else {
+      key_matched_min.back() = std::max(min_properties, key_matched_min.back());
+    }
+    for (int i = properties_size - 2; i >= 0; --i) {
+      key_matched_min[i] = std::max(key_matched_min[i], key_matched_min[i + 1] - 1);
+    }
+
+    // Construct the last rule
+    if (allow_additional) {
+      for (int matched = key_matched_min.back(); matched <= properties_size; ++matched) {
+        std::string last_rule_body = GetPropertyWithNumberConstraints(
+            mid_sep + " " + additional_prop_pattern, min_properties, max_properties, matched
+        );
+        std::string last_rule_name = rule_name + "_part_" + std::to_string(properties_size - 1) +
+                                     "_" + std::to_string(matched);
+        last_rule_name = ebnf_script_creator_.AddRule(last_rule_name, last_rule_body);
+        rule_names.back().push_back(last_rule_name);
+      }
+    } else {
+      for (int matched = key_matched_min.back(); matched <= properties_size; ++matched) {
+        rule_names.back().push_back("\"\"");
+      }
+    }
+
+    // Construct 0~(len(properties) - 2) rules
+    for (int i = properties_size - 2; i >= 0; --i) {
+      const std::string& prop_pattern = prop_patterns[i + 1];
+      for (int matched = key_matched_min[i]; matched <= i + 1; ++matched) {
+        std::string cur_rule_body;
+        if (is_required[i + 1] || matched == key_matched_min[i + 1] - 1) {
+          cur_rule_body = mid_sep + " " + prop_pattern + " " +
+                          rule_names[i + 1][matched + 1 - key_matched_min[i + 1]];
+        } else {
+          cur_rule_body = rule_names[i + 1][matched - key_matched_min[i + 1]] + " | " + mid_sep +
+                          " " + prop_pattern + " " +
+                          rule_names[i + 1][matched - key_matched_min[i + 1] + 1];
+        }
+        std::string cur_rule_name =
+            rule_name + "_part_" + std::to_string(i) + "_" + std::to_string(matched);
+        cur_rule_name = ebnf_script_creator_.AddRule(cur_rule_name, cur_rule_body);
+        rule_names[i].push_back(cur_rule_name);
+      }
     }
 
     // Construct root rule
-    for (size_t i = 0; i < properties.size(); ++i) {
-      if (i != 0) {
-        res += " | ";
+    bool is_first = true;
+    for (int i = 0; i < properties_size; ++i) {
+      if (key_matched_min[i] > 1) {
+        break;
       }
-      res += "(" + prop_patterns[i] + " " + rule_names[i] + ")";
+      if (!is_first) {
+        res += " | ";
+      } else {
+        is_first = false;
+      }
+      res += "(" + prop_patterns[i] + " " + rule_names[i][1 - key_matched_min[i]] + ")";
       if (is_required[i]) {
         break;
       }
     }
 
     if (allow_additional && required.empty()) {
-      res += " | " + additional_prop_pattern + " " +
+      if (!is_first) {
+        res += " | ";
+      }
+      res += "(" + additional_prop_pattern + " " +
              GetPropertyWithNumberConstraints(
                  mid_sep + " " + additional_prop_pattern, min_properties, max_properties, 1
-             );
+             ) +
+             ")";
+    }
+
+    res = first_sep + " (" + res + ") " + last_sep;
+  } else {
+    // Case 3: With constraints on both lower & upper bound of the properties number
+    const int properties_size = static_cast<int>(properties.size());
+    std::vector<std::vector<std::string>> rule_names(properties_size, std::vector<std::string>());
+    std::vector<int> key_matched_min(properties_size, 0);
+    std::vector<int> key_matched_max(properties_size, properties_size);
+    std::vector<uint8_t> is_required(properties_size, false);
+    bool allow_additional = additional != nullptr;
+
+    std::string additional_prop_pattern;
+    if (allow_additional) {
+      std::string add_value_rule = CreateRule(additional, rule_name + "_" + additional_suffix);
+      additional_prop_pattern = FormatOtherProperty(
+          GetBasicStringRuleName(), add_value_rule, rule_name, additional_suffix
+      );
+    }
+
+    // Get the range of matched properties for each rule
+    bool get_first_required = required.count(properties[0].name);
+    key_matched_min[0] = 1;
+    key_matched_max[0] = 1;
+    for (int i = 1; i < properties_size; ++i) {
+      if (required.count(properties[i].name)) {
+        is_required[i] = true;
+        key_matched_min[i] = key_matched_min[i - 1] + 1;
+      } else {
+        key_matched_min[i] = key_matched_min[i - 1];
+      }
+      if (!get_first_required) {
+        key_matched_min[i] = 1;
+      }
+      key_matched_max[i] = key_matched_max[i - 1] + 1;
+      if (is_required[i]) {
+        get_first_required = true;
+      }
+    }
+    if (required.count(properties[0].name)) {
+      is_required[0] = true;
+    }
+    if (allow_additional) {
+      key_matched_min.back() = std::max(1, key_matched_min.back());
+      key_matched_max.back() = std::min(max_properties, key_matched_max.back());
+    } else {
+      key_matched_min.back() = std::max(min_properties, key_matched_min.back());
+      key_matched_max.back() = std::min(max_properties, key_matched_max.back());
+    }
+    for (int i = properties_size - 2; i >= 0; --i) {
+      key_matched_min[i] = std::max(key_matched_min[i], key_matched_min[i + 1] - 1);
+      if (is_required[i + 1]) {
+        key_matched_max[i] = std::min(key_matched_max[i], key_matched_max[i + 1] - 1);
+      } else {
+        key_matched_max[i] = std::min(key_matched_max[i], key_matched_max[i + 1]);
+      }
+    }
+
+    // Construct the last rule
+    if (allow_additional) {
+      for (int matched = key_matched_min.back(); matched <= key_matched_max.back(); ++matched) {
+        std::string last_rule_body = GetPropertyWithNumberConstraints(
+            mid_sep + " " + additional_prop_pattern, min_properties, max_properties, matched
+        );
+        std::string last_rule_name = rule_name + "_part_" + std::to_string(properties_size - 1) +
+                                     "_" + std::to_string(matched);
+        last_rule_name = ebnf_script_creator_.AddRule(last_rule_name, last_rule_body);
+        rule_names.back().push_back(last_rule_name);
+      }
+    } else {
+      for (int matched = key_matched_min.back(); matched <= key_matched_max.back(); ++matched) {
+        rule_names.back().push_back("\"\"");
+      }
+    }
+
+    // Construct 0~(len(properties) - 2) rules
+    for (int i = properties_size - 2; i >= 0; --i) {
+      const std::string& prop_pattern = prop_patterns[i + 1];
+      for (int matched = key_matched_min[i]; matched <= key_matched_max[i]; ++matched) {
+        std::string cur_rule_body;
+        if (matched == key_matched_max[i + 1]) {
+          cur_rule_body = rule_names[i + 1][matched - key_matched_min[i + 1]];
+        } else if (is_required[i + 1] || matched == key_matched_min[i + 1] - 1) {
+          cur_rule_body = mid_sep + " " + prop_pattern + " " +
+                          rule_names[i + 1][matched + 1 - key_matched_min[i + 1]];
+        } else {
+          cur_rule_body = rule_names[i + 1][matched - key_matched_min[i + 1]] + " | " + mid_sep +
+                          " " + prop_pattern + " " +
+                          rule_names[i + 1][matched - key_matched_min[i + 1] + 1];
+        }
+        std::string cur_rule_name =
+            rule_name + "_part_" + std::to_string(i) + "_" + std::to_string(matched);
+        cur_rule_name = ebnf_script_creator_.AddRule(cur_rule_name, cur_rule_body);
+        rule_names[i].push_back(cur_rule_name);
+      }
+    }
+
+    // Construct root rule
+    bool is_first = true;
+    for (int i = 0; i < properties_size; ++i) {
+      if (key_matched_max[i] < key_matched_min[i]) {
+        continue;
+      }
+      if (key_matched_min[i] > 1) {
+        break;
+      }
+      if (!is_first) {
+        res += " | ";
+      } else {
+        is_first = false;
+      }
+      res += "(" + prop_patterns[i] + " " + rule_names[i][1 - key_matched_min[i]] + ")";
+      if (is_required[i]) {
+        break;
+      }
+    }
+
+    if (allow_additional && required.empty()) {
+      if (!is_first) {
+        res += " | ";
+      }
+      res += "(" + additional_prop_pattern + " " +
+             GetPropertyWithNumberConstraints(
+                 mid_sep + " " + additional_prop_pattern, min_properties, max_properties, 1
+             ) +
+             ")";
     }
 
     res = first_sep + " (" + res + ") " + last_sep;
