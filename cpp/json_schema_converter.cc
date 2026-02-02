@@ -28,6 +28,109 @@
 
 namespace xgrammar {
 
+// ==================== Spec ToString implementations ====================
+
+std::string IntegerSpec::ToString() const {
+  return "IntegerSpec{minimum=" + (minimum.has_value() ? std::to_string(*minimum) : "null") +
+         ", maximum=" + (maximum.has_value() ? std::to_string(*maximum) : "null") +
+         ", exclusive_minimum=" +
+         (exclusive_minimum.has_value() ? std::to_string(*exclusive_minimum) : "null") +
+         ", exclusive_maximum=" +
+         (exclusive_maximum.has_value() ? std::to_string(*exclusive_maximum) : "null") + "}";
+}
+
+std::string NumberSpec::ToString() const {
+  return "NumberSpec{minimum=" + (minimum.has_value() ? std::to_string(*minimum) : "null") +
+         ", maximum=" + (maximum.has_value() ? std::to_string(*maximum) : "null") +
+         ", exclusive_minimum=" +
+         (exclusive_minimum.has_value() ? std::to_string(*exclusive_minimum) : "null") +
+         ", exclusive_maximum=" +
+         (exclusive_maximum.has_value() ? std::to_string(*exclusive_maximum) : "null") + "}";
+}
+
+std::string StringSpec::ToString() const {
+  return "StringSpec{pattern=" + (pattern.has_value() ? "\"" + *pattern + "\"" : "null") +
+         ", format=" + (format.has_value() ? "\"" + *format + "\"" : "null") +
+         ", min_length=" + std::to_string(min_length) +
+         ", max_length=" + std::to_string(max_length) + "}";
+}
+
+std::string BooleanSpec::ToString() const { return "BooleanSpec{}"; }
+
+std::string NullSpec::ToString() const { return "NullSpec{}"; }
+
+std::string AnySpec::ToString() const { return "AnySpec{}"; }
+
+std::string ArraySpec::ToString() const {
+  return "ArraySpec{prefix_items.size()=" + std::to_string(prefix_items.size()) +
+         ", allow_additional_items=" + (allow_additional_items ? "true" : "false") +
+         ", additional_items=" + (additional_items ? "SchemaSpec" : "null") +
+         ", min_items=" + std::to_string(min_items) + ", max_items=" + std::to_string(max_items) +
+         "}";
+}
+
+std::string ObjectSpec::ToString() const {
+  std::string s =
+      "ObjectSpec{properties.size()=" + std::to_string(properties.size()) + ", properties=[";
+  for (size_t i = 0; i < properties.size(); ++i) {
+    if (i != 0) s += ", ";
+    s += properties[i].name;
+  }
+  s += "], pattern_properties.size()=" + std::to_string(pattern_properties.size()) + ", required=[";
+  bool first = true;
+  for (const auto& r : required) {
+    if (!first) s += ", ";
+    s += r;
+    first = false;
+  }
+  s +=
+      std::string("], allow_additional_properties=") +
+      (allow_additional_properties ? "true" : "false") +
+      ", additional_properties_schema=" + (additional_properties_schema ? "SchemaSpec" : "null") +
+      ", allow_unevaluated_properties=" + (allow_unevaluated_properties ? "true" : "false") +
+      ", unevaluated_properties_schema=" + (unevaluated_properties_schema ? "SchemaSpec" : "null") +
+      ", property_names=" + (property_names ? "SchemaSpec" : "null") +
+      ", min_properties=" + std::to_string(min_properties) +
+      ", max_properties=" + std::to_string(max_properties) + "}";
+  return s;
+}
+
+std::string ConstSpec::ToString() const { return "ConstSpec{json_value=\"" + json_value + "\"}"; }
+
+std::string EnumSpec::ToString() const {
+  std::string s =
+      "EnumSpec{json_values.size()=" + std::to_string(json_values.size()) + ", json_values=[";
+  for (size_t i = 0; i < json_values.size(); ++i) {
+    if (i != 0) s += ", ";
+    s += "\"" + json_values[i] + "\"";
+  }
+  s += "]}";
+  return s;
+}
+
+std::string RefSpec::ToString() const {
+  return "RefSpec{uri=\"" + uri + "\", resolved=" + (resolved ? "SchemaSpec" : "null") + "}";
+}
+
+std::string AnyOfSpec::ToString() const {
+  return "AnyOfSpec{options.size()=" + std::to_string(options.size()) + "}";
+}
+
+std::string AllOfSpec::ToString() const {
+  return "AllOfSpec{schemas.size()=" + std::to_string(schemas.size()) + "}";
+}
+
+std::string TypeArraySpec::ToString() const {
+  return "TypeArraySpec{type_schemas.size()=" + std::to_string(type_schemas.size()) + "}";
+}
+
+std::string SchemaSpec::ToString() const {
+  std::string spec_str;
+  std::visit([&spec_str](const auto& s) { spec_str = s.ToString(); }, spec);
+  return "SchemaSpec{spec=" + spec_str + ", cache_key=\"" + cache_key + "\", rule_name_hint=\"" +
+         rule_name_hint + "\"}";
+}
+
 // ==================== SchemaParser (Internal) ====================
 
 namespace {
