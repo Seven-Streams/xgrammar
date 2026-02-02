@@ -9,6 +9,7 @@
 
 #include <picojson.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -121,7 +122,6 @@ struct EnumSpec {
 
 struct RefSpec {
   std::string uri;
-  SchemaSpecPtr resolved;  // resolved reference
 
   std::string ToString() const;
 };
@@ -227,11 +227,15 @@ class IndentManager {
  */
 class JSONSchemaConverter {
  public:
+  using RefResolver =
+      std::function<SchemaSpecPtr(const std::string& uri, const std::string& rule_name_hint)>;
+
   JSONSchemaConverter(
       std::optional<int> indent,
       std::optional<std::pair<std::string, std::string>> separators,
       bool any_whitespace,
-      std::optional<int> max_whitespace_cnt
+      std::optional<int> max_whitespace_cnt,
+      RefResolver ref_resolver = nullptr
   );
 
   virtual ~JSONSchemaConverter() = default;
@@ -350,7 +354,8 @@ class JSONSchemaConverter {
 
   std::unordered_map<std::string, std::string> rule_cache_;
   std::unordered_map<std::string, std::string>
-      uri_to_rule_name_;  // For circular reference handling
+      uri_to_rule_name_;      // For circular reference handling
+  RefResolver ref_resolver_;  // Resolves $ref URI to SchemaSpecPtr at generate time
 
   // For string spec deduplication
   struct StringSpecKey {

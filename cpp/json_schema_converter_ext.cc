@@ -6,7 +6,6 @@
 #include "json_schema_converter_ext.h"
 
 #include "regex_converter.h"
-#include "support/logging.h"
 
 namespace xgrammar {
 
@@ -19,9 +18,10 @@ XMLToolCallingConverter::XMLToolCallingConverter(
     std::optional<int> indent,
     std::optional<std::pair<std::string, std::string>> separators,
     bool any_whitespace,
-    std::optional<int> max_whitespace_cnt
+    std::optional<int> max_whitespace_cnt,
+    RefResolver ref_resolver
 )
-    : JSONSchemaConverter(indent, separators, any_whitespace, max_whitespace_cnt),
+    : JSONSchemaConverter(indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver),
       is_root_object_(true) {}
 
 std::string XMLToolCallingConverter::Convert(const SchemaSpecPtr& spec) {

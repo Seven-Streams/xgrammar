@@ -108,9 +108,7 @@ std::string EnumSpec::ToString() const {
   return s;
 }
 
-std::string RefSpec::ToString() const {
-  return "RefSpec{uri=\"" + uri + "\", resolved=" + (resolved ? "SchemaSpec" : "null") + "}";
-}
+std::string RefSpec::ToString() const { return "RefSpec{uri=\"" + uri + "\"}"; }
 
 std::string AnyOfSpec::ToString() const {
   return "AnyOfSpec{options.size()=" + std::to_string(options.size()) + "}";
@@ -163,6 +161,10 @@ class SchemaParser {
   const picojson::value& GetRootSchema() const { return root_schema_; }
   bool IsStrictMode() const { return config_.strict_mode; }
 
+  Result<SchemaSpecPtr, SchemaError> ResolveRef(
+      const std::string& uri, const std::string& rule_name_hint
+  );
+
  private:
   Result<IntegerSpec, SchemaError> ParseInteger(const picojson::object& schema);
   Result<NumberSpec, SchemaError> ParseNumber(const picojson::object& schema);
@@ -181,9 +183,6 @@ class SchemaParser {
   );
 
   std::string ComputeCacheKey(const picojson::value& schema);
-  Result<SchemaSpecPtr, SchemaError> ResolveRef(
-      const std::string& uri, const std::string& rule_name_hint
-  );
 
   static void WarnUnsupportedKeywords(
       const picojson::object& schema, const std::vector<std::string>& keywords, bool verbose = false
@@ -298,9 +297,6 @@ Result<SchemaSpecPtr, SchemaError> SchemaParser::Parse(
     auto ref_result = ParseRef(schema_obj);
     if (ref_result.IsErr()) return ResultErr(std::move(ref_result).UnwrapErr());
     auto ref_spec = std::move(ref_result).Unwrap();
-    auto resolved = ResolveRef(ref_spec.uri, rule_name_hint);
-    if (resolved.IsErr()) return ResultErr(std::move(resolved).UnwrapErr());
-    ref_spec.resolved = std::move(resolved).Unwrap();
     result = SchemaSpec::Make(std::move(ref_spec), cache_key, rule_name_hint);
   } else if (schema_obj.count("const")) {
     auto const_result = ParseConst(schema_obj);
@@ -1058,7 +1054,8 @@ JSONSchemaConverter::JSONSchemaConverter(
     std::optional<int> indent,
     std::optional<std::pair<std::string, std::string>> separators,
     bool any_whitespace,
-    std::optional<int> max_whitespace_cnt
+    std::optional<int> max_whitespace_cnt,
+    RefResolver ref_resolver
 )
     : indent_manager_(
           indent,
@@ -1068,7 +1065,8 @@ JSONSchemaConverter::JSONSchemaConverter(
           max_whitespace_cnt
       ),
       any_whitespace_(any_whitespace),
-      max_whitespace_cnt_(max_whitespace_cnt) {
+      max_whitespace_cnt_(max_whitespace_cnt),
+      ref_resolver_(std::move(ref_resolver)) {
   std::string colon_sep =
       separators.has_value() ? separators->second : (any_whitespace ? ":" : ": ");
   if (any_whitespace) {
@@ -2059,21 +2057,52 @@ std::string JSONSchemaConverter::GenerateEnum(const EnumSpec& spec, const std::s
 }
 
 std::string JSONSchemaConverter::GenerateRef(const RefSpec& spec, const std::string& rule_name) {
-  // Check if we have a direct URI mapping (for circular references)
+  // First check if we have a direct URI mapping (for circular references)
   if (uri_to_rule_name_.count(spec.uri)) {
     return uri_to_rule_name_[spec.uri];
   }
 
-  if (spec.resolved) {
-    // Check if the resolved spec's rule is already cached
-    if (!spec.resolved->cache_key.empty() && rule_cache_.count(spec.resolved->cache_key)) {
-      return rule_cache_[spec.resolved->cache_key];
-    }
-    return CreateRule(spec.resolved, rule_name);
+  if (!ref_resolver_) {
+    XGRAMMAR_LOG(FATAL) << "Ref resolver not set; cannot resolve $ref: " << spec.uri;
   }
 
-  // TODO(Linzhang):Otherwise, we need to resolve the reference.
-  XGRAMMAR_LOG(FATAL) << "Ref spec is not resolved: " << spec.uri;
+  // Derive rule name from URI path (like original URIToRule) so that the same
+  // $ref always gets the same rule name, and allocate before resolving to prevent
+  // dead recursion when the ref target contains a ref back.
+  std::string rule_name_hint = "ref";
+  if (spec.uri.size() >= 2 && spec.uri[0] == '#' && spec.uri[1] == '/') {
+    std::string new_rule_name_prefix;
+    std::stringstream ss(spec.uri.substr(2));
+    std::string part;
+    while (std::getline(ss, part, '/')) {
+      if (!part.empty()) {
+        if (!new_rule_name_prefix.empty()) {
+          new_rule_name_prefix += "_";
+        }
+        for (char c : part) {
+          if (std::isalpha(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == '.') {
+            new_rule_name_prefix += c;
+          }
+        }
+      }
+    }
+    if (!new_rule_name_prefix.empty()) {
+      rule_name_hint = std::move(new_rule_name_prefix);
+    }
+  }
+
+  std::string allocated_rule_name = ebnf_script_creator_.AllocateRuleName(rule_name_hint);
+  uri_to_rule_name_[spec.uri] = allocated_rule_name;
+
+  SchemaSpecPtr resolved = ref_resolver_(spec.uri, allocated_rule_name);
+  std::string rule_body = GenerateFromSpec(resolved, allocated_rule_name);
+  ebnf_script_creator_.AddRuleWithAllocatedName(allocated_rule_name, rule_body);
+
+  if (!resolved->cache_key.empty()) {
+    rule_cache_[resolved->cache_key] = allocated_rule_name;
+  }
+
+  return allocated_rule_name;
 }
 
 std::string JSONSchemaConverter::GenerateAnyOf(
@@ -2828,13 +2857,25 @@ std::string JSONSchemaToEBNF(
   }
   auto spec = std::move(spec_result).Unwrap();
 
+  auto ref_resolver = [&parser](const std::string& uri, const std::string& rule_name_hint) {
+    auto r = parser.ResolveRef(uri, rule_name_hint);
+    if (r.IsErr()) {
+      XGRAMMAR_LOG(FATAL) << std::move(r).UnwrapErr().what();
+    }
+    return std::move(r).Unwrap();
+  };
+
   // Create converter based on format
   if (json_format == JSONFormat::kXML) {
-    XMLToolCallingConverter converter(indent, separators, any_whitespace, max_whitespace_cnt);
+    XMLToolCallingConverter converter(
+        indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver
+    );
     return converter.Convert(spec);
   }
 
-  JSONSchemaConverter converter(indent, separators, any_whitespace, max_whitespace_cnt);
+  JSONSchemaConverter converter(
+      indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver
+  );
   return converter.Convert(spec);
 }
 

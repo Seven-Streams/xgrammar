@@ -24,7 +24,8 @@ class XMLToolCallingConverter : public JSONSchemaConverter {
       std::optional<int> indent,
       std::optional<std::pair<std::string, std::string>> separators,
       bool any_whitespace,
-      std::optional<int> max_whitespace_cnt
+      std::optional<int> max_whitespace_cnt,
+      RefResolver ref_resolver = nullptr
   );
 
   /*! \brief Convert SchemaSpec to EBNF with XML format for root object. */
