@@ -14,6 +14,7 @@ pandoc
 pillow
 pydantic
 sentencepiece
+setuptools
 sphinx==5.2.3
 sphinx-autobuild
 sphinx-book-theme
