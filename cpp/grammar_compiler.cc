@@ -1113,7 +1113,6 @@ class GrammarCompilerNoCache {
 CompiledGrammar GrammarCompilerNoCache::MultiThreadCompileGrammar(Grammar grammar) {
   using GrammarExprType = Grammar::Impl::GrammarExprType;
 
-  is_jit_ = true;
   auto compiled_grammar_impl = std::make_shared<CompiledGrammar::Impl>();
 
   compiled_grammar_impl->grammar = grammar;

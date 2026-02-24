@@ -418,6 +418,9 @@ class CrossingCacheManager {
         AdaptiveTokenMask&& token_mask
     );
     CrossingCacheManagerImpl(size_t max_cache_size = 10000) : max_cache_size_(max_cache_size) {}
+    ~CrossingCacheManagerImpl() {
+      std::cout << "ask_time: " << ask_time << ", hit_time: " << hit_time << std::endl;
+    }
 
     void ClearCache();
 
@@ -427,6 +430,8 @@ class CrossingCacheManager {
     std::list<std::pair<std::tuple<uint64_t, int32_t, uint64_t>, AdaptiveTokenMask>> cache_list_;
     std::unordered_map<std::tuple<uint64_t, int32_t, uint64_t>, decltype(cache_list_.begin())>
         cache_;
+    int ask_time = 0;
+    int hit_time = 0;
   };
   CrossingCacheManagerImpl crossing_cache_manager_impl_;
 };

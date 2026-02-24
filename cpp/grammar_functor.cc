@@ -2471,6 +2471,7 @@ std::optional<AdaptiveTokenMask> CrossingCacheManager::CrossingCacheManagerImpl:
     const uint64_t& fsm_hash, int32_t fsm_new_node_id, const uint64_t& tokenizer_hash
 ) {
   std::lock_guard<std::mutex> lock(mutex_);
+  ask_time++;
 
   if (cache_.find(std::make_tuple(fsm_hash, fsm_new_node_id, tokenizer_hash)) == cache_.end()) {
     // The cache is not hit.
@@ -2479,7 +2480,7 @@ std::optional<AdaptiveTokenMask> CrossingCacheManager::CrossingCacheManagerImpl:
   // Perform LRU.
   auto list_iterator = cache_[std::make_tuple(fsm_hash, fsm_new_node_id, tokenizer_hash)];
   cache_list_.splice(cache_list_.begin(), cache_list_, list_iterator);
-
+  hit_time++;
   // Return the cached token mask.
   return cache_list_.front().second;
 }
