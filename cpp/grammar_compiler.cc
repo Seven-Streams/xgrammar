@@ -1044,7 +1044,7 @@ class GrammarCompilerSub {
 
 CompiledGrammar GrammarCompilerSub::MultiThreadCompileGrammar(Grammar grammar_unoptimized) {
   auto compiled_grammar_impl = std::make_shared<CompiledGrammar::Impl>();
-
+  XGRAMMAR_LOG(INFO) << "Grammar Compiled:\n" << grammar_unoptimized.ToString();
   compiled_grammar_impl->grammar = GrammarOptimizer::Apply(grammar_unoptimized);
   compiled_grammar_impl->tokenizer_info = tokenizer_info_;
   if (tokenizer_info_.GetVocabSize() == 0) {
