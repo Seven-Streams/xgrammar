@@ -1971,12 +1971,7 @@ root ::= ((tags_with_separator))
         _harmony_instances_with_tools,
         True,
         False,
-        r"""any_text ::= TagDispatch(
-  loop_after_dispatch=false,
-  excludes=("<|end|>")
-)
-tag ::= (("<|channel|>analysis<|message|>" any_text "<|end|>"))
-basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]))
+        r"""basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]))
 basic_string_sub ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub) | ("\\" basic_escape basic_string_sub)) (=([ \n\t]* [,}\]:]))
 basic_any ::= ((basic_number) | (basic_string) | (basic_boolean) | (basic_null) | (basic_array) | (basic_object))
 basic_integer ::= (("0") | (basic_integer_1 [1-9] [0-9]*))
@@ -1997,9 +1992,14 @@ basic_number_6 ::= ("" | ([eE] basic_number_4 basic_number_5))
 basic_array_1 ::= ("" | ([ \n\t]* "," [ \n\t]* basic_any basic_array_1))
 basic_object_1 ::= ("" | ([ \n\t]* "," [ \n\t]* basic_string [ \n\t]* ":" [ \n\t]* basic_any basic_object_1))
 basic_number_7 ::= (("0") | ([1-9] [0-9]*))
-tag_1 ::= (("<|channel|>commentary to=comment_tool<|constrain|>json<|message|>" root_0 "<|call|>"))
-tag_2 ::= (("<|channel|>analysis to=analysis_tool<|message|>" root_0 "<|call|>"))
-tag_3 ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+tag ::= (("<|channel|>commentary to=comment_tool<|constrain|>json<|message|>" root_0 "<|call|>"))
+tag_1 ::= (("<|channel|>analysis to=analysis_tool<|message|>" root_0 "<|call|>"))
+any_text ::= TagDispatch(
+  loop_after_dispatch=false,
+  excludes=("<|end|>")
+)
+tag_2 ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+tag_3 ::= (("<|channel|>analysis<|message|>" any_text "<|end|>"))
 tags_with_separator_tags ::= ((tag) | (tag_1) | (tag_2) | (tag_3))
 tags_with_separator_sub ::= ("" | ("<|start|>assistant" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ("" | (tags_with_separator_tags tags_with_separator_sub))
@@ -2013,9 +2013,7 @@ root ::= ((tags_with_separator))
         _harmony_instances_with_tools,
         True,
         True,
-        r"""const_string ::= (("<|end|>"))
-tag ::= (("<|channel|>analysis<|message|>" const_string))
-basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]))
+        r"""basic_escape ::= (([\"\\/bfnrt]) | ("u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]))
 basic_string_sub ::= (("\"") | ([^\0-\x1f\"\\\r\n] basic_string_sub) | ("\\" basic_escape basic_string_sub)) (=([ \n\t]* [,}\]:]))
 basic_any ::= ((basic_number) | (basic_string) | (basic_boolean) | (basic_null) | (basic_array) | (basic_object))
 basic_integer ::= (("0") | (basic_integer_1 [1-9] [0-9]*))
@@ -2036,13 +2034,15 @@ basic_number_6 ::= ("" | ([eE] basic_number_4 basic_number_5))
 basic_array_1 ::= ("" | ([ \n\t]* "," [ \n\t]* basic_any basic_array_1))
 basic_object_1 ::= ("" | ([ \n\t]* "," [ \n\t]* basic_string [ \n\t]* ":" [ \n\t]* basic_any basic_object_1))
 basic_number_7 ::= (("0") | ([1-9] [0-9]*))
-tag_1 ::= (("<|channel|>commentary to=comment_tool<|constrain|>json<|message|>" root_0 "<|call|>"))
-tag_2 ::= (("<|channel|>analysis to=analysis_tool<|message|>" root_0 "<|call|>"))
+tag ::= (("<|channel|>commentary to=comment_tool<|constrain|>json<|message|>" root_0 "<|call|>"))
+tag_1 ::= (("<|channel|>analysis to=analysis_tool<|message|>" root_0 "<|call|>"))
 any_text ::= TagDispatch(
   loop_after_dispatch=false,
   excludes=("<|end|>")
 )
-tag_3 ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+tag_2 ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+const_string ::= (("<|end|>"))
+tag_3 ::= (("<|channel|>analysis<|message|>" const_string))
 tags_with_separator_tags ::= ((tag) | (tag_1) | (tag_2) | (tag_3))
 tags_with_separator_sub ::= ("" | ("<|start|>assistant" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ("" | (tags_with_separator_tags tags_with_separator_sub))
@@ -2078,8 +2078,8 @@ root ::= ((tags_with_separator))
   loop_after_dispatch=false,
   excludes=("<|end|>")
 )
-tag ::= (("<|channel|>analysis<|message|>" any_text "<|end|>"))
-tag_1 ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+tag ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+tag_1 ::= (("<|channel|>analysis<|message|>" any_text "<|end|>"))
 tags_with_separator_tags ::= ((tag) | (tag_1))
 tags_with_separator_sub ::= ("" | ("<|start|>assistant" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ("" | (tags_with_separator_tags tags_with_separator_sub))
@@ -2093,13 +2093,13 @@ root ::= ((tags_with_separator))
         _harmony_instances_no_tools,
         True,
         True,
-        r"""const_string ::= (("<|end|>"))
-tag ::= (("<|channel|>analysis<|message|>" const_string))
-any_text ::= TagDispatch(
+        r"""any_text ::= TagDispatch(
   loop_after_dispatch=false,
   excludes=("<|end|>")
 )
-tag_1 ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+tag ::= (("<|channel|>final<|message|>" any_text "<|end|>"))
+const_string ::= (("<|end|>"))
+tag_1 ::= (("<|channel|>analysis<|message|>" const_string))
 tags_with_separator_tags ::= ((tag) | (tag_1))
 tags_with_separator_sub ::= ("" | ("<|start|>assistant" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ("" | (tags_with_separator_tags tags_with_separator_sub))
