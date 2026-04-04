@@ -45,7 +45,7 @@ def get_builtin_structural_tag(
 
     Parameters
     ----------
-    model : BuiltinModels
+    model : BuiltinSupportedModels
         The model type of the structural tag template.
     reasoning : bool
         Whether to enable reasoning mode. i.e. whether to enable the <think>
@@ -101,7 +101,7 @@ def get_builtin_structural_tag_supported_models(
 
     Parameters
     ----------
-    strucutural_tag_style : Optional[BuiltinModels]
+    strucutural_tag_style : Optional[BuiltinSupportedModels]
         The structural tag style.
     Returns
     -------
@@ -221,7 +221,7 @@ def _get_builtin_structural_tag_function(
 
     Parameters
     ----------
-    format_type : BuiltinModels
+    format_type : BuiltinSupportedModels
         The format type of the structural tag template.
         Currently supported format types are:
         - "llama": Llama3.1 style structural tag format.
@@ -1042,10 +1042,18 @@ def _get_deepseek_v3_2_structural_tag(input_dict: Dict[str, Any]) -> StructuralT
             function = tool["function"]
             if function["name"] == forced_function_name:
                 parameters = _get_function_parameters(function)
-                suffix_tag = TagFormat(
-                    begin=(INVOKE_BEGIN_PREFIX + forced_function_name + INVOKE_BEGIN_SUFFIX),
-                    content=JSONSchemaFormat(json_schema=parameters, style=XML_STYLE),
-                    end=INVOKE_END,
+                suffix_tag = SequenceFormat(
+                    elements=[
+                        ConstStringFormat(value=FUNCTION_CALLS_BEGIN),
+                        TagFormat(
+                            begin=(
+                                INVOKE_BEGIN_PREFIX + forced_function_name + INVOKE_BEGIN_SUFFIX
+                            ),
+                            content=JSONSchemaFormat(json_schema=parameters, style=XML_STYLE),
+                            end=INVOKE_END,
+                        ),
+                        ConstStringFormat(value=FUNCTION_CALLS_END),
+                    ]
                 )
                 break
 
@@ -1069,7 +1077,13 @@ def _get_deepseek_v3_2_structural_tag(input_dict: Dict[str, Any]) -> StructuralT
                 )
             )
         if len(tags) > 0:
-            suffix_tag = TagsWithSeparatorFormat(tags=tags, separator="\n", at_least_one=True)
+            suffix_tag = SequenceFormat(
+                elements=[
+                    ConstStringFormat(value=FUNCTION_CALLS_BEGIN),
+                    TagsWithSeparatorFormat(tags=tags, separator="\n", at_least_one=True),
+                    ConstStringFormat(value=FUNCTION_CALLS_END),
+                ]
+            )
         else:
             raise ValueError(REQUIRED_TOOLS_ERROR)
 
@@ -1151,7 +1165,7 @@ def _get_minimax_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
                 parameters = _get_function_parameters(function)
                 suffix_tag = SequenceFormat(
                     elements=[
-                        ConstStringFormat(value=TOOL_CALL_TRIGGER),
+                        ConstStringFormat(value=TOOL_CALL_BEGIN),
                         TagFormat(
                             begin=(
                                 INVOKE_BEGIN_PREFIX + forced_function_name + INVOKE_BEGIN_SUFFIX
@@ -1159,6 +1173,7 @@ def _get_minimax_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
                             content=JSONSchemaFormat(json_schema=parameters, style=XML_STYLE),
                             end=INVOKE_END,
                         ),
+                        ConstStringFormat(value=TOOL_CALL_END),
                     ]
                 )
                 break
@@ -1184,8 +1199,9 @@ def _get_minimax_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
         if len(tags) > 0:
             suffix_tag = SequenceFormat(
                 elements=[
-                    ConstStringFormat(value=TOOL_CALL_TRIGGER),
+                    ConstStringFormat(value=TOOL_CALL_BEGIN),
                     TagsWithSeparatorFormat(tags=tags, separator="\n", at_least_one=True),
+                    ConstStringFormat(value=TOOL_CALL_END),
                 ]
             )
         else:
