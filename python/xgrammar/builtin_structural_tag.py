@@ -1149,10 +1149,17 @@ def _get_minimax_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
             function = tool["function"]
             if function["name"] == forced_function_name:
                 parameters = _get_function_parameters(function)
-                suffix_tag = TagFormat(
-                    begin=(INVOKE_BEGIN_PREFIX + forced_function_name + INVOKE_BEGIN_SUFFIX),
-                    content=JSONSchemaFormat(json_schema=parameters, style=XML_STYLE),
-                    end=INVOKE_END,
+                suffix_tag = SequenceFormat(
+                    elements=[
+                        ConstStringFormat(value=TOOL_CALL_TRIGGER),
+                        TagFormat(
+                            begin=(
+                                INVOKE_BEGIN_PREFIX + forced_function_name + INVOKE_BEGIN_SUFFIX
+                            ),
+                            content=JSONSchemaFormat(json_schema=parameters, style=XML_STYLE),
+                            end=INVOKE_END,
+                        ),
+                    ]
                 )
                 break
         if suffix_tag is None:
@@ -1175,7 +1182,12 @@ def _get_minimax_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
                 )
             )
         if len(tags) > 0:
-            suffix_tag = TagsWithSeparatorFormat(tags=tags, separator="\n", at_least_one=True)
+            suffix_tag = SequenceFormat(
+                elements=[
+                    ConstStringFormat(value=TOOL_CALL_TRIGGER),
+                    TagsWithSeparatorFormat(tags=tags, separator="\n", at_least_one=True),
+                ]
+            )
         else:
             raise ValueError(REQUIRED_TOOLS_ERROR)
 
