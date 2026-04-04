@@ -25,6 +25,8 @@ def _input_dict_to_get_stag_kwargs(format_type: str, input_dict: Dict[str, Any])
         "builtin_tools": input_dict.get("builtin_tools", []),
         "reasoning": input_dict.get("reasoning", input_dict.get("reasoning", True)),
         "force_empty_reasoning": input_dict.get("force_empty_reasoning", False),
+        "tool_choice": input_dict.get("tool_choice", "auto"),
+        "forced_function_name": input_dict.get("forced_function_name"),
     }
 
 

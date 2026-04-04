@@ -28,6 +28,8 @@ BuiltinSupportedModels = Literal[
     "glm47",
 ]
 
+BuiltinStructuralTagToolChoice = Literal["auto", "forced", "required"]
+
 
 def get_builtin_structural_tag(
     model: BuiltinSupportedModels,
@@ -35,6 +37,8 @@ def get_builtin_structural_tag(
     tools: List[Dict[str, Any]] = [],
     builtin_tools: List[Dict[str, Any]] = [],
     force_empty_reasoning: bool = False,
+    tool_choice: BuiltinStructuralTagToolChoice = "auto",
+    forced_function_name: Optional[str] = None,
 ) -> StructuralTag:
     r"""Get structural tag for model. This function can generate structural tag for the given model
     with the given tools, builtin tools and reasoning mode.
@@ -58,6 +62,10 @@ def get_builtin_structural_tag(
         the empty thinking content at the beginning of the response.
         Some models like Qwen3, DeepSeek-R1 and etc. prefer empty-thinking mode to disable
         reasoning mode instead of non-thinking mode.
+    tool_choice : Literal["auto", "forced", "required"]
+        How tool calls are constrained relative to the provided tools list.
+    forced_function_name : Optional[str]
+        When ``tool_choice`` implies a single forced tool, the name of that function.
 
 
     Returns
@@ -69,6 +77,7 @@ def get_builtin_structural_tag(
         raise ValueError("The 'reasoning' key in the input_dict must be a boolean.")
     if not isinstance(force_empty_reasoning, bool):
         raise ValueError("The 'force_empty_reasoning' key in the input_dict must be a boolean.")
+    _validate_tool_choice_params(tool_choice, forced_function_name)
     _validate_tool_function(tools)
     _validate_tool_function(builtin_tools)
 
@@ -78,6 +87,8 @@ def get_builtin_structural_tag(
         "builtin_tools": builtin_tools,
         "reasoning": reasoning,
         "force_empty_reasoning": force_empty_reasoning,
+        "tool_choice": tool_choice,
+        "forced_function_name": forced_function_name,
     }
     return func(input_dict)
 
@@ -111,6 +122,25 @@ _structural_tag_registry: Dict[
 ] = {}
 _structural_tag_supported_models: Dict[BuiltinSupportedModels, List[str]] = {}
 _THINK_EXCLUDE_TOKENS = ["<think>", "</think>"]
+
+
+_VALID_BUILTIN_TOOL_CHOICES: tuple[BuiltinStructuralTagToolChoice, ...] = (
+    "auto",
+    "forced",
+    "required",
+)
+
+
+def _validate_tool_choice_params(
+    tool_choice: BuiltinStructuralTagToolChoice, forced_function_name: Optional[str]
+) -> None:
+    if tool_choice not in _VALID_BUILTIN_TOOL_CHOICES:
+        raise ValueError(
+            "The 'tool_choice' must be one of "
+            f"{list(_VALID_BUILTIN_TOOL_CHOICES)}, got {tool_choice!r}."
+        )
+    if forced_function_name is not None and not isinstance(forced_function_name, str):
+        raise ValueError("The 'forced_function_name' must be a string or None.")
 
 
 def _validate_tool_function(tools: Any) -> None:
@@ -161,6 +191,8 @@ def _get_builtin_structural_tag_function(
     key, which is a dictionary containing "name" and "parameters" fields. In addition, for the "qwen",
     "deepseek_r1" and "harmony" formats, "reasoning" key can be provided to enable/disable reasoning mode.
     By default, reasoning mode is enabled.
+    The ``input_dict`` may also include ``tool_choice`` (``"auto"``, ``"forced"``, or ``"required"``)
+    and ``forced_function_name`` (optional string), as set by :func:`get_builtin_structural_tag`.
 
     Examples
     --------

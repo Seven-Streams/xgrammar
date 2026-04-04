@@ -28,8 +28,10 @@ Use it when you need to constrain the model to output in a fixed pattern such as
   Default value is `[]`.
 - **builtin_tools** (`List[Dict[str, Any]]`, optional): List of built-in tools (used only for `"harmony"`); each element has the same structure as items in `tools`. Default `[]`.
 - **force_empty_reasoning** (`bool`, optional): When reasoning is on, whether to force empty thinking content at the beginning. Default `False`.
+- **tool_choice** (`Literal["auto", "forced", "required"]`, optional): How tool calling is constrained relative to the `tools` list (e.g. optional tools vs. requiring a tool call). `"auto"` is the usual case: all listed tools remain available without extra policy. `"forced"` and `"required"` correspond to stricter server-side tool-choice modes; the exact effect on the generated structural tag depends on the selected **model** style. Default `"auto"`.
+- **forced_function_name** (`str`, optional): When a single function is pinned (e.g. together with `tool_choice="forced"`), its `"name"` string as it appears in `tools`. Default `None`.
 
-Passing an unsupported `model` raises `ValueError`.
+Passing an unsupported `model`, an invalid `tool_choice`, or a non-string `forced_function_name` raises `ValueError`.
 
 ### Returns
 
@@ -87,6 +89,17 @@ grammar = Grammar.from_structural_tag(structural_tag)
 ```
 
 If `reasoning` is not passed, reasoning mode is enabled by default. Besides, when `reasoning` is `True`, you can also set `force_empty_reasoning` to constrain the reasoning content.
+
+You can pass **tool choice** options when building the structural_tag; they are included in the internal input passed to each built-in style handler:
+
+```python
+structural_tag = get_builtin_structural_tag(
+    "llama",
+    tools=tools,
+    tool_choice="forced",
+    forced_function_name="get_weather",
+)
+```
 
 ---
 
