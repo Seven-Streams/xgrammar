@@ -123,6 +123,17 @@ _tools_deepseek_v3_2 = make_tools(["search"])
 _tools_minimax = make_tools(["search"])
 _tools_glm47 = make_tools(["search"])
 
+# Two distinct tools for tool_choice=required / forced instance tests.
+_tools_llama_pair = make_tools(["t1", "t2"])
+_tools_kimi_pair = make_tools(["t1", "t2"])
+_tools_deepseek_pair = make_tools(["search", "alt"])
+_tools_deepseek_v3_2_pair = make_tools(["search", "alt"])
+_tools_minimax_pair = make_tools(["search", "alt"])
+_tools_qwen_coder_pair = make_tools(["run_sql", "run_py"])
+_tools_qwen_pair = make_tools(["t1", "t2"])
+_tools_harmony_pair = make_tools(["comment_tool", "other_tool"])
+_tools_glm47_pair = make_tools(["search", "alt"])
+
 
 # ---------- Test: unknown format type ----------
 
@@ -343,6 +354,8 @@ def test_get_builtin_structural_tag_strict_or_missing_parameters_instances(
 # ---------- Test: instance positive / negative ----------
 
 # Case: (input_dict, instances, reasoning, force_empty_reasoning, expected_grammar_ebnf, expected_accept_per_instance)
+# input_dict may include tool_choice ("auto" | "forced" | "required") and forced_function_name (str | None).
+# When expected_grammar_ebnf is empty or whitespace-only, grammar equality is skipped (fill in EBNF when ready).
 InstanceCase = Tuple[Dict[str, Any], List[str], bool, bool, str, List[bool]]
 
 
@@ -362,8 +375,11 @@ def run_instance_case(format_type: str, case: InstanceCase):
         force_empty_reasoning=force_empty_reasoning,
         tools=input_dict.get("tools", []),
         builtin_tools=input_dict.get("builtin_tools", []),
+        tool_choice=input_dict.get("tool_choice", "auto"),
+        forced_function_name=input_dict.get("forced_function_name"),
     )
-    check_stag_with_grammar(stag, expected_grammar_ebnf)
+    if expected_grammar_ebnf.strip():
+        check_stag_with_grammar(stag, expected_grammar_ebnf)
     for j, instance in enumerate(instances):
         check_stag_with_instance(stag, instance, expected_accept_per_instance[j])
 
@@ -2121,6 +2137,298 @@ root ::= ((tags_with_separator))
 def test_get_harmony_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(harmony) accepts/rejects instance as expected."""
     run_instance_case("harmony", case)
+
+
+# tool_choice=required / forced: expected_grammar_ebnf left "" for manual completion.
+_tool_choice_instance_cases = [
+    pytest.param(
+        "llama",
+        (
+            {"tools": _tools_llama_pair, "tool_choice": "required"},
+            ["", '{"name": "t1", "parameters": {"q": "v"}}'],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="llama-required",
+    ),
+    pytest.param(
+        "llama",
+        (
+            {"tools": _tools_llama_pair, "tool_choice": "forced", "forced_function_name": "t1"},
+            [
+                '{"name": "t1", "parameters": {"q": "v"}}',
+                '{"name": "t2", "parameters": {"q": "v"}}',
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="llama-forced",
+    ),
+    pytest.param(
+        "kimi",
+        (
+            {"tools": _tools_kimi_pair, "tool_choice": "required"},
+            [
+                "",
+                '<|redacted_tool_call_begin_kimi|>functions.t1:0<|redacted_tool_call_argument_begin|>{"q": "v"}<|redacted_tool_call_end_kimi|>',
+            ],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="kimi-required",
+    ),
+    pytest.param(
+        "kimi",
+        (
+            {"tools": _tools_kimi_pair, "tool_choice": "forced", "forced_function_name": "t1"},
+            [
+                '<|redacted_tool_call_begin_kimi|>functions.t1:0<|redacted_tool_call_argument_begin|>{"q": "v"}<|redacted_tool_call_end_kimi|>',
+                '<|redacted_tool_call_begin_kimi|>functions.t2:0<|redacted_tool_call_argument_begin|>{"q": "v"}<|redacted_tool_call_end_kimi|>',
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="kimi-forced",
+    ),
+    pytest.param(
+        "deepseek_r1",
+        (
+            {"tools": _tools_deepseek_pair, "tool_choice": "required"},
+            [
+                "",
+                '<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>search<｜tool▁sep｜>{"q": "v"}<｜tool▁call▁end｜>',
+            ],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="deepseek_r1-required",
+    ),
+    pytest.param(
+        "deepseek_r1",
+        (
+            {
+                "tools": _tools_deepseek_pair,
+                "tool_choice": "forced",
+                "forced_function_name": "search",
+            },
+            [
+                '<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>search<｜tool▁sep｜>{"q": "v"}<｜tool▁call▁end｜>',
+                '<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>alt<｜tool▁sep｜>{"q": "v"}<｜tool▁call▁end｜>',
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="deepseek_r1-forced",
+    ),
+    pytest.param(
+        "deepseek_v3_2",
+        (
+            {"tools": _tools_deepseek_v3_2_pair, "tool_choice": "required"},
+            [
+                "",
+                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter></｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+            ],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="deepseek_v3_2-required",
+    ),
+    pytest.param(
+        "deepseek_v3_2",
+        (
+            {
+                "tools": _tools_deepseek_v3_2_pair,
+                "tool_choice": "forced",
+                "forced_function_name": "search",
+            },
+            [
+                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter></｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="alt">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter></｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="deepseek_v3_2-forced",
+    ),
+    pytest.param(
+        "minimax",
+        (
+            {"tools": _tools_minimax_pair, "tool_choice": "required"},
+            [
+                "",
+                '<minimax:tool_call>\n<invoke name="search">\n<parameter name="q">v</parameter></invoke>\n</minimax:tool_call>\n',
+            ],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="minimax-required",
+    ),
+    pytest.param(
+        "minimax",
+        (
+            {
+                "tools": _tools_minimax_pair,
+                "tool_choice": "forced",
+                "forced_function_name": "search",
+            },
+            [
+                '<minimax:tool_call>\n<invoke name="search">\n<parameter name="q">v</parameter></invoke>\n</minimax:tool_call>\n',
+                '<minimax:tool_call>\n<invoke name="alt">\n<parameter name="q">v</parameter></invoke>\n</minimax:tool_call>\n',
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="minimax-forced",
+    ),
+    pytest.param(
+        "qwen_coder",
+        (
+            {"tools": _tools_qwen_coder_pair, "tool_choice": "required"},
+            [
+                "",
+                "<tool_call>\n<function=run_sql>\n<parameter=q>v</parameter>\n</function>\n</tool_call>",
+            ],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="qwen_coder-required",
+    ),
+    pytest.param(
+        "qwen_coder",
+        (
+            {
+                "tools": _tools_qwen_coder_pair,
+                "tool_choice": "forced",
+                "forced_function_name": "run_sql",
+            },
+            [
+                "<tool_call>\n<function=run_sql>\n<parameter=q>v</parameter>\n</function>\n</tool_call>",
+                "<tool_call>\n<function=run_py>\n<parameter=q>v</parameter>\n</function>\n</tool_call>",
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="qwen_coder-forced",
+    ),
+    pytest.param(
+        "qwen",
+        (
+            {"tools": _tools_qwen_pair, "tool_choice": "required"},
+            ["", '<tool_call>\n{"name": "t1", "arguments": {"q": "v"}}\n</tool_call>'],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="qwen-required",
+    ),
+    pytest.param(
+        "qwen",
+        (
+            {"tools": _tools_qwen_pair, "tool_choice": "forced", "forced_function_name": "t1"},
+            [
+                '<tool_call>\n{"name": "t1", "arguments": {"q": "v"}}\n</tool_call>',
+                '<tool_call>\n{"name": "t2", "arguments": {"q": "v"}}\n</tool_call>',
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="qwen-forced",
+    ),
+    pytest.param(
+        "harmony",
+        (
+            {"tools": _tools_harmony_pair, "tool_choice": "required"},
+            [
+                "plain text without channels",
+                '<|channel|>commentary to=comment_tool<|constrain|>json<|message|>{"q": "v"}<|call|>',
+            ],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="harmony-required",
+    ),
+    pytest.param(
+        "harmony",
+        (
+            {
+                "tools": _tools_harmony_pair,
+                "tool_choice": "forced",
+                "forced_function_name": "comment_tool",
+            },
+            [
+                '<|channel|>commentary to=comment_tool<|constrain|>json<|message|>{"q": "v"}<|call|>',
+                '<|channel|>commentary to=other_tool<|constrain|>json<|message|>{"q": "v"}<|call|>',
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="harmony-forced",
+    ),
+    pytest.param(
+        "glm47",
+        (
+            {"tools": _tools_glm47_pair, "tool_choice": "required"},
+            ["", "<tool_call>search<arg_key>q</arg_key><arg_value>v</arg_value></tool_call>"],
+            False,
+            False,
+            "",
+            [False, True],
+        ),
+        id="glm47-required",
+    ),
+    pytest.param(
+        "glm47",
+        (
+            {"tools": _tools_glm47_pair, "tool_choice": "forced", "forced_function_name": "search"},
+            [
+                "<tool_call>search<arg_key>q</arg_key><arg_value>v</arg_value></tool_call>",
+                "<tool_call>alt<arg_key>q</arg_key><arg_value>v</arg_value></tool_call>",
+            ],
+            False,
+            False,
+            "",
+            [True, False],
+        ),
+        id="glm47-forced",
+    ),
+]
+
+
+@pytest.mark.parametrize("format_type, case", _tool_choice_instance_cases)
+def test_get_builtin_structural_tag_instance_tool_choice(format_type: str, case: InstanceCase):
+    """tool_choice required/forced: instance checks; fill expected EBNF in cases when ready."""
+    run_instance_case(format_type, case)
 
 
 _TOOLS: List[Dict[str, Any]] = [

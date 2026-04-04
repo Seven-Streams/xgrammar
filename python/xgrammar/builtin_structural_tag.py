@@ -1327,3 +1327,5 @@ def _get_glm47_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
         prefix_tag = TagFormat(begin=THINK_TAG_BEGIN, content=AnyTextFormat(), end=THINK_TAG_END)
 
     return StructuralTag(format=SequenceFormat(elements=[prefix_tag, suffix_tag]))
+
+    return StructuralTag(format=SequenceFormat(elements=[prefix_tag, suffix_tag]))
