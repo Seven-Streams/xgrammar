@@ -346,26 +346,26 @@ def test_get_builtin_structural_tag_strict_or_missing_parameters_instances(
 InstanceCase = Tuple[Dict[str, Any], List[str], bool, bool, str, List[bool]]
 
 
-def _run_instance_cases_explicit(format_type: str, cases: List[InstanceCase]):
-    """Run instance tests from explicit cases with reasoning/force_empty_reasoning per case."""
-    for (
+def run_instance_case(format_type: str, case: InstanceCase):
+    """Run one instance test case (grammar + accept/reject per instance string)."""
+    (
         input_dict,
         instances,
         reasoning,
         force_empty_reasoning,
         expected_grammar_ebnf,
         expected_accept_per_instance,
-    ) in cases:
-        stag = get_builtin_structural_tag(
-            format_type,
-            reasoning=reasoning,
-            force_empty_reasoning=force_empty_reasoning,
-            tools=input_dict.get("tools", []),
-            builtin_tools=input_dict.get("builtin_tools", []),
-        )
-        check_stag_with_grammar(stag, expected_grammar_ebnf)
-        for j, instance in enumerate(instances):
-            check_stag_with_instance(stag, instance, expected_accept_per_instance[j])
+    ) = case
+    stag = get_builtin_structural_tag(
+        format_type,
+        reasoning=reasoning,
+        force_empty_reasoning=force_empty_reasoning,
+        tools=input_dict.get("tools", []),
+        builtin_tools=input_dict.get("builtin_tools", []),
+    )
+    check_stag_with_grammar(stag, expected_grammar_ebnf)
+    for j, instance in enumerate(instances):
+        check_stag_with_instance(stag, instance, expected_accept_per_instance[j])
 
 
 def _run_instance_cases_for_style(
@@ -596,9 +596,10 @@ root ::= ((sequence))
 ]
 
 
-def test_get_llama_structural_tag_instance():
+@pytest.mark.parametrize("case", llama_instance_cases)
+def test_get_llama_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(llama) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("llama", llama_instance_cases)
+    run_instance_case("llama", case)
 
 
 # ----- kimi
@@ -810,9 +811,10 @@ root ::= ((sequence))
 ]
 
 
-def test_get_kimi_structural_tag_instance():
+@pytest.mark.parametrize("case", kimi_instance_cases)
+def test_get_kimi_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(kimi) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("kimi", kimi_instance_cases)
+    run_instance_case("kimi", case)
 
 
 # ----- deepseek_r1
@@ -999,9 +1001,10 @@ root ::= ((sequence))
 ]
 
 
-def test_get_deepseek_r1_structural_tag_instance():
+@pytest.mark.parametrize("case", deepseek_r1_instance_cases)
+def test_get_deepseek_r1_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(deepseek_r1) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("deepseek_r1", deepseek_r1_instance_cases)
+    run_instance_case("deepseek_r1", case)
 
 
 # ----- deepseek_v3_2
@@ -1239,9 +1242,10 @@ root ::= ((sequence))
 ]
 
 
-def test_get_deepseek_v3_2_structural_tag_instance():
+@pytest.mark.parametrize("case", deepseek_v3_2_instance_cases)
+def test_get_deepseek_v3_2_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(deepseek_v3_2) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("deepseek_v3_2", deepseek_v3_2_instance_cases)
+    run_instance_case("deepseek_v3_2", case)
 
 
 # ----- minimax
@@ -1470,9 +1474,10 @@ root ::= ((sequence))
 ]
 
 
-def test_get_minimax_structural_tag_instance():
+@pytest.mark.parametrize("case", minimax_instance_cases)
+def test_get_minimax_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(minimax) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("minimax", minimax_instance_cases)
+    run_instance_case("minimax", case)
 
 
 def test_get_glm47_structural_tag_instance():
@@ -1706,9 +1711,10 @@ root ::= ((sequence))
 ]
 
 
-def test_get_qwen_coder_structural_tag_instance():
+@pytest.mark.parametrize("case", qwen_coder_instance_cases)
+def test_get_qwen_coder_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(qwen_coder) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("qwen_coder", qwen_coder_instance_cases)
+    run_instance_case("qwen_coder", case)
 
 
 # ----- qwen
@@ -1900,9 +1906,10 @@ root ::= ((sequence))
 ]
 
 
-def test_get_qwen_structural_tag_instance():
+@pytest.mark.parametrize("case", qwen_instance_cases)
+def test_get_qwen_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(qwen) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("qwen", qwen_instance_cases)
+    run_instance_case("qwen", case)
 
 
 # ----- harmony
@@ -2110,9 +2117,10 @@ root ::= ((tags_with_separator))
 ]
 
 
-def test_get_harmony_structural_tag_instance():
+@pytest.mark.parametrize("case", harmony_instance_cases)
+def test_get_harmony_structural_tag_instance(case: InstanceCase):
     """get_builtin_structural_tag(harmony) accepts/rejects instance as expected."""
-    _run_instance_cases_explicit("harmony", harmony_instance_cases)
+    run_instance_case("harmony", case)
 
 
 _TOOLS: List[Dict[str, Any]] = [
