@@ -763,8 +763,122 @@ def _get_harmony_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
     reasoning = input_dict.get("reasoning", True)
     force_empty_reasoning = input_dict.get("force_empty_reasoning", False)
     builtin_tools = input_dict.get("builtin_tools", [])
+    tool_choice = input_dict.get("tool_choice", "auto")
+    forced_function_name = input_dict.get("forced_function_name")
 
-    tags = []
+    if tool_choice == "auto":
+        tags = []
+
+        for tool in tools:
+            if "function" not in tool:
+                continue
+
+            function = tool["function"]
+            parameters = _get_function_parameters(function)
+            name = function["name"]
+            tags.append(
+                TagFormat(
+                    begin=f"<|channel|>commentary to={name}<|constrain|>json<|message|>",
+                    content=JSONSchemaFormat(json_schema=parameters),
+                    end="<|call|>",
+                )
+            )
+
+        for tool in builtin_tools:
+            if "function" not in tool:
+                continue
+
+            function = tool["function"]
+            parameters = _get_function_parameters(function)
+            name = function["name"]
+            tags.append(
+                TagFormat(
+                    begin=f"<|channel|>analysis to={name}<|message|>",
+                    content=JSONSchemaFormat(json_schema=parameters),
+                    end="<|call|>",
+                )
+            )
+
+        final_tag = TagFormat(
+            begin="<|channel|>final<|message|>", content=AnyTextFormat(), end="<|end|>"
+        )
+
+    elif tool_choice == "forced":
+        forced_tag = None
+
+        if forced_function_name is None:
+            raise ValueError(
+                "The 'forced_function_name' is required when 'tool_choice' is 'forced'."
+            )
+
+        for tool in builtin_tools:
+            if "function" not in tool:
+                continue
+            function = tool["function"]
+            if function["name"] == forced_function_name:
+                parameters = _get_function_parameters(function)
+                forced_tag = TagFormat(
+                    begin=f"<|channel|>analysis to={forced_function_name}<|message|>",
+                    content=JSONSchemaFormat(json_schema=parameters),
+                    end="<|call|>",
+                )
+                break
+
+        if forced_tag is None:
+            for tool in tools:
+                if "function" not in tool:
+                    continue
+                function = tool["function"]
+                if function["name"] == forced_function_name:
+                    parameters = _get_function_parameters(function)
+                    forced_tag = TagFormat(
+                        begin=f"<|channel|>commentary to={forced_function_name}<|constrain|>json<|message|>",
+                        content=JSONSchemaFormat(json_schema=parameters),
+                        end="<|call|>",
+                    )
+                    break
+
+        if forced_tag is None:
+            raise ValueError(
+                f"The tool with name '{forced_function_name}' is not found in the tools list."
+            )
+
+        tags.append(forced_tag)
+
+    elif tool_choice == "required":
+        tags = []
+        for tool in builtin_tools:
+            if "function" not in tool:
+                continue
+            function = tool["function"]
+            parameters = _get_function_parameters(function)
+            name = function["name"]
+            tags.append(
+                TagFormat(
+                    begin=f"<|channel|>analysis to={name}<|message|>",
+                    content=JSONSchemaFormat(json_schema=parameters),
+                    end="<|call|>",
+                )
+            )
+        for tool in tools:
+            if "function" not in tool:
+                continue
+            function = tool["function"]
+            parameters = _get_function_parameters(function)
+            name = function["name"]
+            tags.append(
+                TagFormat(
+                    begin=f"<|channel|>commentary to={name}<|constrain|>json<|message|>",
+                    content=JSONSchemaFormat(json_schema=parameters),
+                    end="<|call|>",
+                )
+            )
+        if len(tags) > 0:
+            suffix_tag = TagsWithSeparatorFormat(tags=tags, separator="", at_least_one=True)
+        else:
+            raise ValueError(
+                "The 'tools' list is empty, which is not allowed when 'tool_choice' is 'required'."
+            )
 
     if reasoning:
         if force_empty_reasoning:
@@ -778,40 +892,6 @@ def _get_harmony_structural_tag(input_dict: Dict[str, Any]) -> StructuralTag:
                 begin="<|channel|>analysis<|message|>", content=AnyTextFormat(), end="<|end|>"
             )
         tags.append(analysis_tag)
-
-    for tool in tools:
-        if "function" not in tool:
-            continue
-
-        function = tool["function"]
-        parameters = _get_function_parameters(function)
-        name = function["name"]
-        tags.append(
-            TagFormat(
-                begin=f"<|channel|>commentary to={name}<|constrain|>json<|message|>",
-                content=JSONSchemaFormat(json_schema=parameters),
-                end="<|call|>",
-            )
-        )
-
-    for tool in builtin_tools:
-        if "function" not in tool:
-            continue
-
-        function = tool["function"]
-        parameters = _get_function_parameters(function)
-        name = function["name"]
-        tags.append(
-            TagFormat(
-                begin=f"<|channel|>analysis to={name}<|message|>",
-                content=JSONSchemaFormat(json_schema=parameters),
-                end="<|call|>",
-            )
-        )
-
-    final_tag = TagFormat(
-        begin="<|channel|>final<|message|>", content=AnyTextFormat(), end="<|end|>"
-    )
 
     tags.append(final_tag)
     tags_with_separator = TagsWithSeparatorFormat(tags=tags, separator="<|start|>assistant")
