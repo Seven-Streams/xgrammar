@@ -294,6 +294,11 @@ class Grammar::Impl {
   std::vector<std::optional<CompactFSMWithStartEnd>> per_rule_fsms;
 
   /*!
+   * \brief The state count and edge count for each rule's FSM.
+   */
+  std::vector<std::optional<std::pair<int32_t, int32_t>>> per_rule_fsm_state_cnt_edge_cnt;
+
+  /*!
    * \brief The hash value for each rule's FSM.
    */
   std::vector<std::optional<uint64_t>> per_rule_fsm_hashes;

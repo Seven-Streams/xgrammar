@@ -13,10 +13,12 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <set>
 #include <stack>
 #include <tuple>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -1084,6 +1086,9 @@ class GrammarFSMBuilderImpl {
   void Apply(Grammar* grammar) {
     FSM complete_fsm;
     std::vector<std::optional<FSMWithStartEnd>> per_rule_fsms((*grammar)->NumRules());
+    std::vector<std::optional<std::pair<int32_t, int32_t>>> per_fsm_state_cnt_edge_cnt(
+        (*grammar)->NumRules()
+    );
     std::vector<int> state_mapping;
 
     for (int i = 0; i < (*grammar)->NumRules(); ++i) {
@@ -1093,6 +1098,12 @@ class GrammarFSMBuilderImpl {
         auto rule_fsm = TagDispatch((*grammar)->GetTagDispatch(grammar_expr));
         XGRAMMAR_CHECK(rule_fsm.has_value()) << "Failed to build tag dispatch fsm for rule " << i;
         per_rule_fsms[i] = rule_fsm->AddToCompleteFSM(&complete_fsm, &state_mapping);
+        const auto& fsm = rule_fsm->GetFsm();
+        int num_edges = 0;
+        for (const auto& edge : fsm.GetEdges()) {
+          num_edges += edge.size();
+        }
+        per_fsm_state_cnt_edge_cnt[i] = std::make_pair(fsm.NumStates(), num_edges);
       } else if (grammar_expr.type == Grammar::Impl::GrammarExprType::kTokenTagDispatch) {
         auto rule_fsm = TokenTagDispatch((*grammar)->GetTokenTagDispatch(grammar_expr));
         XGRAMMAR_CHECK(rule_fsm.has_value())
@@ -1104,6 +1115,12 @@ class GrammarFSMBuilderImpl {
         if (rule_fsm.has_value()) {
           per_rule_fsms[i] = rule_fsm->AddToCompleteFSM(&complete_fsm, &state_mapping);
         }
+        const auto& fsm = rule_fsm->GetFsm();
+        int num_edges = 0;
+        for (const auto& edge : fsm.GetEdges()) {
+          num_edges += edge.size();
+        }
+        per_fsm_state_cnt_edge_cnt[i] = std::make_pair(fsm.NumStates(), num_edges);
       }
     }
 
@@ -1127,6 +1144,7 @@ class GrammarFSMBuilderImpl {
 
     (*grammar)->complete_fsm = std::move(compact_complete_fsm);
     (*grammar)->per_rule_fsms = std::move(compact_per_rule_fsms);
+    (*grammar)->per_rule_fsm_state_cnt_edge_cnt = std::move(per_fsm_state_cnt_edge_cnt);
   }
 
   /* Basic Building functions.*/
