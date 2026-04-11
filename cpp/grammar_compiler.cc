@@ -1333,8 +1333,16 @@ class GrammarCompiler::Impl {
       bool cache_enabled,
       int64_t max_memory_bytes
   )
-      : cache_enabled_(false),
-        rule_level_cache_(static_cast<std::size_t>(max_memory_bytes)),
+      : cache_enabled_(cache_enabled),
+        rule_level_cache_(
+            cache_enabled
+                ? std::optional<RuleLevelCache>(
+                      max_memory_bytes == -1
+                          ? static_cast<std::size_t>(-1)
+                          : static_cast<std::size_t>(max_memory_bytes - max_memory_bytes / 3 * 2)
+                  )
+                : std::nullopt
+        ),
         no_cache_compiler_(tokenizer_info, max_threads, rule_level_cache_),
         grammar_level_cache_(
             max_memory_bytes == -1 ? static_cast<std::size_t>(-1)
