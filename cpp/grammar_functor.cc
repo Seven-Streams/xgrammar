@@ -2578,8 +2578,8 @@ class RuleLevelCache::Impl {
   friend size_t MemorySize(const Impl* impl) { return impl->current_cache_memory_size_; }
 
   ~Impl() {
-    std::cout << "ask_time: " << ask_time << " inconsistent_time: " << inconsistent_time
-              << std::endl;
+    std::cout << "ask_time: " << ask_time << " hit_time: " << hit_time
+              << " hit_rate: " << static_cast<double>(hit_time) / ask_time << std::endl;
   }
 
   size_t GetMaxSize() const { return max_cache_memory_size_; }
@@ -2590,7 +2590,7 @@ class RuleLevelCache::Impl {
   const size_t max_cache_memory_size_;
   int64_t current_cache_memory_size_ = 0;
   int64_t ask_time = 0;
-  int64_t inconsistent_time = 0;
+  int64_t hit_time = 0;
   List<NodeType> cache_list_;
   std::map<NodeKey, int> cache_;
 };
@@ -2640,19 +2640,11 @@ std::optional<AdaptiveTokenMask> RuleLevelCache::Impl::GetCache(
   NodeKey key = std::make_tuple(fsm_hash, fsm_new_node_id, state_cnt, edge_cnt);
   auto it = cache_.find(key);
   if (it == cache_.end()) {
-    NodeKey dumb_key = std::make_tuple(fsm_hash, fsm_new_node_id, 0, 0);
-    // Find if there is a node with the same fsm_hash and fsm_new_node_id, but with different
-    // state_cnt and edge_cnt.
-    auto dumb_it = cache_.lower_bound(dumb_key);
-    if (dumb_it != cache_.end() && std::get<0>(dumb_it->first) == fsm_hash &&
-        std::get<1>(dumb_it->first) == fsm_new_node_id) {
-      inconsistent_time++;
-      return std::nullopt;
-    }
     return std::nullopt;
   }
 
   // Move the node to the back of the list.
+  hit_time++;
   cache_list_.MoveBack(it->second);
   return List<NodeType>::iterator(it->second, cache_list_)->second;
 }
