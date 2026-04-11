@@ -6,8 +6,10 @@
 #include <xgrammar/compiler.h>
 
 #include <algorithm>
+#include <atomic>
 #include <bitset>
 #include <cctype>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -31,6 +33,35 @@
 #include "xgrammar/grammar.h"
 #include "xgrammar/tokenizer_info.h"
 
+namespace {
+
+/*!
+ * \brief On destruction, adds elapsed time since construction to `acc` in nanoseconds (if
+ * non-null).
+ */
+class NanosecondAccumulator {
+ public:
+  explicit NanosecondAccumulator(std::atomic<int64_t>* acc)
+      : acc_(acc), start_(std::chrono::steady_clock::now()) {}
+  ~NanosecondAccumulator() {
+    if (acc_ != nullptr) {
+      const auto elapsed = std::chrono::steady_clock::now() - start_;
+      acc_->fetch_add(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count(),
+          std::memory_order_relaxed
+      );
+    }
+  }
+  NanosecondAccumulator(const NanosecondAccumulator&) = delete;
+  NanosecondAccumulator& operator=(const NanosecondAccumulator&) = delete;
+
+ private:
+  std::atomic<int64_t>* acc_;
+  std::chrono::steady_clock::time_point start_;
+};
+
+}  // namespace
+
 namespace xgrammar {
 
 /************** AdaptiveTokenMaskCache Generator **************/
@@ -45,7 +76,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
           tag_dispatch_rule_id_to_second_slicing_bitset,
       const TokenizerInfo& tokenizer_info,
       std::optional<RuleLevelCache>& rule_level_cache,
-      const bool& need_expand = true
+      const bool& need_expand = true,
+      std::atomic<int64_t>* get_adaptive_total_ns = nullptr,
+      std::atomic<int64_t>* adapt_lookahead_total_ns = nullptr
   )
       : EarleyParser(grammar, init_state),
         init_rule_id_(init_state.rule_id),
@@ -53,7 +86,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
         tag_dispatch_rule_id_to_second_slicing_bitset_(tag_dispatch_rule_id_to_second_slicing_bitset
         ),
         tokenizer_info_(tokenizer_info),
-        rule_level_cache_(rule_level_cache) {}
+        rule_level_cache_(rule_level_cache),
+        get_adaptive_total_ns_(get_adaptive_total_ns),
+        adapt_lookahead_total_ns_(adapt_lookahead_total_ns) {}
   /*!
    * \brief Get the adaptive token mask for the given ParserState.
    * \param is_root_rule Whether to consider the parent rule. If false, there will be
@@ -131,6 +166,9 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 
   std::optional<RuleLevelCache> rule_level_cache_;
 
+  std::atomic<int64_t>* get_adaptive_total_ns_ = nullptr;
+  std::atomic<int64_t>* adapt_lookahead_total_ns_ = nullptr;
+
   // Temporary data for GetAdaptiveTokenMask.
   std::vector<int32_t> tmp_accepted_indices_;
   std::vector<int32_t> tmp_rejected_indices_;
@@ -147,6 +185,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
 void GrammarMatcherForTokenMaskCache::AdaptCacheWithLookahead(
     AdaptiveTokenMask* cache_ptr, bool is_root_rule
 ) {
+  NanosecondAccumulator adapt_timer(adapt_lookahead_total_ns_);
   AdaptiveTokenMask& cache = *cache_ptr;
   const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
   const auto& subtree_nodes_range = tokenizer_info_.GetTrieSubtreeNodesRange();
@@ -775,6 +814,7 @@ const std::vector<int32_t>& GrammarMatcherForTokenMaskCache::GetTokenEdgeAccepte
 }
 
 AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_root_rule) {
+  NanosecondAccumulator get_timer(get_adaptive_total_ns_);
   tmp_accepted_indices_.clear();
   tmp_rejected_indices_.clear();
   tmp_uncertain_indices_.clear();
@@ -1011,11 +1051,15 @@ class GrammarCompilerSub {
   GrammarCompilerSub(
       const TokenizerInfo& tokenizer_info,
       int max_threads,
-      std::optional<RuleLevelCache> rule_level_cache
+      std::optional<RuleLevelCache> rule_level_cache,
+      std::atomic<int64_t>* get_adaptive_total_ns = nullptr,
+      std::atomic<int64_t>* adapt_lookahead_total_ns = nullptr
   )
       : tokenizer_info_(tokenizer_info),
         max_threads_(max_threads),
-        rule_level_cache_(rule_level_cache) {}
+        rule_level_cache_(rule_level_cache),
+        get_adaptive_total_ns_(get_adaptive_total_ns),
+        adapt_lookahead_total_ns_(adapt_lookahead_total_ns) {}
 
   CompiledGrammar CompileBuiltinJSONGrammar();
 
@@ -1056,6 +1100,9 @@ class GrammarCompilerSub {
 
   /*! \brief The manager of the rule level cache.*/
   std::optional<RuleLevelCache> rule_level_cache_;
+
+  std::atomic<int64_t>* get_adaptive_total_ns_ = nullptr;
+  std::atomic<int64_t>* adapt_lookahead_total_ns_ = nullptr;
 };
 
 CompiledGrammar GrammarCompilerSub::MultiThreadCompileGrammar(Grammar grammar_unoptimized) {
@@ -1096,7 +1143,9 @@ CompiledGrammar GrammarCompilerSub::MultiThreadCompileGrammar(Grammar grammar_un
         tag_dispatch_rule_id_to_second_slicing_bitset,
         tokenizer_info_,
         rule_level_cache_,
-        false
+        false,
+        get_adaptive_total_ns_,
+        adapt_lookahead_total_ns_
     );
     auto cur_adaptive_token_mask_cache = grammar_matcher.GetAdaptiveTokenMask(is_root_rule);
     if (max_threads_ > 1) {
@@ -1343,7 +1392,13 @@ class GrammarCompiler::Impl {
                   )
                 : std::nullopt
         ),
-        no_cache_compiler_(tokenizer_info, max_threads, rule_level_cache_),
+        no_cache_compiler_(
+            tokenizer_info,
+            max_threads,
+            rule_level_cache_,
+            &total_get_adaptive_token_mask_ns_,
+            &total_adapt_cache_with_lookahead_ns_
+        ),
         grammar_level_cache_(
             max_memory_bytes == -1 ? static_cast<std::size_t>(-1)
                                    : static_cast<std::size_t>(max_memory_bytes / 3 * 2),
@@ -1352,6 +1407,21 @@ class GrammarCompiler::Impl {
     if (max_memory_bytes < -1) {
       XGRAMMAR_LOG(FATAL) << "Invalid max_memory_bytes: " << max_memory_bytes << ". "
                           << "It should be -1 (unlimited) or a non-negative integer.";
+    }
+  }
+
+  ~Impl() {
+    const int64_t get_ns = total_get_adaptive_token_mask_ns_.load(std::memory_order_relaxed);
+    const int64_t adapt_ns = total_adapt_cache_with_lookahead_ns_.load(std::memory_order_relaxed);
+    if (get_ns > 0) {
+      XGRAMMAR_LOG(INFO) << "GrammarCompiler::~Impl timing: GetAdaptiveTokenMask total_ns="
+                         << get_ns << " AdaptCacheWithLookahead total_ns=" << adapt_ns
+                         << " ratio(AdaptCacheWithLookahead_ns/GetAdaptiveTokenMask_ns)="
+                         << (static_cast<double>(adapt_ns) / static_cast<double>(get_ns));
+    } else {
+      XGRAMMAR_LOG(INFO) << "GrammarCompiler::~Impl timing: GetAdaptiveTokenMask total_ns="
+                         << get_ns << " AdaptCacheWithLookahead total_ns=" << adapt_ns
+                         << " ratio(AdaptCacheWithLookahead_ns/GetAdaptiveTokenMask_ns)=n/a";
     }
   }
 
@@ -1406,6 +1476,9 @@ class GrammarCompiler::Impl {
 
   /*! \brief The crossing cache manager for compiled grammars. */
   std::optional<RuleLevelCache> rule_level_cache_ = std::nullopt;
+
+  std::atomic<int64_t> total_get_adaptive_token_mask_ns_{0};
+  std::atomic<int64_t> total_adapt_cache_with_lookahead_ns_{0};
 
   /*! \brief The no cache compiler. */
   GrammarCompilerSub no_cache_compiler_;
