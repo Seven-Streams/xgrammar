@@ -828,6 +828,13 @@ AdaptiveTokenMask GrammarMatcherForTokenMaskCache::GetAdaptiveTokenMask(bool is_
     // If the rule doesn't have a lookahead, then it is exactly the same fsm.
     if (crossing_cache.has_value()) {
       AdaptCacheWithLookahead(&crossing_cache.value(), is_root_rule);
+      rule_level_cache_->AddCache(
+          HashCombine(fsm_hash.value(), lookahead_hash.value(), is_exact_lookahead),
+          new_state_id,
+          grammar_->per_rule_fsm_state_cnt_edge_cnt[init_rule_id_].value().first,
+          grammar_->per_rule_fsm_state_cnt_edge_cnt[init_rule_id_].value().second,
+          crossing_cache.value()
+      );
       return std::move(crossing_cache.value());
     }
   }
