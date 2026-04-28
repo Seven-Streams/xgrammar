@@ -1084,7 +1084,7 @@ def get_deepseek_v3_2_structural_tag(
     """
     INVOKE_BEGIN_PREFIX = '<｜DSML｜invoke name="'
     INVOKE_BEGIN_SUFFIX = '">\n'
-    INVOKE_END = "</｜DSML｜invoke>\n"
+    INVOKE_END = "\n</｜DSML｜invoke>\n"
     FUNCTION_CALLS_BEGIN = "<｜DSML｜function_calls>\n"
     FUNCTION_CALLS_END = "</｜DSML｜function_calls>\n"
     FUNCTION_CALLS_TRIGGER = "<｜DSML｜function_calls>"
@@ -1584,7 +1584,7 @@ def get_deepseek_v4_structural_tag(
     """
     INVOKE_BEGIN_PREFIX = '<｜DSML｜invoke name="'
     INVOKE_BEGIN_SUFFIX = '">\n'
-    INVOKE_END = "</｜DSML｜invoke>\n"
+    INVOKE_END = "\n</｜DSML｜invoke>\n"
     FUNCTION_CALLS_BEGIN = "<｜DSML｜tool_calls>\n"
     FUNCTION_CALLS_END = "</｜DSML｜tool_calls>\n"
     FUNCTION_CALLS_TRIGGER = "<｜DSML｜tool_calls>"
