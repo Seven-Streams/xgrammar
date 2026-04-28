@@ -566,22 +566,22 @@ def test_specific_functions_cases(structural_tag_fn, case: Dict[str, Any]):
         ),
         (
             "deepseek_v3_2",
-            '<｜DSML｜function_calls>\n<｜DSML｜invoke name="t1">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+            '<｜DSML｜function_calls>\n<｜DSML｜invoke name="t1">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
             True,
         ),
         (
             "deepseek_v3_2",
-            '<｜DSML｜function_calls>\n<｜DSML｜invoke name="t2">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+            '<｜DSML｜function_calls>\n<｜DSML｜invoke name="t2">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
             False,
         ),
         (
             "deepseek_v4",
-            '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="t1">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
+            '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="t1">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
             True,
         ),
         (
             "deepseek_v4",
-            '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="t2">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
+            '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="t2">\n<q>{"type": "string"}</q>\n\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
             False,
         ),
         (
@@ -1308,11 +1308,11 @@ def test_deepseek_r1_instances(case: InstanceCase):
 # ----- deepseek_v3_2
 
 _deepseek_v3_2_instances_with_tools = [
-    'text<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
-    '<think>123</think><｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
-    '<think>123</think>text<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+    'text<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
+    '<think>123</think><｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
+    '<think>123</think>text<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
     "<think>\n\n</think>text<think>123</think>",
-    '<think>\n\n</think>text<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+    '<think>\n\n</think>text<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
 ]
 _deepseek_v3_2_instances_no_tools = [
     "",
@@ -1365,7 +1365,7 @@ tag ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\uf
 tags_with_separator_tags ::= ((tag))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5cfunction_calls>\n"))
+triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5cfunction_calls>"))
 triggered_tags ::= TagDispatch(
   ("<\uff5cDSML\uff5cfunction_calls>", triggered_tags_group),
   loop_after_dispatch=true,
@@ -1422,7 +1422,7 @@ tag_1 ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\
 tags_with_separator_tags ::= ((tag_1))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5cfunction_calls>\n"))
+triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5cfunction_calls>"))
 triggered_tags ::= TagDispatch(
   ("<\uff5cDSML\uff5cfunction_calls>", triggered_tags_group),
   loop_after_dispatch=true,
@@ -1476,7 +1476,7 @@ tag ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\uf
 tags_with_separator_tags ::= ((tag))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5cfunction_calls>\n"))
+triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5cfunction_calls>"))
 triggered_tags ::= TagDispatch(
   ("<\uff5cDSML\uff5cfunction_calls>", triggered_tags_group),
   loop_after_dispatch=true,
@@ -1549,11 +1549,11 @@ def test_deepseek_v3_2_instances(case: InstanceCase):
 # ----- deepseek_v4
 
 _deepseek_v4_instances_with_tools = [
-    'text<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
-    '<think>123</think><｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
-    '<think>123</think>text<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
+    'text<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
+    '<think>123</think><｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
+    '<think>123</think>text<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
     "<think>\n\n</think>text<think>123</think>",
-    '<think>\n\n</think>text<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
+    '<think>\n\n</think>text<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
 ]
 _deepseek_v4_instances_no_tools = [
     "",
@@ -1606,7 +1606,7 @@ tag ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\uf
 tags_with_separator_tags ::= ((tag))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5ctool_calls>\n"))
+triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5ctool_calls>"))
 triggered_tags ::= TagDispatch(
   ("<\uff5cDSML\uff5ctool_calls>", triggered_tags_group),
   loop_after_dispatch=true,
@@ -1663,7 +1663,7 @@ tag_1 ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\
 tags_with_separator_tags ::= ((tag_1))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5ctool_calls>\n"))
+triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5ctool_calls>"))
 triggered_tags ::= TagDispatch(
   ("<\uff5cDSML\uff5ctool_calls>", triggered_tags_group),
   loop_after_dispatch=true,
@@ -1717,7 +1717,7 @@ tag ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\uf
 tags_with_separator_tags ::= ((tag))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5ctool_calls>\n"))
+triggered_tags_group ::= (("\n" tags_with_separator "</\uff5cDSML\uff5ctool_calls>"))
 triggered_tags ::= TagDispatch(
   ("<\uff5cDSML\uff5ctool_calls>", triggered_tags_group),
   loop_after_dispatch=true,
@@ -2919,7 +2919,7 @@ root ::= ((tag))
             {"tools": _tools_deepseek_v3_2_pair, "tool_choice": "required"},
             [
                 "",
-                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
             ],
             False,
             False,
@@ -2961,7 +2961,7 @@ tag_1 ::= (("<\uff5cDSML\uff5cinvoke name=\"alt\">\n" root_0 "\n</\uff5cDSML\uff
 tags_with_separator_tags ::= ((tag) | (tag_1))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-const_string_1 ::= (("</\uff5cDSML\uff5cfunction_calls>\n"))
+const_string_1 ::= (("</\uff5cDSML\uff5cfunction_calls>"))
 sequence ::= ((const_string tags_with_separator const_string_1))
 root ::= ((sequence))
 """,
@@ -2975,7 +2975,7 @@ root ::= ((sequence))
             {"tools": _tools_deepseek_v4_pair, "tool_choice": "required"},
             [
                 "",
-                '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
+                '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
             ],
             False,
             False,
@@ -3017,7 +3017,7 @@ tag_1 ::= (("<\uff5cDSML\uff5cinvoke name=\"alt\">\n" root_0 "\n</\uff5cDSML\uff
 tags_with_separator_tags ::= ((tag) | (tag_1))
 tags_with_separator_sub ::= ("" | ("\n" tags_with_separator_tags tags_with_separator_sub))
 tags_with_separator ::= ((tags_with_separator_tags tags_with_separator_sub))
-const_string_1 ::= (("</\uff5cDSML\uff5ctool_calls>\n"))
+const_string_1 ::= (("</\uff5cDSML\uff5ctool_calls>"))
 sequence ::= ((const_string tags_with_separator const_string_1))
 root ::= ((sequence))
 """,
@@ -3034,8 +3034,8 @@ root ::= ((sequence))
                 "forced_function_name": "search",
             },
             [
-                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
-                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="alt">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>\n',
+                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
+                '<｜DSML｜function_calls>\n<｜DSML｜invoke name="alt">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>',
             ],
             False,
             False,
@@ -3073,7 +3073,7 @@ xml_object_2 ::= (("true") | ("false"))
 root_1 ::= (("true") | ("false"))
 xml_object_1_1 ::= (("true") | ("false"))
 tag ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\uff5cinvoke>\n"))
-const_string_1 ::= (("</\uff5cDSML\uff5cfunction_calls>\n"))
+const_string_1 ::= (("</\uff5cDSML\uff5cfunction_calls>"))
 sequence ::= ((const_string tag const_string_1))
 root ::= ((sequence))
 """,
@@ -3090,8 +3090,8 @@ root ::= ((sequence))
                 "forced_function_name": "search",
             },
             [
-                '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
-                '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="alt">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n',
+                '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="search">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
+                '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="alt">\n<｜DSML｜parameter name="q" string="true">v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
             ],
             False,
             False,
@@ -3129,7 +3129,7 @@ xml_object_2 ::= (("true") | ("false"))
 root_1 ::= (("true") | ("false"))
 xml_object_1_1 ::= (("true") | ("false"))
 tag ::= (("<\uff5cDSML\uff5cinvoke name=\"search\">\n" root_0 "\n</\uff5cDSML\uff5cinvoke>\n"))
-const_string_1 ::= (("</\uff5cDSML\uff5ctool_calls>\n"))
+const_string_1 ::= (("</\uff5cDSML\uff5ctool_calls>"))
 sequence ::= ((const_string tag const_string_1))
 root ::= ((sequence))
 """,
