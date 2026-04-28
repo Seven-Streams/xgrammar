@@ -1520,6 +1520,83 @@ def get_gemma4_structural_tag(
     return StructuralTag(format=SequenceFormat(elements=[prefix_tag, suffix_tag]))
 
 
+@register_model_structural_tag("llama_custom")
+def get_llama_custom_structural_tag(
+    tools: Optional[List[FunctionToolParam]] = None,
+    builtin_tools: Optional[List[BuiltinToolParam]] = None,
+    tool_choice: Literal["auto", "required", "forced"] = "auto",
+    reasoning: bool = True,
+    force_empty_reasoning: bool = False,
+    **kwargs: Any,
+) -> StructuralTag:
+    """Get Llama user-defined ``<function=name>{...}</function>`` style structural tag format.
+
+    Corresponding model key: ``"llama_custom"``.
+
+    Reference: https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_1/#user-defined-custom-tool-calling
+
+    Parameters are normalized by :func:`get_model_structural_tag` before this
+    function is called:
+
+    - ``tools``: a list of function tools. Each tool should have a ``function``
+      object containing ``name`` and ``parameters`` fields.
+    - ``reasoning``: whether to enable reasoning mode.
+    - ``force_empty_reasoning``: when reasoning is enabled, use empty thinking
+      if ``True`` and regular thinking if ``False``.
+
+    Supported models:
+
+    - Meta-Llama-3
+    - Llama-3.1
+    - Llama-3.2
+    - Llama-4
+
+    Returns
+    -------
+    StructuralTag
+        A structural tag for Llama user-defined function calling format.
+    """
+    TOOL_CALL_BEGIN_PREFIX = "<function="
+    TOOL_CALL_BEGIN_SUFFIX = ">"
+    TOOL_CALL_END = "</function>"
+    THINK_TAG_BEGIN = "<think>"
+    THINK_TAG_END = "</think>"
+    EMPTY_THINK_CONTENT = THINK_TAG_BEGIN + "\n\n" + THINK_TAG_END
+
+    tags = []
+    for tool in tools:
+        if "function" not in tool:
+            continue
+
+        function = tool.function
+        parameters = _get_function_parameters(function)
+        name = function.name
+        tags.append(
+            TagFormat(
+                begin=TOOL_CALL_BEGIN_PREFIX + name + TOOL_CALL_BEGIN_SUFFIX,
+                content=JSONSchemaFormat(json_schema=parameters),
+                end=TOOL_CALL_END,
+            )
+        )
+
+    if len(tags) > 0:
+        suffix_tag = TriggeredTagsFormat(
+            triggers=[TOOL_CALL_BEGIN_PREFIX], tags=tags, excludes=_THINK_EXCLUDE_TOKENS
+        )
+    else:
+        suffix_tag = AnyTextFormat(excludes=_THINK_EXCLUDE_TOKENS)
+
+    if not reasoning:
+        return StructuralTag(format=suffix_tag)
+
+    if force_empty_reasoning:
+        prefix_tag = ConstStringFormat(value=EMPTY_THINK_CONTENT)
+    else:
+        prefix_tag = TagFormat(begin=THINK_TAG_BEGIN, content=AnyTextFormat(), end=THINK_TAG_END)
+
+    return StructuralTag(format=SequenceFormat(elements=[prefix_tag, suffix_tag]))
+
+
 # Backward-compatible alias
 get_builtin_structural_tag = get_model_structural_tag
 """Alias for :func:`get_model_structural_tag`. Deprecated."""
