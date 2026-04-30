@@ -628,11 +628,6 @@ def test_strict_or_missing_parameters(
     format_type: str, instance: str, is_accepted: bool, tool: Dict[str, Any]
 ):
     """strict=False or missing 'parameters' should still accept/reject instances correctly."""
-    if is_accepted and format_type == "kimi":
-        instance = "<think></think>" + instance
-    elif is_accepted and format_type == "qwen_3_5":
-        instance = "<think>\n\n</think>" + instance
-
     if format_type == "harmony":
         tools = [tool]
         stag = get_model_structural_tag(format_type, tools=tools, reasoning=False)
