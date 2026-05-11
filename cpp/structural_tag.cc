@@ -1790,20 +1790,20 @@ Grammar StructuralTagGrammarConverter::AddRootRuleAndGetGrammar(int ref_rule_id)
 }
 
 Result<int, ISTError> StructuralTagGrammarConverter::Visit(const Format& format) {
-  std::string fingerprint = FormatToJSONValue(format).serialize();
+  // std::string fingerprint = FormatToJSONValue(format).serialize();
 
-  // Check if we've already processed an identical format
-  auto it = serialization_to_rule_id_.find(fingerprint);
-  if (it != serialization_to_rule_id_.end()) {
-    return ResultOk(it->second);
-  }
+  // // Check if we've already processed an identical format
+  // auto it = serialization_to_rule_id_.find(fingerprint);
+  // if (it != serialization_to_rule_id_.end()) {
+  //   return ResultOk(it->second);
+  // }
 
   // Process the format and cache the result
   auto result =
       std::visit([&](auto&& arg) -> Result<int, ISTError> { return VisitSub(arg); }, format);
   if (result.IsOk()) {
     int rule_id = std::move(result).Unwrap();
-    serialization_to_rule_id_[fingerprint] = rule_id;
+    // serialization_to_rule_id_[fingerprint] = rule_id;
     return ResultOk(rule_id);
   }
   return result;
