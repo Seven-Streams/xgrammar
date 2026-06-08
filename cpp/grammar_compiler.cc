@@ -36,14 +36,35 @@ namespace xgrammar {
 
 /************** AdaptiveTokenMaskCache Generator **************/
 
+/*!
+ * \brief Precomputed data for the second slicing optimization of dispatch-like rules
+ * (TagDispatch, negated Trie, and their Products).
+ * \details These rules accept most tokens, but checking every token with the Earley parser is
+ * slow. Their FSMs share a common structure: most states transit to a "home" state on most
+ * characters (the start state of the AC automaton of a TagDispatch, the absorbing accept-all
+ * state of a negated Trie, or their product). We precompute a bitset over the sorted vocab:
+ * bit i is set iff token i without its first character is definitely accepted when running the
+ * rule FSM from the home state. When computing the token mask at some state, if the first
+ * character of a token transits to the home state and its bit is set, the token is accepted
+ * directly without the Earley parser.
+ */
+struct SecondSlicingInfo {
+  /*! \brief Mapping from a home state of the rule FSM (a state id in the complete FSM) to the
+   * bitset of the definitely accepted tokens: bit i is set iff sorted vocab token i, with its
+   * first character sliced off, is definitely accepted when running the rule FSM from the home
+   * state. A rule may have multiple home states, since different states return to different
+   * homes (e.g. the product of a negated trie and a tag dispatch has one home per absorbing
+   * state of the trie). */
+  std::unordered_map<int32_t, DynamicBitset> home_state_to_bitset;
+};
+
 /*! \brief The concrete implementation of GrammarMatcherNode. */
 class GrammarMatcherForTokenMaskCache : public EarleyParser {
  public:
   GrammarMatcherForTokenMaskCache(
       const Grammar& grammar,
       const ParserState& init_state,
-      const std::unordered_map<int32_t, DynamicBitset>&
-          tag_dispatch_rule_id_to_second_slicing_bitset,
+      const std::unordered_map<int32_t, SecondSlicingInfo>& rule_id_to_second_slicing_info,
       const TokenizerInfo& tokenizer_info,
       std::optional<RuleLevelCache>& rule_level_cache,
       const bool& need_expand = true
@@ -51,8 +72,7 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
       : EarleyParser(grammar, init_state),
         init_rule_id_(init_state.rule_id),
         initial_state_(init_state),
-        tag_dispatch_rule_id_to_second_slicing_bitset_(tag_dispatch_rule_id_to_second_slicing_bitset
-        ),
+        rule_id_to_second_slicing_info_(rule_id_to_second_slicing_info),
         tokenizer_info_(tokenizer_info),
         rule_level_cache_(rule_level_cache) {}
   /*!
@@ -118,15 +138,16 @@ class GrammarMatcherForTokenMaskCache : public EarleyParser {
   ParserState initial_state_;
 
   /*!
-   * \brief This is a mapping from TagDispatch rule id to the bitset used for second slicing.
-   * \note If a rule is a TagDispatch rule, then there will be an AC automaton for its triggers.
-   *  Which means that it can accept a lot of tokens. However, it will be slow to check a lot of
-   *  tokens. The DynamicBitset here is used to do a second slicing: if a token's substr(1, n - 1)
-   *  can be accepted by the start state of the AC automaton, then it will be True in the bitset.
-   *  When we check a token, we first check if its first character can transit to the start state.
-   *  If yes, then we check if it is in the bitset. If yes, then we accept it directly.
+   * \brief This is a mapping from dispatch-like rule ids (TagDispatch, negated Trie, Product) to
+   * the information used for second slicing. See SecondSlicingInfo for details. When we check a
+   * token, we first check if its first character can transit to the home state of the rule FSM.
+   * If yes, then we check if it is in the bitset. If yes, then we accept it directly.
    */
-  const std::unordered_map<int32_t, DynamicBitset>& tag_dispatch_rule_id_to_second_slicing_bitset_;
+  const std::unordered_map<int32_t, SecondSlicingInfo>& rule_id_to_second_slicing_info_;
+
+  /*! \brief The bitset of the home state chosen for the current state by
+   * GetSpeculativeCalculation, or nullptr if the current rule or state has none. */
+  const DynamicBitset* cur_definite_accepted_bitset_ = nullptr;
 
   const TokenizerInfo& tokenizer_info_;
 
@@ -429,23 +450,40 @@ int GetPossibleTokenIntervals(
 }
 
 std::pair<bool, std::bitset<256>> GrammarMatcherForTokenMaskCache::GetSpeculativeCalculation() {
-  using GrammarExprType = Grammar::Impl::GrammarExprType;
-  // If the initial rule is a tag dispatch, we will check if it can achieve its initial state.
-  const auto& rule = grammar_->GetRule(init_rule_id_);
-  const auto& rule_body = grammar_->GetGrammarExpr(rule.body_expr_id);
-  if (rule_body.type == GrammarExprType::kTagDispatch) {
-    std::bitset<256> speculative_mask;
+  // If the initial rule is a dispatch-like rule with second slicing info (TagDispatch, negated
+  // Trie, Product), the speculative mask is the set of characters transiting to the home state.
+  if (auto it = rule_id_to_second_slicing_info_.find(init_rule_id_);
+      it != rule_id_to_second_slicing_info_.end()) {
+    // Choose the home state for the current state: among the home states with a precomputed
+    // bitset, the one receiving the largest character mass from the current state.
+    const auto& home_state_to_bitset = it->second.home_state_to_bitset;
     XGRAMMAR_DCHECK(grammar_->per_rule_fsms[init_rule_id_].has_value());
     const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+    std::unordered_map<int32_t, int64_t> mass_to_home;
     for (const auto& edge : fsm.GetFsm().GetFsm().GetEdges(initial_state_.element_id)) {
-      if (edge.target != fsm.GetFsm().GetStart()) {
-        continue;
+      if (edge.IsCharRange() && home_state_to_bitset.count(edge.target) > 0) {
+        mass_to_home[edge.target] += edge.max - edge.min + 1;
       }
-      if (!edge.IsCharRange()) {
-        continue;
+    }
+    int32_t home_state = -1;
+    int64_t max_mass = 0;
+    for (const auto& [state, mass] : mass_to_home) {
+      // Tie-break by the smaller state id for determinism.
+      if (mass > max_mass || (mass == max_mass && state < home_state)) {
+        home_state = state;
+        max_mass = mass;
       }
-      for (int32_t ch = edge.min; ch <= edge.max; ++ch) {
-        speculative_mask.set(ch);
+    }
+    std::bitset<256> speculative_mask;
+    cur_definite_accepted_bitset_ = nullptr;
+    if (home_state != -1) {
+      cur_definite_accepted_bitset_ = &home_state_to_bitset.at(home_state);
+      for (const auto& edge : fsm.GetFsm().GetFsm().GetEdges(initial_state_.element_id)) {
+        if (edge.IsCharRange() && edge.target == home_state) {
+          for (int32_t ch = edge.min; ch <= edge.max; ++ch) {
+            speculative_mask.set(ch);
+          }
+        }
       }
     }
     return {true, speculative_mask};
@@ -523,12 +561,24 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
   int last_rejected_range = 0;
   const bool& is_exact_lookahead = grammar_->GetRule(init_rule_id_).is_exact_lookahead;
   std::optional<const DynamicBitset*> definite_accepted_bitset = std::nullopt;
-  const bool is_tag_dispatch_rule =
-      grammar_->GetGrammarExpr(grammar_->GetRule(init_rule_id_).body_expr_id).type ==
-      Grammar::Impl::GrammarExprType::kTagDispatch;
-  if (is_tag_dispatch_rule) {
-    XGRAMMAR_DCHECK(tag_dispatch_rule_id_to_second_slicing_bitset_.count(init_rule_id_) > 0);
-    definite_accepted_bitset = &tag_dispatch_rule_id_to_second_slicing_bitset_.at(init_rule_id_);
+  // For dispatch-like rules, the self-loop mask is a fallback for the home-state check: if every
+  // character of a token self-loops on the current state, the token is definitely accepted. This
+  // covers the absorbing states that do not transit to any home state (e.g. the reject-trap
+  // states of a negated trie).
+  std::bitset<256> self_loop_mask;
+  const bool is_second_slicing_rule = rule_id_to_second_slicing_info_.count(init_rule_id_) > 0;
+  if (is_second_slicing_rule) {
+    if (cur_definite_accepted_bitset_ != nullptr) {
+      definite_accepted_bitset = cur_definite_accepted_bitset_;
+    }
+    const auto& fsm = grammar_->per_rule_fsms[init_rule_id_].value();
+    for (const auto& edge : fsm.GetFsm().GetFsm().GetEdges(initial_state_.element_id)) {
+      if (edge.IsCharRange() && edge.target == initial_state_.element_id) {
+        for (int32_t ch = edge.min; ch <= edge.max; ++ch) {
+          self_loop_mask.set(ch);
+        }
+      }
+    }
   }
 
   const std::string* prev_token = nullptr;
@@ -558,20 +608,36 @@ bool GrammarMatcherForTokenMaskCache::GetTokenMaskWithFirstCharacterCheck(
       const auto& token = sorted_decoded_vocab[i].second;
       // This optimization is useful for simple self-recursive rules, like string content.
       if (speculative_calculation) {
-        // Optimization for tag dispatch rules.
-        if (definite_accepted_bitset.has_value()) {
+        // Optimization for dispatch-like rules (TagDispatch, negated Trie, Product).
+        if (is_second_slicing_rule) {
           // If the token is empty, it must be accepted.
           if (token.empty()) {
             tmp_accepted_indices_.push_back(i);
             continue;
           }
-          // If the token doesn't contain tags or stop strings since the second character, and it
-          // will transit to the start state after consuming the first character, it must be
+          // If the token transits to the home state after consuming the first character, and
+          // the rest of the token is definitely accepted from the home state, it must be
           // accepted.
-          if (speculative_mask[static_cast<uint8_t>(token[0])] &&
+          if (definite_accepted_bitset.has_value() &&
+              speculative_mask[static_cast<uint8_t>(token[0])] &&
               (*definite_accepted_bitset.value())[i]) {
             tmp_accepted_indices_.push_back(i);
             continue;
+          }
+          // Fallback: if every character of the token self-loops on the current state, the
+          // token must be accepted.
+          if (self_loop_mask.any()) {
+            bool all_self_loop = true;
+            for (char ch : token) {
+              if (!self_loop_mask[static_cast<uint8_t>(ch)]) {
+                all_self_loop = false;
+                break;
+              }
+            }
+            if (all_self_loop) {
+              tmp_accepted_indices_.push_back(i);
+              continue;
+            }
           }
         } else {
           bool all_accepted = true;
@@ -1026,14 +1092,15 @@ class GrammarCompilerSub {
  private:
   /*! \brief The main logic. Compile the grammar with multi-threading. */
   CompiledGrammar MultiThreadCompileGrammar(Grammar grammar);
-  /*! \brief Optimization for TagDispatch.
+  /*! \brief Second slicing optimization for dispatch-like rules (TagDispatch, negated Trie,
+   * Product). See SecondSlicingInfo for details.
    *  \param compiled_grammar_impl the compiled_grammar to be optimized.
-   *  \param tag_dispatch_rule_id_to_second_slicing_bitset Return value. Mapping from the rule_id to
-   * the definite accepted token mask.
+   *  \param rule_id_to_second_slicing_info Return value. Mapping from the rule_id to the home
+   * state and the definite accepted token bitset.
    */
-  void TagDispatchOptimization(
+  void SecondSlicingOptimization(
       std::shared_ptr<CompiledGrammar::Impl> compiled_grammar_impl,
-      std::unordered_map<int32_t, DynamicBitset>* tag_dispatch_rule_id_to_second_slicing_bitset
+      std::unordered_map<int32_t, SecondSlicingInfo>* rule_id_to_second_slicing_info
   );
 
   /*! \brief The vocabulary associated with this storage class. */
@@ -1052,8 +1119,8 @@ CompiledGrammar GrammarCompilerSub::MultiThreadCompileGrammar(Grammar grammar_un
   if (tokenizer_info_.GetVocabSize() == 0) {
     return CompiledGrammar(compiled_grammar_impl);
   }
-  std::unordered_map<int32_t, DynamicBitset> tag_dispatch_rule_id_to_second_slicing_bitset;
-  TagDispatchOptimization(compiled_grammar_impl, &tag_dispatch_rule_id_to_second_slicing_bitset);
+  std::unordered_map<int32_t, SecondSlicingInfo> rule_id_to_second_slicing_info;
+  SecondSlicingOptimization(compiled_grammar_impl, &rule_id_to_second_slicing_info);
 
   // If the compiler is cache-enabled, then we hash the grammars for crossing-grammar caching.
   if (rule_level_cache_.has_value()) {
@@ -1079,7 +1146,7 @@ CompiledGrammar GrammarCompilerSub::MultiThreadCompileGrammar(Grammar grammar_un
     auto grammar_matcher = GrammarMatcherForTokenMaskCache(
         compiled_grammar_impl->grammar,
         state,
-        tag_dispatch_rule_id_to_second_slicing_bitset,
+        rule_id_to_second_slicing_info,
         tokenizer_info_,
         rule_level_cache_,
         false
@@ -1169,55 +1236,196 @@ CompiledGrammar GrammarCompilerSub::CompileGrammar(
   return MultiThreadCompileGrammar(Grammar::FromEBNF(ebnf_str, root_rule_name));
 }
 
-void GrammarCompilerSub::TagDispatchOptimization(
+void GrammarCompilerSub::SecondSlicingOptimization(
     std::shared_ptr<CompiledGrammar::Impl> compiled_grammar_impl,
-    std::unordered_map<int32_t, DynamicBitset>* tag_dispatch_rule_id_to_second_slicing_bitset
+    std::unordered_map<int32_t, SecondSlicingInfo>* rule_id_to_second_slicing_info
 ) {
   using GrammarExprType = Grammar::Impl::GrammarExprType;
-  tag_dispatch_rule_id_to_second_slicing_bitset->clear();
+  rule_id_to_second_slicing_info->clear();
 
-  // Optimization for TagDispatch: Precompute the definitely accepted tokens.
-  for (int i = 0; i < compiled_grammar_impl->grammar->NumRules(); i++) {
-    const auto& rule = compiled_grammar_impl->grammar->GetRule(i);
-    const auto& rule_body = compiled_grammar_impl->grammar->GetGrammarExpr(rule.body_expr_id);
-    if (rule_body.type != GrammarExprType::kTagDispatch) {
-      continue;
-    }
-    XGRAMMAR_DCHECK(rule_body.type == GrammarExprType::kTagDispatch);
-    Grammar::Impl::TagDispatch tag_dispatch =
-        compiled_grammar_impl->GetGrammar()->GetTagDispatch(rule.body_expr_id);
-    const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
-    DynamicBitset definite_accepted_tokens_since_second_char(sorted_decoded_vocab.size());
-    for (int j = 0; j < static_cast<int32_t>(sorted_decoded_vocab.size()); j++) {
-      bool definite_accept_since_second_char = true;
-      const auto& token = sorted_decoded_vocab[j].second;
-      if (token.empty()) {
-        definite_accepted_tokens_since_second_char.Set(j);
-        continue;
-      }
+  auto& grammar = compiled_grammar_impl->grammar;
+  const auto& sorted_decoded_vocab = tokenizer_info_.GetSortedDecodedVocab();
 
-      // Check if the token contains any string trigger or exclude string after first char.
-      for (const auto& [trigger, rule_id] : tag_dispatch.tag_rule_pairs) {
-        if (token.find(trigger, 1) != std::string::npos) {
-          definite_accept_since_second_char = false;
-          break;
+  // Reused buffers for the FSM walk of the negated Trie / Product rules.
+  std::vector<int32_t> cur_states;
+  std::vector<int32_t> next_states;
+  std::vector<uint32_t> visited_stamps;
+  uint32_t stamp = 0;
+
+  // Precompute the definitely accepted tokens for the dispatch-like rules.
+  for (int i = 0; i < grammar->NumRules(); i++) {
+    const auto& rule = grammar->GetRule(i);
+    const auto& rule_body = grammar->GetGrammarExpr(rule.body_expr_id);
+
+    if (rule_body.type == GrammarExprType::kTagDispatch) {
+      // For TagDispatch, the home state is the start state of the AC automaton, and a token is
+      // definitely accepted from it iff the token contains no trigger or exclude string since
+      // the second character.
+      Grammar::Impl::TagDispatch tag_dispatch = grammar->GetTagDispatch(rule.body_expr_id);
+      DynamicBitset definite_accepted_tokens_since_second_char(sorted_decoded_vocab.size());
+      for (int j = 0; j < static_cast<int32_t>(sorted_decoded_vocab.size()); j++) {
+        bool definite_accept_since_second_char = true;
+        const auto& token = sorted_decoded_vocab[j].second;
+        if (token.empty()) {
+          definite_accepted_tokens_since_second_char.Set(j);
+          continue;
         }
-      }
-      if (definite_accept_since_second_char) {
-        for (const auto& excl : tag_dispatch.excludes) {
-          if (token.find(excl, 1) != std::string::npos) {
+
+        // Check if the token contains any string trigger or exclude string after first char.
+        for (const auto& [trigger, rule_id] : tag_dispatch.tag_rule_pairs) {
+          if (token.find(trigger, 1) != std::string::npos) {
             definite_accept_since_second_char = false;
             break;
           }
         }
-      }
+        if (definite_accept_since_second_char) {
+          for (const auto& excl : tag_dispatch.excludes) {
+            if (token.find(excl, 1) != std::string::npos) {
+              definite_accept_since_second_char = false;
+              break;
+            }
+          }
+        }
 
-      if (definite_accept_since_second_char) {
-        definite_accepted_tokens_since_second_char.Set(j);
+        if (definite_accept_since_second_char) {
+          definite_accepted_tokens_since_second_char.Set(j);
+        }
+      }
+      XGRAMMAR_DCHECK(grammar->per_rule_fsms[i].has_value());
+      SecondSlicingInfo info;
+      info.home_state_to_bitset.emplace(
+          grammar->per_rule_fsms[i]->GetFsm().GetStart(),
+          std::move(definite_accepted_tokens_since_second_char)
+      );
+      (*rule_id_to_second_slicing_info)[i] = std::move(info);
+      continue;
+    }
+
+    // For negated Trie and Product rules, the home state and the bitset are computed directly
+    // on the rule FSM.
+    if (rule_body.type != GrammarExprType::kTrie && rule_body.type != GrammarExprType::kProduct) {
+      continue;
+    }
+    if (rule_body.type == GrammarExprType::kTrie && !grammar->GetTrie(rule_body).is_negated) {
+      // A non-negated trie accepts a finite language, so second slicing cannot help.
+      continue;
+    }
+    if (!grammar->per_rule_fsms[i].has_value()) {
+      continue;
+    }
+    const auto& rule_fsm = grammar->per_rule_fsms[i].value();
+    const auto& complete_fsm = rule_fsm.GetFsm().GetFsm();
+
+    // Find the home states: for each reachable state, its home candidate is the target state
+    // receiving the largest character mass over its outgoing edges. Dispatch-like FSMs transit
+    // to a home state on most characters (the absorbing accept-all state of a negated trie, or
+    // the products of the factors' home states with the absorbing states), so most tokens stay
+    // alive from a home state. To bound the cost of the precomputation, only the home states
+    // chosen by the most states are kept.
+    static constexpr int kMaxHomeStatesPerRule = 16;
+    std::unordered_set<int> reachable_states;
+    rule_fsm.GetFsm().GetReachableStates(&reachable_states);
+    std::unordered_map<int32_t, int32_t> home_candidate_to_num_states;
+    for (int state : reachable_states) {
+      std::unordered_map<int32_t, int64_t> mass_to_target;
+      for (const auto& edge : complete_fsm.GetEdges(state)) {
+        if (edge.IsCharRange()) {
+          mass_to_target[edge.target] += edge.max - edge.min + 1;
+        }
+      }
+      int32_t home_candidate = -1;
+      int64_t max_mass = 0;
+      for (const auto& [target, mass] : mass_to_target) {
+        // Tie-break by the smaller state id for determinism.
+        if (mass > max_mass || (mass == max_mass && target < home_candidate)) {
+          home_candidate = target;
+          max_mass = mass;
+        }
+      }
+      if (home_candidate != -1) {
+        home_candidate_to_num_states[home_candidate] += 1;
       }
     }
-    (*tag_dispatch_rule_id_to_second_slicing_bitset)[i] =
-        definite_accepted_tokens_since_second_char;
+    if (home_candidate_to_num_states.empty()) {
+      continue;
+    }
+    std::vector<std::pair<int32_t, int32_t>> sorted_home_candidates(
+        home_candidate_to_num_states.begin(), home_candidate_to_num_states.end()
+    );
+    std::sort(
+        sorted_home_candidates.begin(),
+        sorted_home_candidates.end(),
+        [](const auto& lhs, const auto& rhs) {
+          // Sort by the number of choosing states descending; tie-break by the smaller state id
+          // for determinism.
+          return lhs.second != rhs.second ? lhs.second > rhs.second : lhs.first < rhs.first;
+        }
+    );
+    if (static_cast<int>(sorted_home_candidates.size()) > kMaxHomeStatesPerRule) {
+      sorted_home_candidates.resize(kMaxHomeStatesPerRule);
+    }
+
+    if (static_cast<int>(visited_stamps.size()) < complete_fsm.NumStates()) {
+      visited_stamps.resize(complete_fsm.NumStates(), 0);
+    }
+
+    // Expand the epsilon closure of the states in (*states)[from_index:] in place.
+    auto expand_epsilon_closure = [&](std::vector<int32_t>* states, size_t from_index) {
+      for (size_t idx = from_index; idx < states->size(); ++idx) {
+        for (const auto& edge : complete_fsm.GetEdges((*states)[idx])) {
+          if (edge.IsEpsilon() && visited_stamps[edge.target] != stamp) {
+            visited_stamps[edge.target] = stamp;
+            states->push_back(edge.target);
+          }
+        }
+      }
+    };
+
+    // A token is definitely accepted from a home state iff walking its bytes since the second
+    // character along the character edges keeps at least one state alive. Then every prefix of
+    // the token can be consumed by the Earley parser, so the token is accepted as a prefix of
+    // the rule. Rule reference and other non-character edges are not followed, which is
+    // conservative but safe.
+    SecondSlicingInfo info;
+    for (const auto& [home_state, num_states] : sorted_home_candidates) {
+      DynamicBitset definite_accepted_tokens_since_second_char(sorted_decoded_vocab.size());
+      for (int j = 0; j < static_cast<int32_t>(sorted_decoded_vocab.size()); j++) {
+        const auto& token = sorted_decoded_vocab[j].second;
+        ++stamp;
+        cur_states.clear();
+        cur_states.push_back(home_state);
+        visited_stamps[home_state] = stamp;
+        expand_epsilon_closure(&cur_states, 0);
+        bool alive = true;
+        for (size_t pos = 1; pos < token.size(); ++pos) {
+          uint8_t ch = static_cast<uint8_t>(token[pos]);
+          ++stamp;
+          next_states.clear();
+          for (int32_t state : cur_states) {
+            for (const auto& edge : complete_fsm.GetEdges(state)) {
+              if (edge.IsCharRange() && edge.min <= ch && ch <= edge.max &&
+                  visited_stamps[edge.target] != stamp) {
+                visited_stamps[edge.target] = stamp;
+                next_states.push_back(edge.target);
+              }
+            }
+          }
+          expand_epsilon_closure(&next_states, 0);
+          if (next_states.empty()) {
+            alive = false;
+            break;
+          }
+          std::swap(cur_states, next_states);
+        }
+        if (alive) {
+          definite_accepted_tokens_since_second_char.Set(j);
+        }
+      }
+      info.home_state_to_bitset.emplace(
+          home_state, std::move(definite_accepted_tokens_since_second_char)
+      );
+    }
+    (*rule_id_to_second_slicing_info)[i] = std::move(info);
   }
 }
 

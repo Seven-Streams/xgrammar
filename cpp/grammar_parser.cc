@@ -493,6 +493,8 @@ class EBNFParser {
   int32_t ParseTokenSet();
   int32_t ParseExcludeToken();
   int32_t ParseTokenTagDispatch();
+  int32_t ParseTrie();
+  int32_t ParseProduct();
 
   // Helper functions
 
@@ -544,6 +546,8 @@ const std::unordered_map<std::string, std::function<int32_t(EBNFParser*)>>
         {"Token", [](EBNFParser* parser) { return parser->ParseTokenSet(); }},
         {"ExcludeToken", [](EBNFParser* parser) { return parser->ParseExcludeToken(); }},
         {"TokenTagDispatch", [](EBNFParser* parser) { return parser->ParseTokenTagDispatch(); }},
+        {"Trie", [](EBNFParser* parser) { return parser->ParseTrie(); }},
+        {"Product", [](EBNFParser* parser) { return parser->ParseProduct(); }},
 };
 
 const EBNFParser::Token& EBNFParser::Peek(int delta) const { return *(current_token_ + delta); }
@@ -1141,6 +1145,85 @@ int32_t EBNFParser::ParseTokenTagDispatch() {
   }
 
   return builder_.AddTokenTagDispatch(ttd);
+}
+
+int32_t EBNFParser::ParseTrie() {
+  Consume();  // Consume Trie operator
+  auto start = current_token_;
+  auto args = ParseMacroArguments();
+  auto delta_element = start - current_token_;  // Used to report parse errors
+
+  Grammar::Impl::Trie trie;
+
+  static const std::unordered_set<std::string> kValidNamedArgs = {"neg"};
+  for (const auto& [name, _] : args.named_arguments) {
+    if (kValidNamedArgs.count(name) == 0) {
+      ReportParseError("Unknown named argument for Trie: " + name, delta_element);
+    }
+  }
+
+  // The first positional parameter: a tuple of pattern strings
+  if (args.arguments.size() != 1) {
+    ReportParseError(
+        "Trie() requires exactly one tuple of strings as the positional argument", delta_element
+    );
+  }
+  auto tuple_node = std::get_if<MacroIR::TupleNode>(args.arguments[0].get());
+  if (tuple_node == nullptr) {
+    ReportParseError("The first argument of Trie must be a tuple of strings", delta_element);
+  }
+  if (tuple_node->elements.empty()) {
+    ReportParseError("Trie() requires at least one pattern string", delta_element);
+  }
+  for (const auto& element : tuple_node->elements) {
+    auto str_node = std::get_if<MacroIR::StringNode>(element.get());
+    if (str_node == nullptr || str_node->value.empty()) {
+      ReportParseError("Trie pattern must be a non-empty string literal", delta_element);
+    }
+    trie.patterns.push_back(str_node->value);
+  }
+
+  // neg
+  trie.is_negated = false;
+  if (auto it = args.named_arguments.find("neg"); it != args.named_arguments.end()) {
+    auto bool_node = std::get_if<MacroIR::BooleanNode>(it->second.get());
+    if (bool_node == nullptr) {
+      ReportParseError("neg must be a boolean literal", delta_element);
+    }
+    trie.is_negated = bool_node->value;
+  }
+
+  return builder_.AddTrie(trie);
+}
+
+int32_t EBNFParser::ParseProduct() {
+  Consume();  // Consume Product operator
+  auto start = current_token_;
+  auto args = ParseMacroArguments();
+  auto delta_element = start - current_token_;  // Used to report parse errors
+
+  if (!args.named_arguments.empty()) {
+    ReportParseError("Product() does not accept named arguments", delta_element);
+  }
+  if (args.arguments.size() < 2) {
+    ReportParseError("Product() requires at least two rule references", delta_element);
+  }
+
+  Grammar::Impl::Product product;
+  product.rule_ids.reserve(args.arguments.size());
+  for (const auto& arg : args.arguments) {
+    auto rule_name_node = std::get_if<MacroIR::IdentifierNode>(arg.get());
+    if (rule_name_node == nullptr) {
+      ReportParseError("Each argument of Product must be a rule name", delta_element);
+    }
+    auto rule_id = builder_.GetRuleId(rule_name_node->name);
+    if (rule_id == -1) {
+      ReportParseError("Rule \"" + rule_name_node->name + "\" is not defined", delta_element);
+    }
+    product.rule_ids.push_back(rule_id);
+  }
+
+  return builder_.AddProduct(product);
 }
 
 int32_t EBNFParser::ParseLookaheadAssertion() {

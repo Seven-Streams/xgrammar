@@ -119,6 +119,12 @@ class GrammarBuilder {
   /*! \brief Encode a TokenTagDispatch struct into a kTokenTagDispatch expr. */
   int32_t AddTokenTagDispatch(const Grammar::Impl::TokenTagDispatch& token_tag_dispatch);
 
+  /*! \brief Encode a Trie struct into a kTrie expr. */
+  int32_t AddTrie(const Grammar::Impl::Trie& trie);
+
+  /*! \brief Encode a Product struct into a kProduct expr. */
+  int32_t AddProduct(const Grammar::Impl::Product& product);
+
   int32_t AddRepeat(int32_t ref_rule_id, int32_t min_repeat_count, int32_t max_repeat_count);
 
   /*!

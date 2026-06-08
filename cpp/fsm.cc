@@ -1229,6 +1229,84 @@ Result<FSMWithStartEnd> FSMWithStartEnd::Intersect(
   return ResultOk(std::move(result));
 }
 
+Result<FSMWithStartEnd> FSMWithStartEnd::Product(
+    const FSMWithStartEnd& lhs, const FSMWithStartEnd& rhs, int max_result_num_states
+) {
+  FSM result_fsm(0);
+  FSMWithStartEnd result(result_fsm, 0, std::vector<bool>(), false);
+  std::unordered_map<std::pair<int, int>, int> state_map;
+  std::queue<std::pair<int, int>> queue;
+  queue.push({lhs.GetStart(), rhs.GetStart()});
+  state_map[{lhs.GetStart(), rhs.GetStart()}] = result.AddState();
+
+  // Get the state id of a pair of states, or create a new state if it does not exist.
+  auto get_or_add_state = [&](const std::pair<int, int>& state_pair) {
+    auto it = state_map.find(state_pair);
+    if (it != state_map.end()) {
+      return it->second;
+    }
+    int new_state = result.AddState();
+    state_map[state_pair] = new_state;
+    queue.push(state_pair);
+    return new_state;
+  };
+
+  while (!queue.empty()) {
+    auto [lhs_state, rhs_state] = queue.front();
+    queue.pop();
+    if (result.NumStates() > max_result_num_states) {
+      return ResultErr("The number of states of the product FSM exceeds the limit!");
+    }
+    int current_state = state_map[{lhs_state, rhs_state}];
+    if (lhs.IsEndState(lhs_state) && rhs.IsEndState(rhs_state)) {
+      result.AddEndState(current_state);
+    }
+    // Epsilon edges are advanced asynchronously on either side, since they do not consume
+    // input characters. The edge types are checked lazily, so only the edges of the states
+    // reachable from the start states matter. This allows the input FSMs to be embedded in a
+    // larger FSM (e.g. the complete FSM of a grammar).
+    for (const auto& lhs_edge : lhs.GetFsm().GetEdges(lhs_state)) {
+      if (lhs_edge.IsEpsilon()) {
+        result.GetFsm().AddEpsilonEdge(
+            current_state, get_or_add_state({lhs_edge.target, rhs_state})
+        );
+      } else if (!lhs_edge.IsCharRange()) {
+        return ResultErr("Product only supports FSMs with character range edges and epsilon edges!"
+        );
+      }
+    }
+    for (const auto& rhs_edge : rhs.GetFsm().GetEdges(rhs_state)) {
+      if (rhs_edge.IsEpsilon()) {
+        result.GetFsm().AddEpsilonEdge(
+            current_state, get_or_add_state({lhs_state, rhs_edge.target})
+        );
+      } else if (!rhs_edge.IsCharRange()) {
+        return ResultErr("Product only supports FSMs with character range edges and epsilon edges!"
+        );
+      }
+    }
+    // Character range edges are synchronized by range intersection.
+    for (const auto& lhs_edge : lhs.GetFsm().GetEdges(lhs_state)) {
+      if (!lhs_edge.IsCharRange()) {
+        continue;
+      }
+      for (const auto& rhs_edge : rhs.GetFsm().GetEdges(rhs_state)) {
+        if (!rhs_edge.IsCharRange()) {
+          continue;
+        }
+        if (lhs_edge.min > rhs_edge.max || rhs_edge.min > lhs_edge.max) {
+          continue;  // No intersection.
+        }
+        int min_value = std::max(lhs_edge.min, rhs_edge.min);
+        int max_value = std::min(lhs_edge.max, rhs_edge.max);
+        int target_state = get_or_add_state({lhs_edge.target, rhs_edge.target});
+        result.GetFsm().AddEdge(current_state, target_state, min_value, max_value);
+      }
+    }
+  }
+  return ResultOk(std::move(result));
+}
+
 bool FSMWithStartEnd::IsDFA() {
   if (is_dfa_) {
     return true;

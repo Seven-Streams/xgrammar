@@ -143,6 +143,10 @@ class GrammarFunctor {
         return VisitExcludeToken(grammar_expr);
       case GrammarExprType::kTokenTagDispatch:
         return VisitTokenTagDispatch(grammar_expr);
+      case GrammarExprType::kTrie:
+        return VisitTrie(grammar_expr);
+      case GrammarExprType::kProduct:
+        return VisitProduct(grammar_expr);
       default:
         XGRAMMAR_LOG(FATAL) << "Unexpected sequence type: " << static_cast<int>(grammar_expr.type);
         XGRAMMAR_UNREACHABLE();
@@ -235,6 +239,31 @@ class GrammarFunctor {
 
   virtual T VisitTokenTagDispatch(const GrammarExpr& grammar_expr) {
     return VisitElement(grammar_expr);
+  }
+
+  /*! \brief Visit a trie GrammarExpr. The trie data contains expr ids of the pattern strings,
+   * which reference the old grammar, so it is decoded and re-added instead of copied verbatim. */
+  virtual T VisitTrie(const GrammarExpr& grammar_expr) {
+    if constexpr (std::is_same<T, void>::value) {
+      return;
+    } else if constexpr (std::is_same<T, int32_t>::value) {
+      Grammar::Impl::Trie trie = base_grammar_->GetTrie(grammar_expr);
+      return builder_->AddTrie(trie);
+    } else {
+      return T();
+    }
+  }
+
+  /*! \brief Visit a product GrammarExpr. */
+  virtual T VisitProduct(const GrammarExpr& grammar_expr) {
+    if constexpr (std::is_same<T, void>::value) {
+      return;
+    } else if constexpr (std::is_same<T, int32_t>::value) {
+      Grammar::Impl::Product product = base_grammar_->GetProduct(grammar_expr);
+      return builder_->AddProduct(product);
+    } else {
+      return T();
+    }
   }
 
   /*! \brief The grammar to visit or mutate. */
@@ -373,6 +402,8 @@ class GrammarFSMBuilder {
   static std::optional<FSMWithStartEnd> Sequence(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> Choices(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> TagDispatch(const Grammar::Impl::TagDispatch& tag_dispatch);
+  static std::optional<FSMWithStartEnd> Trie(const Grammar::Impl::Trie& trie);
+  static std::optional<FSMWithStartEnd> Product(const std::vector<FSMWithStartEnd>& factor_fsms);
 };
 
 /*!

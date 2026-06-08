@@ -810,6 +810,25 @@ class FSMWithStartEnd : public FSMWithStartEndBase<FSM> {
   );
 
   /*!
+   * \brief Compute the product automaton of two FSMs. The result accepts the intersection of
+   * the languages of the two FSMs.
+   * \details Unlike Intersect, this method does not convert the FSMs to DFAs. It performs the
+   * product construction directly on the NFAs: character range edges are synchronized by range
+   * intersection, and epsilon edges are advanced asynchronously on either side. Only character
+   * range edges and epsilon edges are supported. The edge types are checked lazily during the
+   * traversal, so only the states reachable from the start states matter; the input FSMs are
+   * thus allowed to be embedded in a larger FSM (e.g. the complete FSM of a grammar).
+   * \param lhs The left FSM.
+   * \param rhs The right FSM.
+   * \param max_result_num_states The maximum number of states in the result FSM.
+   * \return The product of the FSMs, or an error if unsupported edges are reachable or the
+   * result exceeds max_result_num_states.
+   */
+  static Result<FSMWithStartEnd> Product(
+      const FSMWithStartEnd& lhs, const FSMWithStartEnd& rhs, int max_result_num_states = 1e6
+  );
+
+  /*!
    * \brief Union the FSMs.
    * \param fsms The FSMs to be unioned.
    * \return The union of the FSMs.

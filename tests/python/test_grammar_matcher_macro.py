@@ -194,5 +194,82 @@ end_tag ::= "</think>"
     assert not _is_grammar_accept_string(grammar, "start12345</conclude>abc")
 
 
+grammar_str__input_str__test_dispatch_like_mask_generation_correctness = [
+    # Trie(neg=true) as the root rule
+    ('root ::= Trie(("abc", "hello"), neg=true)', "xqabhel"),
+    # Trie(neg=true) in a sequence
+    (
+        """root ::= Product(t1, t2) "end"
+t1 ::= Trie(("abc", "hello"), neg=true)
+t2 ::= Trie(("abd", "bye"), neg=true)
+""",
+        "xqaben",
+    ),
+    # Product of Trie(neg=true) and an excludes-only TagDispatch
+    (
+        """root ::= Product(rule1, rule2) "end"
+rule1 ::= Trie(("cat", "dog"), neg=true)
+rule2 ::= TagDispatch(excludes=("end"), loop_after_dispatch=false)
+""",
+        "caxyen",
+    ),
+    # Product of two excludes-only TagDispatches
+    (
+        """root ::= Product(rule1, rule2) "end"
+rule1 ::= TagDispatch(excludes=("end"), loop_after_dispatch=false)
+rule2 ::= TagDispatch(excludes=("cat"), loop_after_dispatch=false)
+""",
+        "caxyen",
+    ),
+    # Product of two Trie(neg=true)
+    (
+        """root ::= Product(t1, t2)
+t1 ::= Trie(("abc", "hello"), neg=true)
+t2 ::= Trie(("abd", "bye"), neg=true)
+""",
+        "xqabhe",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "grammar_str, input_str", grammar_str__input_str__test_dispatch_like_mask_generation_correctness
+)
+def test_dispatch_like_mask_generation_correctness(grammar_str: str, input_str: str):
+    """Compare the token mask of dispatch-like rules (negated Trie, Product, TagDispatch)
+    against the brute-force per-token ground truth at every step."""
+    tokens = [
+        # fmt: off
+        "a", "b", "c", "d", "e", "n", "x", "y", "ab", "abc", "abcd", "abd", "bc", "ca", "cat",
+        "catd", "do", "dog", "he", "hel", "hello", "bye", "by", "en", "end", "xend", "xen",
+        "c哈哈t", "q", "zzzzzzzz", "xy", "yx",
+        # fmt: on
+    ]
+    grammar = xgr.Grammar.from_ebnf(grammar_str)
+    tokenizer_info = xgr.TokenizerInfo(tokens)
+    compiler = xgr.GrammarCompiler(tokenizer_info, max_threads=1)
+    compiled_grammar = compiler.compile_grammar(grammar)
+    mask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
+
+    def ground_truth_accepted(prefix: str) -> list:
+        accepted = []
+        for token in tokens:
+            matcher = xgr.GrammarMatcher(compiled_grammar, terminate_without_stop_token=True)
+            if matcher.accept_string(prefix + token):
+                accepted.append(token)
+        return accepted
+
+    matcher = xgr.GrammarMatcher(compiled_grammar, terminate_without_stop_token=True)
+    prefix = ""
+    for c in input_str:
+        matcher.fill_next_token_bitmask(mask)
+        rejected_indices = set(_get_masked_tokens_from_bitmask(mask, tokenizer_info.vocab_size))
+        accepted_tokens = [tokens[i] for i in range(len(tokens)) if i not in rejected_indices]
+        expected_tokens = ground_truth_accepted(prefix)
+        assert accepted_tokens == expected_tokens, f"prefix={prefix!r}"
+        assert matcher.accept_string(c), f"prefix={prefix!r}, char={c!r}"
+        prefix += c
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

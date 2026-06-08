@@ -132,6 +132,10 @@ class Grammar::Impl {
     //               loop_after_dispatch,
     //               exclude_cnt, token_id × M]
     kTokenTagDispatch,
+    // data format: [is_negated, pattern_expr_id0, pattern_expr_id1, ...]
+    kTrie,
+    // data format: [rule_id0, rule_id1, ...]
+    kProduct,
   };
 
   /*! \brief The object representing a grammar expr. */
@@ -267,6 +271,51 @@ class Grammar::Impl {
   /*! \brief Get the token tag dispatch from the grammar expr with the given id. */
   TokenTagDispatch GetTokenTagDispatch(int32_t grammar_expr_id) {
     return GetTokenTagDispatch(GetGrammarExpr(grammar_expr_id));
+  }
+
+  /*! \brief The object representing a trie. */
+  struct Trie {
+    /*! \brief The pattern strings of the trie. */
+    std::vector<std::string> patterns;
+    /*! \brief If false, the trie accepts exactly the pattern strings. If true, the trie accepts
+     * all strings that do not have any pattern string as a prefix. */
+    bool is_negated;
+  };
+
+  /*! \brief Get the trie from the grammar expr. */
+  Trie GetTrie(const GrammarExpr& grammar_expr) const {
+    XGRAMMAR_DCHECK(grammar_expr.type == GrammarExprType::kTrie) << "GrammarExpr is not a trie";
+    XGRAMMAR_DCHECK(grammar_expr.size() >= 2);
+    Trie result;
+    result.is_negated = static_cast<bool>(grammar_expr[0]);
+    result.patterns.reserve(grammar_expr.size() - 1);
+    for (int i = 1; i < grammar_expr.size(); ++i) {
+      result.patterns.push_back(GetByteString(grammar_expr[i]));
+    }
+    return result;
+  }
+
+  /*! \brief Get the trie from the grammar expr with the given id. */
+  Trie GetTrie(int32_t grammar_expr_id) const { return GetTrie(GetGrammarExpr(grammar_expr_id)); }
+
+  /*! \brief The object representing a product of rules. */
+  struct Product {
+    /*! \brief The ids of the rules whose FSMs are multiplied. */
+    std::vector<int32_t> rule_ids;
+  };
+
+  /*! \brief Get the product from the grammar expr. */
+  Product GetProduct(const GrammarExpr& grammar_expr) const {
+    XGRAMMAR_DCHECK(grammar_expr.type == GrammarExprType::kProduct)
+        << "GrammarExpr is not a product";
+    Product result;
+    result.rule_ids.assign(grammar_expr.begin(), grammar_expr.end());
+    return result;
+  }
+
+  /*! \brief Get the product from the grammar expr with the given id. */
+  Product GetProduct(int32_t grammar_expr_id) const {
+    return GetProduct(GetGrammarExpr(grammar_expr_id));
   }
 
  private:

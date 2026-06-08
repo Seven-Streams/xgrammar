@@ -50,6 +50,10 @@ std::string GrammarPrinter::PrintGrammarExpr(const GrammarExpr& grammar_expr) {
       return PrintExcludeToken(grammar_expr);
     case GrammarExprType::kTokenTagDispatch:
       return PrintTokenTagDispatch(grammar_expr);
+    case GrammarExprType::kTrie:
+      return PrintTrie(grammar_expr);
+    case GrammarExprType::kProduct:
+      return PrintProduct(grammar_expr);
     default:
       XGRAMMAR_LOG(FATAL) << "Unexpected GrammarExpr type: " << static_cast<int>(grammar_expr.type);
       XGRAMMAR_UNREACHABLE();
@@ -197,6 +201,28 @@ std::string GrammarPrinter::PrintTokenTagDispatch(const GrammarExpr& grammar_exp
     result += std::to_string(ttd.excludes[i]);
   }
   result += ")\n)";
+  return result;
+}
+
+std::string GrammarPrinter::PrintTrie(const GrammarExpr& grammar_expr) {
+  auto trie = grammar_->GetTrie(grammar_expr);
+  std::string result = "Trie((";
+  for (int i = 0; i < static_cast<int>(trie.patterns.size()); ++i) {
+    if (i > 0) result += ", ";
+    result += PrintString(trie.patterns[i]);
+  }
+  result += "), neg=" + PrintBoolean(trie.is_negated) + ")";
+  return result;
+}
+
+std::string GrammarPrinter::PrintProduct(const GrammarExpr& grammar_expr) {
+  auto product = grammar_->GetProduct(grammar_expr);
+  std::string result = "Product(";
+  for (int i = 0; i < static_cast<int>(product.rule_ids.size()); ++i) {
+    if (i > 0) result += ", ";
+    result += grammar_->GetRule(product.rule_ids[i]).name;
+  }
+  result += ")";
   return result;
 }
 

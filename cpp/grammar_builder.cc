@@ -170,6 +170,24 @@ int32_t GrammarBuilder::AddTokenTagDispatch(
   );
 }
 
+int32_t GrammarBuilder::AddTrie(const Grammar::Impl::Trie& trie) {
+  std::vector<int32_t> data;
+  data.reserve(trie.patterns.size() + 1);
+  data.push_back(static_cast<int32_t>(trie.is_negated));
+  for (const auto& pattern : trie.patterns) {
+    data.push_back(AddByteString(pattern));
+  }
+  return AddGrammarExpr({GrammarExprType::kTrie, data.data(), static_cast<int32_t>(data.size())});
+}
+
+int32_t GrammarBuilder::AddProduct(const Grammar::Impl::Product& product) {
+  return AddGrammarExpr(
+      {GrammarExprType::kProduct,
+       product.rule_ids.data(),
+       static_cast<int32_t>(product.rule_ids.size())}
+  );
+}
+
 int32_t GrammarBuilder::AddRepeat(
     int32_t ref_rule_id, int32_t min_repeat_count, int32_t max_repeat_count
 ) {

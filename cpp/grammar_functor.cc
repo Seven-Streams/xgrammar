@@ -104,6 +104,14 @@ class SubGrammarAdderImpl : public GrammarMutator {
     return builder_->AddTokenTagDispatch(new_ttd);
   }
 
+  int32_t VisitProduct(const GrammarExpr& grammar_expr) final {
+    Grammar::Impl::Product product = base_grammar_->GetProduct(grammar_expr);
+    for (auto& rule_id : product.rule_ids) {
+      rule_id = new_rule_ids_names[rule_id].first;
+    }
+    return builder_->AddProduct(product);
+  }
+
   std::vector<std::pair<int32_t, std::string>> new_rule_ids_names;
 };
 
@@ -294,6 +302,12 @@ class StructureNormalizerImpl : public GrammarMutator {
       case GrammarExprType::kTagDispatch:
         XGRAMMAR_LOG(FATAL) << "TagDispatch should not be in lookahead assertion";
         XGRAMMAR_UNREACHABLE();
+      case GrammarExprType::kTrie:
+        XGRAMMAR_LOG(FATAL) << "Trie should not be in lookahead assertion";
+        XGRAMMAR_UNREACHABLE();
+      case GrammarExprType::kProduct:
+        XGRAMMAR_LOG(FATAL) << "Product should not be in lookahead assertion";
+        XGRAMMAR_UNREACHABLE();
       case GrammarExprType::kByteString:
       case GrammarExprType::kCharacterClass:
       case GrammarExprType::kCharacterClassStar:
@@ -330,6 +344,10 @@ class StructureNormalizerImpl : public GrammarMutator {
         });
       case GrammarExprType::kTagDispatch:
         return VisitTagDispatch(grammar_expr);
+      case GrammarExprType::kTrie:
+        return VisitTrie(grammar_expr);
+      case GrammarExprType::kProduct:
+        return VisitProduct(grammar_expr);
       case GrammarExprType::kTokenTagDispatch: {
         auto ttd_expr_id = VisitTokenTagDispatch(grammar_expr);
         auto new_rule_id = builder_->AddRuleWithHint(cur_rule_name_, ttd_expr_id);
@@ -379,6 +397,20 @@ class StructureNormalizerImpl : public GrammarMutator {
         case GrammarExprType::kTokenTagDispatch: {
           auto ttd_expr_id = VisitTokenTagDispatch(choice_expr);
           auto new_rule_id = builder_->AddRuleWithHint(cur_rule_name_, ttd_expr_id);
+          auto new_sequence_id = builder_->AddSequence({builder_->AddRuleRef(new_rule_id)});
+          new_choice_ids.push_back(new_sequence_id);
+          break;
+        }
+        case GrammarExprType::kTrie: {
+          auto trie_expr_id = VisitTrie(choice_expr);
+          auto new_rule_id = builder_->AddRuleWithHint(cur_rule_name_, trie_expr_id);
+          auto new_sequence_id = builder_->AddSequence({builder_->AddRuleRef(new_rule_id)});
+          new_choice_ids.push_back(new_sequence_id);
+          break;
+        }
+        case GrammarExprType::kProduct: {
+          auto product_expr_id = VisitProduct(choice_expr);
+          auto new_rule_id = builder_->AddRuleWithHint(cur_rule_name_, product_expr_id);
           auto new_sequence_id = builder_->AddSequence({builder_->AddRuleRef(new_rule_id)});
           new_choice_ids.push_back(new_sequence_id);
           break;
@@ -466,6 +498,18 @@ class StructureNormalizerImpl : public GrammarMutator {
         case GrammarExprType::kTokenTagDispatch: {
           auto ttd_expr_id = VisitTokenTagDispatch(element_expr);
           auto new_rule_id = builder_->AddRuleWithHint(cur_rule_name_, ttd_expr_id);
+          new_sequence_ids.push_back(builder_->AddRuleRef(new_rule_id));
+          break;
+        }
+        case GrammarExprType::kTrie: {
+          auto trie_expr_id = VisitTrie(element_expr);
+          auto new_rule_id = builder_->AddRuleWithHint(cur_rule_name_, trie_expr_id);
+          new_sequence_ids.push_back(builder_->AddRuleRef(new_rule_id));
+          break;
+        }
+        case GrammarExprType::kProduct: {
+          auto product_expr_id = VisitProduct(element_expr);
+          auto new_rule_id = builder_->AddRuleWithHint(cur_rule_name_, product_expr_id);
           new_sequence_ids.push_back(builder_->AddRuleRef(new_rule_id));
           break;
         }
@@ -670,6 +714,12 @@ class UsedRulesAnalyzer : public GrammarVisitor<std::vector<int32_t>> {
     }
   }
 
+  void VisitProduct(const GrammarExpr& grammar_expr) {
+    for (auto rule_id : grammar_expr) {
+      visit_queue_.push(rule_id);
+    }
+  }
+
   void VisitRuleRef(const GrammarExpr& grammar_expr) { visit_queue_.push(grammar_expr[0]); }
 
   void VisitRepeat(const GrammarExpr& grammar_expr) { visit_queue_.push(grammar_expr[0]); }
@@ -721,6 +771,15 @@ class DeadCodeEliminatorImpl : public GrammarMutator {
     return builder_->AddTokenTagDispatch(ttd);
   }
 
+  int32_t VisitProduct(const GrammarExpr& grammar_expr) final {
+    Grammar::Impl::Product product = base_grammar_->GetProduct(grammar_expr);
+    for (auto& rule_id : product.rule_ids) {
+      XGRAMMAR_DCHECK(rule_id_map_.count(rule_id) > 0);
+      rule_id = rule_id_map_[rule_id];
+    }
+    return builder_->AddProduct(product);
+  }
+
   int32_t VisitRuleRef(const GrammarExpr& grammar_expr) final {
     XGRAMMAR_DCHECK(rule_id_map_.count(grammar_expr[0]) > 0);
     auto new_rule_id = rule_id_map_[grammar_expr[0]];
@@ -747,7 +806,9 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
     auto root_rule = grammar->GetRootRule();
     auto root_grammar_expr = base_grammar_->GetGrammarExpr(root_rule.body_expr_id);
     if (root_grammar_expr.type == GrammarExprType::kTagDispatch ||
-        root_grammar_expr.type == GrammarExprType::kTokenTagDispatch) {
+        root_grammar_expr.type == GrammarExprType::kTokenTagDispatch ||
+        root_grammar_expr.type == GrammarExprType::kTrie ||
+        root_grammar_expr.type == GrammarExprType::kProduct) {
       return grammar;
     }
     BuildRuleLookaheadInfo();
@@ -810,6 +871,18 @@ class LookaheadAssertionAnalyzerImpl : public GrammarMutator {
       if (grammar_expr.type == GrammarExprType::kTokenTagDispatch) {
         auto token_tag_dispatch = base_grammar_->GetTokenTagDispatch(grammar_expr);
         for (const auto& [token_id, rule_id] : token_tag_dispatch.trigger_rule_pairs) {
+          rule_lookahead_infos_[rule_id].is_triggered_by_dispatch = true;
+        }
+        continue;
+      }
+      if (grammar_expr.type == GrammarExprType::kTrie) {
+        continue;
+      }
+      if (grammar_expr.type == GrammarExprType::kProduct) {
+        // The rules referenced by a product are used in a non-sequence context, so they cannot
+        // use the derived lookahead.
+        auto product = base_grammar_->GetProduct(grammar_expr);
+        for (auto rule_id : product.rule_ids) {
           rule_lookahead_infos_[rule_id].is_triggered_by_dispatch = true;
         }
         continue;
@@ -894,6 +967,12 @@ class RuleRefGraphFinder : public GrammarVisitor<std::vector<std::vector<int32_t
     }
   }
 
+  void VisitProduct(const GrammarExpr& grammar_expr) {
+    for (auto rule_id : grammar_expr) {
+      rule_visit_graph_[rule_id].push_back(cur_rule_id_);
+    }
+  }
+
   // Inversed reference graph: pointing from referee to referer
   std::vector<std::vector<int32_t>> rule_visit_graph_;
   int32_t cur_rule_id_;
@@ -930,6 +1009,21 @@ class AllowEmptyRuleAnalyzerImpl : public GrammarVisitor<std::vector<int32_t>> {
       if (grammar_expr.type == GrammarExprType::kTagDispatch ||
           grammar_expr.type == GrammarExprType::kTokenTagDispatch) {
         empty_rule_id_set->insert(i);
+        continue;
+      }
+
+      if (grammar_expr.type == GrammarExprType::kTrie) {
+        // A negated trie accepts the empty string, since patterns are non-empty and thus the
+        // empty string has no pattern prefix.
+        if (base_grammar_->GetTrie(grammar_expr).is_negated) {
+          empty_rule_id_set->insert(i);
+        }
+        continue;
+      }
+
+      if (grammar_expr.type == GrammarExprType::kProduct) {
+        // A product rule allows empty iff all its factor rules allow empty. It is handled in
+        // FindIndirectEmptyRules.
         continue;
       }
 
@@ -994,10 +1088,20 @@ class AllowEmptyRuleAnalyzerImpl : public GrammarVisitor<std::vector<int32_t>> {
             grammar_expr.type != GrammarExprType::kTokenTagDispatch
         ) << "TagDispatch rules should already exist in empty_rule_id_set";
 
-        bool is_epsilon = std::any_of(grammar_expr.begin(), grammar_expr.end(), [&](int32_t i) {
-          auto seq_expr = base_grammar_->GetGrammarExpr(i);
-          return SeqExprIsEpsilon(seq_expr, *empty_rule_id_set);
-        });
+        bool is_epsilon;
+        if (grammar_expr.type == GrammarExprType::kProduct) {
+          // A product rule allows empty iff all its factor rules allow empty.
+          auto product = base_grammar_->GetProduct(grammar_expr);
+          is_epsilon =
+              std::all_of(product.rule_ids.begin(), product.rule_ids.end(), [&](int32_t id) {
+                return empty_rule_id_set->count(id) > 0;
+              });
+        } else {
+          is_epsilon = std::any_of(grammar_expr.begin(), grammar_expr.end(), [&](int32_t i) {
+            auto seq_expr = base_grammar_->GetGrammarExpr(i);
+            return SeqExprIsEpsilon(seq_expr, *empty_rule_id_set);
+          });
+        }
 
         if (is_epsilon) {
           empty_rule_id_set->insert(referer_rule_id);
@@ -1051,6 +1155,7 @@ class GrammarFSMBuilderImpl {
     FSM complete_fsm;
     std::vector<std::optional<FSMWithStartEndWithSize>> per_rule_fsms((*grammar)->NumRules());
     std::vector<int> state_mapping;
+    std::vector<int> product_rule_ids;
 
     for (int i = 0; i < (*grammar)->NumRules(); ++i) {
       auto rule = (*grammar)->GetRule(i);
@@ -1064,6 +1169,13 @@ class GrammarFSMBuilderImpl {
         XGRAMMAR_CHECK(rule_fsm.has_value())
             << "Failed to build token tag dispatch fsm for rule " << i;
         per_rule_fsms[i] = rule_fsm->AddToCompleteFSM(&complete_fsm, &state_mapping);
+      } else if (grammar_expr.type == Grammar::Impl::GrammarExprType::kTrie) {
+        auto rule_fsm = Trie((*grammar)->GetTrie(grammar_expr));
+        XGRAMMAR_CHECK(rule_fsm.has_value()) << "Failed to build trie fsm for rule " << i;
+        per_rule_fsms[i] = rule_fsm->AddToCompleteFSM(&complete_fsm, &state_mapping);
+      } else if (grammar_expr.type == Grammar::Impl::GrammarExprType::kProduct) {
+        // Deferred to a second phase, so the FSMs of the factor rules can be used directly.
+        product_rule_ids.push_back(i);
       } else {
         XGRAMMAR_DCHECK(grammar_expr.type == Grammar::Impl::GrammarExprType::kChoices);
         auto rule_fsm = Choices(grammar_expr, *grammar);
@@ -1071,6 +1183,37 @@ class GrammarFSMBuilderImpl {
           per_rule_fsms[i] = rule_fsm->AddToCompleteFSM(&complete_fsm, &state_mapping);
         }
       }
+    }
+
+    // Build the product FSMs after all other FSMs are built, so the factor FSMs in the
+    // complete FSM can be used directly. A product whose factors are not all built yet (i.e.
+    // it references another product) is postponed to a later round, so products referencing
+    // other products are built in the dependency order.
+    while (!product_rule_ids.empty()) {
+      std::vector<int> postponed_rule_ids;
+      for (auto i : product_rule_ids) {
+        auto rule = (*grammar)->GetRule(i);
+        auto product = (*grammar)->GetProduct(rule.body_expr_id);
+        bool factors_ready =
+            std::all_of(product.rule_ids.begin(), product.rule_ids.end(), [&](int32_t rule_id) {
+              return per_rule_fsms[rule_id].has_value();
+            });
+        if (!factors_ready) {
+          postponed_rule_ids.push_back(i);
+          continue;
+        }
+        std::vector<FSMWithStartEnd> factor_fsms;
+        factor_fsms.reserve(product.rule_ids.size());
+        for (auto rule_id : product.rule_ids) {
+          factor_fsms.push_back(per_rule_fsms[rule_id]->GetFsm());
+        }
+        auto rule_fsm = Product(factor_fsms);
+        XGRAMMAR_CHECK(rule_fsm.has_value()) << "Failed to build product fsm for rule " << i;
+        per_rule_fsms[i] = rule_fsm->AddToCompleteFSM(&complete_fsm, &state_mapping);
+      }
+      XGRAMMAR_CHECK(postponed_rule_ids.size() < product_rule_ids.size())
+          << "Product rules with cyclic references or factors without FSMs are not supported";
+      product_rule_ids = std::move(postponed_rule_ids);
     }
 
     for (int i = 0; i < (*grammar)->NumRules(); ++i) {
@@ -1113,6 +1256,8 @@ class GrammarFSMBuilderImpl {
   static std::optional<FSMWithStartEnd> Sequence(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> Choices(const GrammarExpr& expr, const Grammar& grammar);
   static std::optional<FSMWithStartEnd> TagDispatch(const Grammar::Impl::TagDispatch& tag_dispatch);
+  static std::optional<FSMWithStartEnd> Trie(const Grammar::Impl::Trie& trie);
+  static std::optional<FSMWithStartEnd> Product(const std::vector<FSMWithStartEnd>& factor_fsms);
   static void AddCharacterRange(FSMWithStartEnd& fsm, int from, int to, uint32_t min, uint32_t max);
   /* Building tool functions.*/
   static std::optional<FSMWithStartEnd> BuildTagDispatch(
@@ -1659,6 +1804,58 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::TagDispatch(
   return BuildTagDispatch(
       string_trigger_rules, tag_dispatch.loop_after_dispatch, tag_dispatch.excludes
   );
+}
+
+std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::Trie(const Grammar::Impl::Trie& trie) {
+  // Build a plain trie without Aho-Corasick back edges. The terminal state of each pattern is
+  // marked as an end state by the trie builder.
+  auto trie_result = TrieFSMBuilder::Build(
+      trie.patterns, {}, /*end_states=*/nullptr, /*allow_overlap=*/true, /*add_back_edges=*/false
+  );
+  if (!trie_result.has_value()) {
+    return std::nullopt;
+  }
+  if (!trie.is_negated) {
+    return trie_result;
+  }
+  // The negated trie rejects any string that has a pattern as a prefix. Add self-loops over all
+  // bytes on the pattern-end states, so the trie accepts exactly the strings with a pattern
+  // prefix, then negate it.
+  for (int state = 0; state < trie_result->NumStates(); ++state) {
+    if (trie_result->IsEndState(state)) {
+      trie_result->GetFsm().AddEdge(state, state, 0x00, 0xFF);
+    }
+  }
+  auto not_result = trie_result->Not();
+  if (not_result.IsErr()) {
+    XGRAMMAR_LOG(WARNING) << "Failed to negate the trie fsm: "
+                          << std::move(not_result).UnwrapErr().what();
+    return std::nullopt;
+  }
+  return std::move(not_result).Unwrap();
+}
+
+std::optional<FSMWithStartEnd> GrammarFSMBuilderImpl::Product(
+    const std::vector<FSMWithStartEnd>& factor_fsms
+) {
+  // The parser guarantees at least two factors, so the result below is always a standalone FSM
+  // detached from the factors' underlying FSM.
+  XGRAMMAR_DCHECK(factor_fsms.size() >= 2);
+
+  // Multiply the factor FSMs one by one.
+  auto result = factor_fsms[0];
+  for (int i = 1; i < static_cast<int>(factor_fsms.size()); ++i) {
+    auto product_result = FSMWithStartEnd::Product(result, factor_fsms[i]);
+    if (product_result.IsErr()) {
+      XGRAMMAR_LOG(WARNING) << "Failed to build product fsm: "
+                            << std::move(product_result).UnwrapErr().what();
+      return std::nullopt;
+    }
+    result = std::move(product_result).Unwrap();
+  }
+  result = result.SimplifyEpsilon();
+  result = result.MergeEquivalentStates();
+  return result;
 }
 
 class RepetitionRangeExpanderImpl : public GrammarMutator {
@@ -2474,7 +2671,9 @@ std::optional<uint64_t> GrammarFSMHasherImpl::HashSequence(
         return std::nullopt;
       }
       case (GrammarExprType::kTagDispatch):
-      case (GrammarExprType::kTokenTagDispatch): {
+      case (GrammarExprType::kTokenTagDispatch):
+      case (GrammarExprType::kTrie):
+      case (GrammarExprType::kProduct): {
         return std::nullopt;
       }
       case (GrammarExprType::kToken):
@@ -2735,6 +2934,16 @@ std::optional<FSMWithStartEnd> GrammarFSMBuilder::TagDispatch(
     const Grammar::Impl::TagDispatch& tag_dispatch
 ) {
   return GrammarFSMBuilderImpl::TagDispatch(tag_dispatch);
+}
+
+std::optional<FSMWithStartEnd> GrammarFSMBuilder::Trie(const Grammar::Impl::Trie& trie) {
+  return GrammarFSMBuilderImpl::Trie(trie);
+}
+
+std::optional<FSMWithStartEnd> GrammarFSMBuilder::Product(
+    const std::vector<FSMWithStartEnd>& factor_fsms
+) {
+  return GrammarFSMBuilderImpl::Product(factor_fsms);
 }
 
 std::vector<int32_t> AllowEmptyRuleAnalyzer::Apply(const Grammar& grammar) {
