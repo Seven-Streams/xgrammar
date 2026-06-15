@@ -1156,7 +1156,7 @@ void JSONSchemaConverter::AddBasicRules() {
   // Create basic rules with a temporary indent manager for compact format
   auto saved_indent_manager = indent_manager_;
   if (any_whitespace_) {
-    indent_manager_ = IndentManager(std::nullopt, ",", true, std::nullopt);
+    indent_manager_ = IndentManager(std::nullopt, ",", true, max_whitespace_cnt_);
   } else {
     indent_manager_ = IndentManager(std::nullopt, ", ", false, std::nullopt);
   }
@@ -3150,47 +3150,79 @@ std::string GenerateFloatRangeRegex(std::optional<double> start, std::optional<d
   return JSONSchemaConverter::GenerateFloatRangeRegex(start, end, 6);
 }
 
-std::string QwenXMLToolCallingToEBNF(const std::string& schema) {
+std::string QwenXMLToolCallingToEBNF(
+    const std::string& schema, bool any_whitespace, std::optional<int> max_whitespace_cnt
+) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kQwenXML
+      json_value,
+      any_whitespace,
+      std::nullopt,
+      std::nullopt,
+      true,
+      max_whitespace_cnt,
+      JSONFormat::kQwenXML
   );
 }
 
-std::string MiniMaxXMLToolCallingToEBNF(const std::string& schema) {
+std::string MiniMaxXMLToolCallingToEBNF(
+    const std::string& schema, bool any_whitespace, std::optional<int> max_whitespace_cnt
+) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kMiniMaxXML
+      json_value,
+      any_whitespace,
+      std::nullopt,
+      std::nullopt,
+      true,
+      max_whitespace_cnt,
+      JSONFormat::kMiniMaxXML
   );
 }
 
-std::string DeepSeekXMLToolCallingToEBNF(const std::string& schema) {
+std::string DeepSeekXMLToolCallingToEBNF(
+    const std::string& schema, bool any_whitespace, std::optional<int> max_whitespace_cnt
+) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kDeepSeekXML
+      json_value,
+      any_whitespace,
+      std::nullopt,
+      std::nullopt,
+      true,
+      max_whitespace_cnt,
+      JSONFormat::kDeepSeekXML
   );
 }
 
-std::string GlmXMLToolCallingToEBNF(const std::string& schema) {
+std::string GlmXMLToolCallingToEBNF(
+    const std::string& schema, bool any_whitespace, std::optional<int> max_whitespace_cnt
+) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kGlmXML
+      json_value,
+      any_whitespace,
+      std::nullopt,
+      std::nullopt,
+      true,
+      max_whitespace_cnt,
+      JSONFormat::kGlmXML
   );
 }
 

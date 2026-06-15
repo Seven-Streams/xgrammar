@@ -6,7 +6,7 @@ import pytest
 from transformers import AutoTokenizer
 
 import xgrammar as xgr
-from xgrammar.structural_tag import StructuralTag
+from xgrammar.structural_tag import JSONSchemaFormat, StructuralTag, TagFormat
 from xgrammar.testing import _is_grammar_accept_string
 
 
@@ -4040,6 +4040,65 @@ def test_token_tag_dispatch_need_tokenizer_info():
     }
     with pytest.raises(Exception, match="Invalid structural tag error"):
         xgr.Grammar.from_structural_tag(stag)
+
+
+# ---------------------------------------------------------------------------
+# Whitespace control for the JSON-schema content of a structural tag.
+#
+# any_whitespace and max_whitespace_cnt are parameters of the compile interface
+# (Grammar.from_structural_tag / GrammarCompiler.compile_structural_tag), mirroring
+# compile_json_schema. These tests verify they actually affect the generated grammar.
+# ---------------------------------------------------------------------------
+
+_WS_SCHEMA = {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"]}
+
+
+def _ws_stag() -> StructuralTag:
+    return StructuralTag(
+        format=TagFormat(
+            begin="<call>",
+            content=JSONSchemaFormat(json_schema=_WS_SCHEMA, style="json"),
+            end="</call>",
+        )
+    )
+
+
+def _ws_instance(num_spaces: int) -> str:
+    return '<call>{"a":' + " " * num_spaces + "1}</call>"
+
+
+def test_structural_tag_max_whitespace_cnt():
+    g_unbounded = xgr.Grammar.from_structural_tag(_ws_stag())
+    g_bounded = xgr.Grammar.from_structural_tag(_ws_stag(), max_whitespace_cnt=2)
+    # Within the bound: accepted by both.
+    for n in (1, 2):
+        assert _is_grammar_accept_string(g_unbounded, _ws_instance(n))
+        assert _is_grammar_accept_string(g_bounded, _ws_instance(n))
+    # Beyond the bound: accepted only without the limit.
+    assert _is_grammar_accept_string(g_unbounded, _ws_instance(5))
+    assert not _is_grammar_accept_string(g_bounded, _ws_instance(5))
+
+
+def test_structural_tag_any_whitespace_false():
+    g_any = xgr.Grammar.from_structural_tag(_ws_stag(), any_whitespace=True)
+    g_fixed = xgr.Grammar.from_structural_tag(_ws_stag(), any_whitespace=False)
+    # any_whitespace=True accepts arbitrary spacing.
+    assert _is_grammar_accept_string(g_any, _ws_instance(0))
+    assert _is_grammar_accept_string(g_any, _ws_instance(3))
+    # any_whitespace=False enforces the fixed compact format (single space after colon).
+    assert _is_grammar_accept_string(g_fixed, _ws_instance(1))
+    assert not _is_grammar_accept_string(g_fixed, _ws_instance(0))
+    assert not _is_grammar_accept_string(g_fixed, _ws_instance(3))
+
+
+def test_structural_tag_max_whitespace_cnt_compile_cache():
+    # Same structural tag compiled with different max_whitespace_cnt must not collide in the
+    # GrammarCompiler cache (the cache key includes the whitespace-control params).
+    compiler = xgr.GrammarCompiler(xgr.TokenizerInfo([]), cache_enabled=True)
+    g_unbounded = compiler.compile_structural_tag(_ws_stag()).grammar
+    g_bounded = compiler.compile_structural_tag(_ws_stag(), max_whitespace_cnt=2).grammar
+    assert _is_grammar_accept_string(g_unbounded, _ws_instance(5))
+    assert not _is_grammar_accept_string(g_bounded, _ws_instance(5))
 
 
 if __name__ == "__main__":

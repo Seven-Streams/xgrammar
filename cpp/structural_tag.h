@@ -376,11 +376,18 @@ struct StructuralTag {
 /*!
  * \brief Convert a structural tag JSON string to a grammar.
  * \param structural_tag_json The JSON string of the structural tag.
+ * \param tokenizer_info The tokenizer info used to resolve token-level formats.
+ * \param any_whitespace Whether to allow any whitespace in the JSON-schema content of the
+ *   structural tag. Default: true.
+ * \param max_whitespace_cnt The maximum number of consecutive whitespace characters allowed in
+ *   the JSON-schema content of the structural tag. If std::nullopt, there is no limit.
  * \return A grammar if the JSON is valid, otherwise an error message in std::string.
  */
 Result<Grammar, StructuralTagError> StructuralTagToGrammar(
     const std::string& structural_tag_json,
-    const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt
+    const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt,
+    bool any_whitespace = true,
+    std::optional<int> max_whitespace_cnt = std::nullopt
 );
 
 }  // namespace xgrammar

@@ -285,7 +285,10 @@ class Grammar(XGRObject):
     @overload
     @staticmethod
     def from_structural_tag(
-        structural_tag: Union[StructuralTag, str, Dict[str, Any]]
+        structural_tag: Union[StructuralTag, str, Dict[str, Any]],
+        *,
+        any_whitespace: bool = True,
+        max_whitespace_cnt: Optional[int] = None,
     ) -> "Grammar": ...
 
     @overload
@@ -294,7 +297,13 @@ class Grammar(XGRObject):
         "from_structural_tag(tags, triggers) is deprecated. Construct structural tag with the "
         "StructuralTag class instead."
     )
-    def from_structural_tag(tags: List[StructuralTagItem], triggers: List[str]) -> "Grammar": ...
+    def from_structural_tag(
+        tags: List[StructuralTagItem],
+        triggers: List[str],
+        *,
+        any_whitespace: bool = True,
+        max_whitespace_cnt: Optional[int] = None,
+    ) -> "Grammar": ...
 
     @staticmethod
     def from_structural_tag(*args, **kwargs) -> "Grammar":
@@ -319,6 +328,16 @@ class Grammar(XGRObject):
 
         triggers : List[str]
             (Deprecated) The triggers. Use StructuralTag class instead.
+
+        any_whitespace : bool, default: True
+            Whether to allow any whitespace between tokens in the JSON-schema content of the
+            structural tag. If False, the JSON-schema content uses fixed formatting.
+
+        max_whitespace_cnt : Optional[int], default: None
+            The maximum number of consecutive whitespace characters allowed in the JSON-schema
+            content of the structural tag. If None, there is no limit. If specified, it limits the
+            number of consecutive whitespace characters to at most max_whitespace_cnt, which avoids
+            unbounded grammar states. It should be a positive integer.
 
         Returns
         -------
@@ -346,8 +365,14 @@ class Grammar(XGRObject):
         Advanced Topics of the Structural Tag in XGrammar documentation for its semantic.
         Structural Tag in XGrammar documentation for its semantic.
         """
+        any_whitespace = kwargs.pop("any_whitespace", True)
+        max_whitespace_cnt = kwargs.pop("max_whitespace_cnt", None)
         structural_tag_str = _get_structural_tag_str_from_args(args, kwargs)
-        return Grammar._create_from_handle(_core.Grammar.from_structural_tag(structural_tag_str))
+        return Grammar._create_from_handle(
+            _core.Grammar.from_structural_tag(
+                structural_tag_str, any_whitespace, max_whitespace_cnt
+            )
+        )
 
     @staticmethod
     def builtin_json_grammar() -> "Grammar":

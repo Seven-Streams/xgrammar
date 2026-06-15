@@ -92,8 +92,18 @@ class GrammarCompiler {
       const std::string& ebnf_str, const std::string& root_rule_name = "root"
   );
 
-  /*! \brief Get the compiled grammar for a structural tag. */
-  CompiledGrammar CompileStructuralTag(const std::string& structural_tag_json);
+  /*! \brief Get the compiled grammar for a structural tag.
+   * \param structural_tag_json The structural tag JSON string.
+   * \param any_whitespace Whether to allow any whitespace in the JSON-schema content of the
+   * structural tag. Default: true.
+   * \param max_whitespace_cnt The maximum number of consecutive whitespace characters allowed in
+   * the JSON-schema content of the structural tag. If std::nullopt, there is no limit.
+   */
+  CompiledGrammar CompileStructuralTag(
+      const std::string& structural_tag_json,
+      bool any_whitespace = true,
+      std::optional<int> max_whitespace_cnt = std::nullopt
+  );
 
   /*! \brief Get the compiled grammar for a regex. */
   CompiledGrammar CompileRegex(const std::string& regex);

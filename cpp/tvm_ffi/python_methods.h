@@ -52,7 +52,9 @@ std::vector<int32_t> GetAllowEmptyRuleIds(const CompiledGrammar& compiled_gramma
 
 Grammar Grammar_FromStructuralTag(
     const std::string& structural_tag_json,
-    const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt
+    const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt,
+    bool any_whitespace = true,
+    std::optional<int> max_whitespace_cnt = std::nullopt
 );
 
 Grammar Grammar_DeserializeJSON(const std::string& json_string);

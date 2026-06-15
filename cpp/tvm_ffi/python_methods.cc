@@ -136,9 +136,14 @@ std::vector<int32_t> GetAllowEmptyRuleIds(const CompiledGrammar& compiled_gramma
 }
 
 Grammar Grammar_FromStructuralTag(
-    const std::string& structural_tag_json, const std::optional<TokenizerInfo>& tokenizer_info
+    const std::string& structural_tag_json,
+    const std::optional<TokenizerInfo>& tokenizer_info,
+    bool any_whitespace,
+    std::optional<int> max_whitespace_cnt
 ) {
-  auto result = Grammar::FromStructuralTag(structural_tag_json, tokenizer_info);
+  auto result = Grammar::FromStructuralTag(
+      structural_tag_json, tokenizer_info, any_whitespace, max_whitespace_cnt
+  );
   if (std::holds_alternative<StructuralTagError>(result)) {
     ThrowVariantError(std::get<StructuralTagError>(result));
   }

@@ -220,7 +220,11 @@ class GrammarCompiler(XGRObject):
 
     @overload
     def compile_structural_tag(
-        self, structural_tag: Union[StructuralTag, str, Dict[str, Any]]
+        self,
+        structural_tag: Union[StructuralTag, str, Dict[str, Any]],
+        *,
+        any_whitespace: bool = True,
+        max_whitespace_cnt: Optional[int] = None,
     ) -> CompiledGrammar: ...
 
     @overload
@@ -229,7 +233,12 @@ class GrammarCompiler(XGRObject):
         "StructuralTag class instead."
     )
     def compile_structural_tag(
-        self, tags: List[StructuralTagItem], triggers: List[str]
+        self,
+        tags: List[StructuralTagItem],
+        triggers: List[str],
+        *,
+        any_whitespace: bool = True,
+        max_whitespace_cnt: Optional[int] = None,
     ) -> CompiledGrammar: ...
 
     def compile_structural_tag(self, *args, **kwargs) -> CompiledGrammar:
@@ -255,6 +264,16 @@ class GrammarCompiler(XGRObject):
         triggers : List[str]
             (Deprecated) The triggers. Use StructuralTag class instead.
 
+        any_whitespace : bool, default: True
+            Whether to allow any whitespace between tokens in the JSON-schema content of the
+            structural tag. If False, the JSON-schema content uses fixed formatting.
+
+        max_whitespace_cnt : Optional[int], default: None
+            The maximum number of consecutive whitespace characters allowed in the JSON-schema
+            content of the structural tag. If None, there is no limit. If specified, it limits the
+            number of consecutive whitespace characters to at most max_whitespace_cnt, which avoids
+            unbounded grammar states. It should be a positive integer.
+
         Returns
         -------
         compiled_grammar : CompiledGrammar
@@ -274,9 +293,13 @@ class GrammarCompiler(XGRObject):
         The legacy pattern compile_structural_tag(tags, triggers) is deprecated. Use the
         StructuralTag class to construct structural tags instead.
         """
+        any_whitespace = kwargs.pop("any_whitespace", True)
+        max_whitespace_cnt = kwargs.pop("max_whitespace_cnt", None)
         structural_tag_str = _get_structural_tag_str_from_args(args, kwargs)
         return CompiledGrammar._create_from_handle(
-            self._handle.compile_structural_tag(structural_tag_str)
+            self._handle.compile_structural_tag(
+                structural_tag_str, any_whitespace, max_whitespace_cnt
+            )
         )
 
     @overload

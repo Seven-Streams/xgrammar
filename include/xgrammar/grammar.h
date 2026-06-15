@@ -133,10 +133,16 @@ class Grammar {
    * \brief Construct a grammar from a structural tag string.
    * \param structural_tag_json The structural tag string.
    * \param tokenizer_info Optional tokenizer info for resolving string token references.
+   * \param any_whitespace Whether to allow any whitespace in the JSON-schema content of the
+   * structural tag. Default: true.
+   * \param max_whitespace_cnt The maximum number of consecutive whitespace characters allowed in
+   * the JSON-schema content of the structural tag. If std::nullopt, there is no limit.
    */
   static std::variant<Grammar, StructuralTagError> FromStructuralTag(
       const std::string& structural_tag_json,
-      const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt
+      const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt,
+      bool any_whitespace = true,
+      std::optional<int> max_whitespace_cnt = std::nullopt
   );
 
   /*!
