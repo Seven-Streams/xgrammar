@@ -19,6 +19,11 @@ The `reasoning` parameter controls whether the model-specific reasoning section 
 
 `get_model_structural_tag` generates a `StructuralTag` for the given model type with the specified tools and options. The returned `StructuralTag` can be used with `Grammar.from_structural_tag` or `GrammarCompiler.compile_structural_tag` to obtain the corresponding grammar.
 
+Both `Grammar.from_structural_tag` and `GrammarCompiler.compile_structural_tag` accept two optional whitespace controls for the JSON-schema content of the structural tag, mirroring `compile_json_schema`:
+
+- **any_whitespace** (`bool`, default `True`): whether to allow arbitrary whitespace between tokens. Set to `False` to require fixed formatting.
+- **max_whitespace_cnt** (`Optional[int]`, default `None`): caps the number of consecutive whitespace characters. Setting it (e.g. `2`) bounds runs of whitespace, which avoids the unbounded-whitespace outputs some models emit in bad cases that would otherwise blow up grammar compilation/matching.
+
 Use it when you need to constrain the model to output in a fixed pattern such as "tool name + parameter JSON", e.g. for Llama, Qwen, Kimi, DeepSeek, OpenAI Harmony, etc.
 
 ### Parameters
