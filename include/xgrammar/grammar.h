@@ -118,6 +118,7 @@ class Grammar {
       std::optional<std::pair<std::string, std::string>> separators = std::nullopt,
       bool strict_mode = true,
       std::optional<int> max_whitespace_cnt = std::nullopt,
+      bool any_order = false,
       bool print_converted_ebnf = false
   );
 

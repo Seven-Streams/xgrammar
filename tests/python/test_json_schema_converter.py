@@ -2567,5 +2567,171 @@ def test_forward_slash_in_enum():
     assert not _is_grammar_accept_string(grammar, '"a\\/b"')
 
 
+def _accept_any_order(
+    schema: Dict[str, Any],
+    instance: str,
+    expect: bool,
+    *,
+    any_order: bool = True,
+    any_whitespace: bool = False,
+):
+    grammar = xgr.Grammar.from_json_schema(
+        json.dumps(schema), any_whitespace=any_whitespace, any_order=any_order
+    )
+    assert _is_grammar_accept_string(grammar, instance) == expect
+
+
+def test_any_order_ebnf():
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}, "c": {"type": "boolean"}},
+        "required": ["a", "b"],
+        "additionalProperties": False,
+    }
+    ebnf = _json_schema_to_ebnf(schema, any_whitespace=False, any_order=True)
+    # The required group becomes a single alternation rule, repeated exactly N_req times; the
+    # optional group is a separate alternation, bounded by the number of optional fields.
+    assert 'root_req_item ::= "\\"a\\"" ": " basic_integer | "\\"b\\"" ": " basic_string' in ebnf
+    assert 'root_opt_item ::= "\\"c\\"" ": " basic_boolean' in ebnf
+    assert (
+        'root ::= "{" "" (root_req_item (", " root_req_item){1,1} (", " root_opt_item){0,1}) "" "}"'
+        in ebnf
+    )
+
+
+@pytest.mark.parametrize(
+    "instance, expect",
+    [
+        ('{"a": 1, "b": "x"}', True),  # declared order
+        ('{"b": "x", "a": 1}', True),  # reordered required
+        ('{"a": 1, "a": 2}', True),  # duplicate required, b missing -> count == 2 accepted
+        ('{"a": 1, "b": "x", "c": true}', True),  # with optional
+        ('{"b": "x", "a": 1, "c": true}', True),  # reordered required + optional
+        ('{"c": true, "a": 1, "b": "x"}', False),  # optional before required group
+        ('{"a": 1}', False),  # only one required entry
+        ('{"a": 1, "b": "x", "c": true, "c": false}', False),  # two optional > bound {0,1}
+        ('{"a": 1, "b": "x", "d": 5}', False),  # additionalProperties false
+        ("{}", False),  # required present -> not empty
+    ],
+)
+def test_any_order_acceptance(instance: str, expect: bool):
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}, "c": {"type": "boolean"}},
+        "required": ["a", "b"],
+        "additionalProperties": False,
+    }
+    _accept_any_order(schema, instance, expect)
+
+
+def test_any_order_additional_properties_unbounded():
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+        "required": ["a"],
+        "additionalProperties": True,
+    }
+    _accept_any_order(schema, '{"a": 1}', True)
+    _accept_any_order(schema, '{"a": 1, "b": "x"}', True)
+    # additional keys join the optional group and are unbounded
+    _accept_any_order(schema, '{"a": 1, "z": 5, "y": "q", "w": true}', True)
+    # but they must still come after the required group
+    _accept_any_order(schema, '{"z": 5, "a": 1}', False)
+
+
+def test_any_order_pattern_properties_unbounded():
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}},
+        "required": ["a"],
+        "patternProperties": {"^x_": {"type": "integer"}},
+        "additionalProperties": False,
+    }
+    # pattern-property keys join the optional group and are unbounded, after the required group
+    _accept_any_order(schema, '{"a": 1}', True)
+    _accept_any_order(schema, '{"a": 1, "x_": 5, "x_": 9}', True)
+    _accept_any_order(schema, '{"x_": 5, "a": 1}', False)
+
+
+def test_any_order_nested_keeps_fixed_order():
+    schema = {
+        "type": "object",
+        "properties": {
+            "outer_a": {"type": "integer"},
+            "nested": {
+                "type": "object",
+                "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}},
+                "required": ["x", "y"],
+                "additionalProperties": False,
+            },
+        },
+        "required": ["outer_a", "nested"],
+        "additionalProperties": False,
+    }
+    # top-level object is reorderable
+    _accept_any_order(schema, '{"nested": {"x": 1, "y": 2}, "outer_a": 5}', True)
+    # but the nested object keeps the fixed declared order
+    _accept_any_order(schema, '{"outer_a": 5, "nested": {"y": 2, "x": 1}}', False)
+
+
+def test_any_order_no_required_fields():
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+        "additionalProperties": False,
+    }
+    _accept_any_order(schema, "{}", True)  # empty allowed
+    _accept_any_order(schema, '{"b": "x"}', True)
+    _accept_any_order(schema, '{"b": "x", "a": 1}', True)
+    # bound is the number of optional fields (2); three entries are rejected
+    _accept_any_order(schema, '{"a": 1, "a": 2, "b": "x"}', False)
+
+
+def test_any_order_min_properties_falls_back_to_ordered():
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+        "required": ["a", "b"],
+        "additionalProperties": False,
+        "minProperties": 2,
+    }
+    # With min/maxProperties, any_order falls back to the fixed-order grammar.
+    ordered = _json_schema_to_ebnf(schema, any_whitespace=False, any_order=False)
+    any_order = _json_schema_to_ebnf(schema, any_whitespace=False, any_order=True)
+    assert ordered == any_order
+    # The fixed order is still enforced.
+    _accept_any_order(schema, '{"a": 1, "b": "x"}', True)
+    _accept_any_order(schema, '{"b": "x", "a": 1}', False)
+
+
+def test_any_order_backward_compatible():
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+        "required": ["a", "b"],
+        "additionalProperties": False,
+    }
+    # any_order=False (the default) must produce the exact same grammar as before.
+    default = _json_schema_to_ebnf(schema, any_whitespace=False)
+    explicit_false = _json_schema_to_ebnf(schema, any_whitespace=False, any_order=False)
+    assert default == explicit_false
+    assert "root_req_item" not in default
+
+
+def test_any_order_qwen_xml():
+    from xgrammar.testing import _qwen_xml_tool_calling_to_ebnf
+
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+        "required": ["a", "b"],
+        "additionalProperties": False,
+    }
+    ordered = _qwen_xml_tool_calling_to_ebnf(json.dumps(schema), False)
+    any_order = _qwen_xml_tool_calling_to_ebnf(json.dumps(schema), True)
+    assert "root_part_" in ordered
+    assert "root_req_item" in any_order
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

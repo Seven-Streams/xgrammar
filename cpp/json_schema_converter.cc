@@ -1098,7 +1098,8 @@ JSONSchemaConverter::JSONSchemaConverter(
     std::optional<std::pair<std::string, std::string>> separators,
     bool any_whitespace,
     std::optional<int> max_whitespace_cnt,
-    RefResolver ref_resolver
+    RefResolver ref_resolver,
+    bool any_order
 )
     : indent_manager_(
           indent,
@@ -1109,6 +1110,7 @@ JSONSchemaConverter::JSONSchemaConverter(
       ),
       any_whitespace_(any_whitespace),
       max_whitespace_cnt_(max_whitespace_cnt),
+      any_order_(any_order),
       ref_resolver_(std::move(ref_resolver)) {
   std::string colon_sep =
       separators.has_value() ? separators->second : (any_whitespace ? ":" : ": ");
@@ -1649,6 +1651,127 @@ std::string JSONSchemaConverter::GetPropertyWithNumberConstraints(
   }
 }
 
+std::string JSONSchemaConverter::GetAnyOrderRuleForProperties(
+    const std::vector<ObjectSpec::Property>& properties,
+    const std::unordered_set<std::string>& required,
+    const SchemaSpecPtr& additional,
+    const std::string& rule_name,
+    const std::string& additional_suffix,
+    const std::string& additional_prop_pattern_override
+) {
+  std::string first_sep = NextSeparator();
+  std::string mid_sep = NextSeparator();
+  std::string last_sep = NextSeparator(true);
+
+  // Partition the named properties into required / optional groups. Declaration order within each
+  // group is irrelevant since the generated grammar allows any order.
+  std::vector<std::string> req_patterns;
+  std::vector<std::string> opt_patterns;
+  for (size_t idx = 0; idx < properties.size(); ++idx) {
+    const auto& prop = properties[idx];
+    std::string value_rule = CreateRule(prop.schema, rule_name + "_prop_" + std::to_string(idx));
+    std::string pattern = FormatProperty(prop.name, value_rule, rule_name, idx);
+    if (required.count(prop.name)) {
+      req_patterns.push_back(pattern);
+    } else {
+      opt_patterns.push_back(pattern);
+    }
+  }
+
+  // Build the "extra key" pattern for additional / patternProperties / propertyNames keys. These
+  // are non-required, so they join the optional group; their presence makes the optional group
+  // unbounded. This mirrors the additional-property handling in the fixed-order path.
+  bool allow_extra = additional != nullptr;
+  std::string extra_pattern;
+  if (allow_extra) {
+    if (!additional_prop_pattern_override.empty()) {
+      extra_pattern = additional_prop_pattern_override;
+    } else {
+      std::string add_value_rule = CreateRule(additional, rule_name + "_" + additional_suffix);
+      extra_pattern = FormatOtherProperty(
+          GetKeyPatternExcluding(properties, rule_name),
+          add_value_rule,
+          rule_name,
+          additional_suffix
+      );
+    }
+  }
+
+  auto join_alternatives = [](const std::vector<std::string>& alts) -> std::string {
+    std::string body;
+    for (size_t i = 0; i < alts.size(); ++i) {
+      if (i != 0) {
+        body += " | ";
+      }
+      body += alts[i];
+    }
+    return body;
+  };
+
+  // Optional group entry: any named optional key, or any extra key.
+  std::vector<std::string> opt_alternatives = opt_patterns;
+  if (allow_extra) {
+    opt_alternatives.push_back(extra_pattern);
+  }
+
+  std::string req_item_rule;
+  if (!req_patterns.empty()) {
+    req_item_rule =
+        ebnf_script_creator_.AddRule(rule_name + "_req_item", join_alternatives(req_patterns));
+  }
+  std::string opt_item_rule;
+  if (!opt_alternatives.empty()) {
+    opt_item_rule =
+        ebnf_script_creator_.AddRule(rule_name + "_opt_item", join_alternatives(opt_alternatives));
+  }
+
+  const int n_req = static_cast<int>(req_patterns.size());
+  const int n_opt = static_cast<int>(opt_patterns.size());
+
+  // The optional block: each occurrence prefixed by mid_sep. Unbounded ("*") when extra keys are
+  // allowed; otherwise bounded by the number of named optional fields. `opt_already` is the number
+  // of optional entries already emitted before this block (1 when there is no required group and
+  // the first optional entry already consumed first_sep).
+  auto make_opt_block = [&](int opt_already) -> std::string {
+    if (opt_alternatives.empty()) {
+      return "";
+    }
+    std::string unit = "(" + mid_sep + " " + opt_item_rule + ")";
+    if (allow_extra) {
+      return unit + "*";
+    }
+    int upper = n_opt - opt_already;
+    if (upper <= 0) {
+      return "";
+    }
+    return unit + "{0," + std::to_string(upper) + "}";
+  };
+
+  std::string content;
+  if (n_req >= 1) {
+    // Required group: exactly n_req entries, each any required key. Then the optional group.
+    content = req_item_rule;
+    if (n_req >= 2) {
+      content += " (" + mid_sep + " " + req_item_rule + "){" + std::to_string(n_req - 1) + "," +
+                 std::to_string(n_req - 1) + "}";
+    }
+    std::string opt_block = make_opt_block(0);
+    if (!opt_block.empty()) {
+      content += " " + opt_block;
+    }
+  } else {
+    // No required fields. The empty object is handled by could_be_empty in GenerateObject; here we
+    // describe the "at least one optional/extra entry" case.
+    content = opt_item_rule;
+    std::string opt_block = make_opt_block(1);
+    if (!opt_block.empty()) {
+      content += " " + opt_block;
+    }
+  }
+
+  return first_sep + " (" + content + ") " + last_sep;
+}
+
 std::string JSONSchemaConverter::GetPartialRuleForProperties(
     const std::vector<ObjectSpec::Property>& properties,
     const std::unordered_set<std::string>& required,
@@ -1657,10 +1780,24 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     const std::string& additional_suffix,
     int min_properties,
     int max_properties,
-    const std::string& additional_prop_pattern_override
+    const std::string& additional_prop_pattern_override,
+    bool is_root
 ) {
   if (max_properties == 0) {
     return "";
+  }
+
+  // any_order only applies to the top-level object, and only when there are no min/max property
+  // count constraints (those fall back to the fixed-order generation below).
+  if (any_order_ && is_root && min_properties == 0 && max_properties == -1) {
+    return GetAnyOrderRuleForProperties(
+        properties,
+        required,
+        additional,
+        rule_name,
+        additional_suffix,
+        additional_prop_pattern_override
+    );
   }
 
   std::string first_sep = NextSeparator();
@@ -1998,6 +2135,11 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
 std::string JSONSchemaConverter::GenerateObject(
     const ObjectSpec& spec, const std::string& rule_name, bool need_braces
 ) {
+  // An object is "top-level" iff it is not nested inside another object. any_order only applies to
+  // top-level objects; nested objects keep the fixed-order behavior.
+  bool is_root_object = (object_depth_ == 0);
+  ++object_depth_;
+
   std::string result = "";
   if (need_braces) {
     result += "\"{\"";
@@ -2072,7 +2214,8 @@ std::string JSONSchemaConverter::GenerateObject(
                         effective_suffix,
                         spec.min_properties,
                         spec.max_properties,
-                        pp_override
+                        pp_override,
+                        is_root_object
                     );
     could_be_empty = spec.required.empty() && spec.min_properties == 0;
   } else if (!spec.pattern_properties.empty() || spec.property_names) {
@@ -2119,7 +2262,9 @@ std::string JSONSchemaConverter::GenerateObject(
                         rule_name,
                         additional_suffix,
                         spec.min_properties,
-                        spec.max_properties
+                        spec.max_properties,
+                        "",
+                        is_root_object
                     );
     could_be_empty = spec.required.empty() && spec.min_properties == 0;
   } else if (additional_property) {
@@ -2144,6 +2289,8 @@ std::string JSONSchemaConverter::GenerateObject(
     // The object is unconditionally empty.
     could_be_empty = true;
   }
+
+  --object_depth_;
 
   indent_manager_.EndIndent();
 
@@ -3082,14 +3229,22 @@ std::string JSONSchemaToEBNF(
     std::optional<std::pair<std::string, std::string>> separators,
     bool strict_mode,
     std::optional<int> max_whitespace_cnt,
-    JSONFormat json_format
+    JSONFormat json_format,
+    bool any_order
 ) {
   picojson::value schema_value;
   std::string err = picojson::parse(schema_value, schema);
   XGRAMMAR_CHECK(err.empty()) << "Failed to parse JSON: " << err
                               << ". The JSON string is:" << schema;
   return JSONSchemaToEBNF(
-      schema_value, any_whitespace, indent, separators, strict_mode, max_whitespace_cnt, json_format
+      schema_value,
+      any_whitespace,
+      indent,
+      separators,
+      strict_mode,
+      max_whitespace_cnt,
+      json_format,
+      any_order
   );
 }
 
@@ -3100,7 +3255,8 @@ std::string JSONSchemaToEBNF(
     std::optional<std::pair<std::string, std::string>> separators,
     bool strict_mode,
     std::optional<int> max_whitespace_cnt,
-    JSONFormat json_format
+    JSONFormat json_format,
+    bool any_order
 ) {
   // Parse JSON Schema to SchemaSpec
   SchemaParser parser(schema, {strict_mode, json_format});
@@ -3122,7 +3278,7 @@ std::string JSONSchemaToEBNF(
   switch (json_format) {
     case JSONFormat::kJSON: {
       JSONSchemaConverter converter(
-          indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver
+          indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver, any_order
       );
       return converter.Convert(spec);
     }
@@ -3131,7 +3287,13 @@ std::string JSONSchemaToEBNF(
     case JSONFormat::kDeepSeekXML:
     case JSONFormat::kGlmXML: {
       XMLToolCallingConverter converter(
-          indent, separators, any_whitespace, max_whitespace_cnt, ref_resolver, json_format
+          indent,
+          separators,
+          any_whitespace,
+          max_whitespace_cnt,
+          ref_resolver,
+          json_format,
+          any_order
       );
       return converter.Convert(spec);
     }
@@ -3150,47 +3312,75 @@ std::string GenerateFloatRangeRegex(std::optional<double> start, std::optional<d
   return JSONSchemaConverter::GenerateFloatRangeRegex(start, end, 6);
 }
 
-std::string QwenXMLToolCallingToEBNF(const std::string& schema) {
+std::string QwenXMLToolCallingToEBNF(const std::string& schema, bool any_order) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kQwenXML
+      json_value,
+      true,
+      std::nullopt,
+      std::nullopt,
+      true,
+      std::nullopt,
+      JSONFormat::kQwenXML,
+      any_order
   );
 }
 
-std::string MiniMaxXMLToolCallingToEBNF(const std::string& schema) {
+std::string MiniMaxXMLToolCallingToEBNF(const std::string& schema, bool any_order) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kMiniMaxXML
+      json_value,
+      true,
+      std::nullopt,
+      std::nullopt,
+      true,
+      std::nullopt,
+      JSONFormat::kMiniMaxXML,
+      any_order
   );
 }
 
-std::string DeepSeekXMLToolCallingToEBNF(const std::string& schema) {
+std::string DeepSeekXMLToolCallingToEBNF(const std::string& schema, bool any_order) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kDeepSeekXML
+      json_value,
+      true,
+      std::nullopt,
+      std::nullopt,
+      true,
+      std::nullopt,
+      JSONFormat::kDeepSeekXML,
+      any_order
   );
 }
 
-std::string GlmXMLToolCallingToEBNF(const std::string& schema) {
+std::string GlmXMLToolCallingToEBNF(const std::string& schema, bool any_order) {
   picojson::value json_value;
   std::string err = picojson::parse(json_value, schema);
   if (!err.empty()) {
     XGRAMMAR_LOG(FATAL) << "Failed to parse JSON schema: " << err;
   }
   return JSONSchemaToEBNF(
-      json_value, true, std::nullopt, std::nullopt, true, std::nullopt, JSONFormat::kGlmXML
+      json_value,
+      true,
+      std::nullopt,
+      std::nullopt,
+      true,
+      std::nullopt,
+      JSONFormat::kGlmXML,
+      any_order
   );
 }
 

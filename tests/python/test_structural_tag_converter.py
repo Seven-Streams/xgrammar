@@ -4042,5 +4042,106 @@ def test_token_tag_dispatch_need_tokenizer_info():
         xgr.Grammar.from_structural_tag(stag)
 
 
+# ---------- JSONSchemaFormat with any_order ----------
+
+any_order_schema = {
+    "type": "object",
+    "properties": {"a": {"type": "integer"}, "b": {"type": "string"}, "c": {"type": "boolean"}},
+    "required": ["a", "b"],
+    "additionalProperties": False,
+}
+
+any_order_json_instance_is_accepted = [
+    ('{"a": 1, "b": "x"}', True),  # declared order
+    ('{"b": "x", "a": 1}', True),  # reordered required group
+    ('{"a": 1, "a": 2}', True),  # duplicate required, b missing -> count == 2 accepted
+    ('{"a": 1, "b": "x", "c": true}', True),  # with optional
+    ('{"b": "x", "a": 1, "c": true}', True),  # reordered required + optional
+    ('{"c": true, "a": 1, "b": "x"}', False),  # optional before the required group
+    ('{"a": 1}', False),  # only one required entry
+    ('{"a": 1, "b": "x", "c": true, "c": false}', False),  # two optional > bound
+    ('{"a": 1, "b": "x", "d": 5}', False),  # additionalProperties false
+    ("{}", False),  # required present -> not empty
+]
+
+
+@pytest.mark.parametrize("instance, is_accepted", any_order_json_instance_is_accepted)
+def test_json_schema_format_any_order(instance: str, is_accepted: bool):
+    stag_format = {"type": "json_schema", "json_schema": any_order_schema, "any_order": True}
+    check_stag_with_instance(stag_format, instance, is_accepted)
+
+
+def test_json_schema_format_any_order_default_is_ordered():
+    # Without any_order (the default), the JSON schema keeps the fixed declared order.
+    stag_format = {"type": "json_schema", "json_schema": any_order_schema}
+    check_stag_with_instance(stag_format, '{"a": 1, "b": "x"}', True)
+    check_stag_with_instance(stag_format, '{"b": "x", "a": 1}', False)
+
+
+any_order_additional_schema = {
+    "type": "object",
+    "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+    "required": ["a"],
+    "additionalProperties": True,
+}
+
+any_order_additional_instance_is_accepted = [
+    ('{"a": 1}', True),
+    ('{"a": 1, "b": "x"}', True),
+    ('{"a": 1, "z": 5, "y": "q", "w": true}', True),  # additional keys, unbounded, after required
+    ('{"z": 5, "a": 1}', False),  # additional key before the required group
+]
+
+
+@pytest.mark.parametrize("instance, is_accepted", any_order_additional_instance_is_accepted)
+def test_json_schema_format_any_order_additional_properties(instance: str, is_accepted: bool):
+    stag_format = {
+        "type": "json_schema",
+        "json_schema": any_order_additional_schema,
+        "any_order": True,
+    }
+    check_stag_with_instance(stag_format, instance, is_accepted)
+
+
+any_order_xml_schema = {
+    "type": "object",
+    "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+    "required": ["a", "b"],
+    "additionalProperties": False,
+}
+
+any_order_xml_instance_is_accepted = [
+    ("<parameter=a>1</parameter><parameter=b>hello</parameter>", True),  # declared order
+    ("<parameter=b>hello</parameter><parameter=a>1</parameter>", True),  # reordered
+    ("<parameter=a>1</parameter><parameter=a>2</parameter>", True),  # duplicate, count == 2
+    ("<parameter=a>1</parameter>", False),  # only one required entry
+]
+
+
+@pytest.mark.parametrize("instance, is_accepted", any_order_xml_instance_is_accepted)
+def test_json_schema_format_any_order_qwen_xml(instance: str, is_accepted: bool):
+    stag_format = {
+        "type": "json_schema",
+        "json_schema": any_order_xml_schema,
+        "style": "qwen_xml",
+        "any_order": True,
+    }
+    check_stag_with_instance(stag_format, instance, is_accepted)
+
+
+def test_json_schema_format_any_order_via_pydantic():
+    # any_order also works when constructing the structural tag through the pydantic models, and
+    # round-trips through serialization (JSONSchemaFormat.ToJSON / ParseJSONSchemaFormat).
+    from xgrammar.structural_tag import JSONSchemaFormat
+
+    st_any = StructuralTag(format=JSONSchemaFormat(json_schema=any_order_schema, any_order=True))
+    check_stag_with_instance(st_any, '{"b": "x", "a": 1}', True)
+
+    st_ordered = StructuralTag(
+        format=JSONSchemaFormat(json_schema=any_order_schema, any_order=False)
+    )
+    check_stag_with_instance(st_ordered, '{"b": "x", "a": 1}', False)
+
+
 if __name__ == "__main__":
     pytest.main(sys.argv)

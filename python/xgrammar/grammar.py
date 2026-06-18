@@ -180,6 +180,7 @@ class Grammar(XGRObject):
         separators: Optional[Tuple[str, str]] = None,
         strict_mode: bool = True,
         max_whitespace_cnt: Optional[int] = None,
+        any_order: bool = False,
         print_converted_ebnf: bool = False,
     ) -> "Grammar":
         """Construct a grammar from JSON schema. Pydantic model or JSON schema string can be
@@ -229,6 +230,16 @@ class Grammar(XGRObject):
             If specified, it will limit the number of whitespace characters to at most max_whitespace_cnt.
             It should be a positive integer.
 
+        any_order : bool, default: False
+            Whether to allow the properties of the top-level object to appear in any order. When
+            False (default), properties must follow the schema's declared order. When True, the
+            required properties form one group and the non-required properties (including
+            additional/pattern properties) form a second group that follows it; within each group
+            the order is unconstrained. Only the count of required properties is enforced: duplicate
+            and missing properties are not checked. This is useful for tool-calling where models do
+            not reliably emit keys in schema order. Note that objects with minProperties/maxProperties
+            constraints, and objects nested inside another object, keep the fixed-order behavior.
+
         print_converted_ebnf : bool, default: False
             If True, the converted EBNF string will be printed. For debugging purposes.
 
@@ -251,6 +262,7 @@ class Grammar(XGRObject):
                 separators,
                 strict_mode,
                 max_whitespace_cnt,
+                any_order,
                 print_converted_ebnf,
             )
         )
