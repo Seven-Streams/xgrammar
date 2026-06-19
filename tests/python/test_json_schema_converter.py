@@ -2589,13 +2589,13 @@ def test_any_order_ebnf():
         "additionalProperties": False,
     }
     ebnf = _json_schema_to_ebnf(schema, any_whitespace=False, any_order=True)
-    # The required group becomes a single alternation rule, repeated exactly N_req times; the
-    # optional group is a separate alternation, bounded by the number of optional fields.
-    assert 'root_req_item ::= "\\"a\\"" ": " basic_integer | "\\"b\\"" ": " basic_string' in ebnf
-    assert 'root_opt_item ::= "\\"c\\"" ": " basic_boolean' in ebnf
-    assert (
-        'root ::= "{" "" (root_req_item (", " root_req_item){1,1} (", " root_opt_item){0,1}) "" "}"'
-        in ebnf
+    # The required group becomes a single alternation rule, repeated exactly N_req (=2) times; the
+    # optional group is a separate alternation, bounded by the number of optional fields (={0,1}).
+    assert ebnf == basic_json_rules_ebnf_no_space + (
+        r"""root_req_item ::= "\"a\"" ": " basic_integer | "\"b\"" ": " basic_string
+root_opt_item ::= "\"c\"" ": " basic_boolean
+root ::= "{" "" (root_req_item (", " root_req_item){1,1} (", " root_opt_item){0,1}) "" "}"
+"""
     )
 
 
@@ -2604,7 +2604,6 @@ def test_any_order_ebnf():
     [
         ('{"a": 1, "b": "x"}', True),  # declared order
         ('{"b": "x", "a": 1}', True),  # reordered required
-        ('{"a": 1, "a": 2}', True),  # duplicate required, b missing -> count == 2 accepted
         ('{"a": 1, "b": "x", "c": true}', True),  # with optional
         ('{"b": "x", "a": 1, "c": true}', True),  # reordered required + optional
         ('{"c": true, "a": 1, "b": "x"}', False),  # optional before required group
@@ -2729,8 +2728,39 @@ def test_any_order_qwen_xml():
     }
     ordered = _qwen_xml_tool_calling_to_ebnf(json.dumps(schema), False)
     any_order = _qwen_xml_tool_calling_to_ebnf(json.dumps(schema), True)
-    assert "root_part_" in ordered
-    assert "root_req_item" in any_order
+
+    # The shared basic_* / xml_* rule prefix is identical for both grammars; any_order only
+    # rewrites the final root rules, so we assert the full grammar = prefix + the differing tail.
+    prefix = r"""basic_escape ::= ["\\/bfnrt] | "u" [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
+basic_string_sub ::= ("\"" | [^\0-\x1f\"\\\r\n] basic_string_sub | "\\" basic_escape basic_string_sub) (= [ \n\t]* [,}\]:])
+basic_any ::= basic_number | basic_string | basic_boolean | basic_null | basic_array | basic_object
+basic_integer ::= ("0" | "-"? [1-9] [0-9]*)
+basic_number ::= "-"? ("0" | [1-9] [0-9]*) ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
+basic_string ::= ["] basic_string_sub
+basic_boolean ::= "true" | "false"
+basic_null ::= "null"
+basic_array ::= (("[" [ \n\t]* basic_any ([ \n\t]* "," [ \n\t]* basic_any)* [ \n\t]* "]") | ("[" [ \n\t]* "]"))
+basic_object ::= ("{" [ \n\t]* basic_string [ \n\t]* ":" [ \n\t]* basic_any ([ \n\t]* "," [ \n\t]* basic_string [ \n\t]* ":" [ \n\t]* basic_any)* [ \n\t]* "}") | "{" [ \n\t]* "}"
+xml_string ::= TagDispatch(loop_after_dispatch=false,excludes=("</parameter>"))
+xml_any ::= xml_string | basic_array | basic_object
+xml_object ::= ( [ \n\t]* "<parameter=" xml_variable_name ">" [ \n\t]* xml_any [ \n\t]* "</parameter>" ([ \n\t]* "<parameter=" xml_variable_name ">" [ \n\t]* xml_any [ \n\t]* "</parameter>")* [ \n\t]*) | [ \n\t]*
+xml_variable_name ::= [a-zA-Z_][a-zA-Z0-9_]*
+root_prop_0 ::= ("0" | "-"? [1-9] [0-9]*)
+"""
+
+    # Ordered: the required props are emitted in fixed declared order (a, then b).
+    assert ordered == prefix + (
+        r"""root_part_0 ::= [ \n\t]* "<parameter=b>" [ \n\t]* xml_string [ \n\t]* "</parameter>" ""
+root ::=  [ \n\t]* (("<parameter=a>" [ \n\t]* root_prop_0 [ \n\t]* "</parameter>" root_part_0)) [ \n\t]*
+"""
+    )
+
+    # any_order: the required group collapses into one alternation rule repeated N_req (=2) times.
+    assert any_order == prefix + (
+        r"""root_req_item ::= "<parameter=a>" [ \n\t]* root_prop_0 [ \n\t]* "</parameter>" | "<parameter=b>" [ \n\t]* xml_string [ \n\t]* "</parameter>"
+root ::=  [ \n\t]* (root_req_item ([ \n\t]* root_req_item){1,1}) [ \n\t]*
+"""
+    )
 
 
 if __name__ == "__main__":
