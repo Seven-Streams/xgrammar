@@ -371,16 +371,15 @@ class JSONSchemaConverter {
       const std::string& additional_suffix,
       int min_properties,
       int max_properties,
-      const std::string& additional_prop_pattern_override = "",
-      bool is_root = false
+      const std::string& additional_prop_pattern_override = ""
   );
 
   /*! \brief Generate partial rule for object properties in "any order" mode. The order of
    *  properties is not fixed: the required group (exactly required.size() entries, each any
    *  required key) comes first, then the optional group (named optional keys, plus any
    *  additional/pattern keys, in any order). Duplicates and missing fields are not checked; only
-   *  the count of required entries is enforced. Used only for the top-level object when any_order
-   *  is enabled and there are no min/max property constraints.
+   *  the count of required entries is enforced. Applies to every object (including nested ones)
+   *  when any_order is enabled and there are no min/max property constraints.
    */
   std::string GetAnyOrderRuleForProperties(
       const std::vector<ObjectSpec::Property>& properties,
@@ -398,13 +397,10 @@ class JSONSchemaConverter {
   std::string colon_pattern_;
   bool any_whitespace_;
   std::optional<int> max_whitespace_cnt_;
-  // When true, the top-level object's properties may appear in any order (see
-  // GetAnyOrderRuleForProperties). Default false preserves the fixed-order behavior.
+  // When true, object properties may appear in any order (see GetAnyOrderRuleForProperties).
+  // Applies to all objects (including nested ones). Default false preserves the fixed-order
+  // behavior.
   bool any_order_ = false;
-  // Object nesting depth during generation. An object is "top-level" iff object_depth_ == 0 at the
-  // moment GenerateObject is entered (i.e. it is not nested inside another object). any_order only
-  // applies to top-level objects.
-  int object_depth_ = 0;
 
  public:
   // Basic rule names

@@ -37,7 +37,7 @@ class JSONSchemaFormat(BaseModel):
     \"deepseek_xml\" (DeepSeek XML(DeepSeek-v3.2): <{dsml_token}parameter name=\"key\" string=\"true|false\">value</{dsml_token}parameter>),
     \"glm_xml\" (GLM XML: <arg_key>key</arg_key><arg_value>value</arg_value>)."""
     any_order: bool = False
-    """Whether to allow the top-level object's properties to appear in any order. See
+    """Whether to allow object properties to appear in any order. See
     :meth:`xgrammar.Grammar.from_json_schema` for the detailed semantics. Default: False."""
 
 

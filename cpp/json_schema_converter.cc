@@ -1780,16 +1780,15 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     const std::string& additional_suffix,
     int min_properties,
     int max_properties,
-    const std::string& additional_prop_pattern_override,
-    bool is_root
+    const std::string& additional_prop_pattern_override
 ) {
   if (max_properties == 0) {
     return "";
   }
 
-  // any_order only applies to the top-level object, and only when there are no min/max property
-  // count constraints (those fall back to the fixed-order generation below).
-  if (any_order_ && is_root && min_properties == 0 && max_properties == -1) {
+  // any_order applies to every object, but only when there are no min/max property count
+  // constraints (those fall back to the fixed-order generation below).
+  if (any_order_ && min_properties == 0 && max_properties == -1) {
     return GetAnyOrderRuleForProperties(
         properties,
         required,
@@ -2135,11 +2134,6 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
 std::string JSONSchemaConverter::GenerateObject(
     const ObjectSpec& spec, const std::string& rule_name, bool need_braces
 ) {
-  // An object is "top-level" iff it is not nested inside another object. any_order only applies to
-  // top-level objects; nested objects keep the fixed-order behavior.
-  bool is_root_object = (object_depth_ == 0);
-  ++object_depth_;
-
   std::string result = "";
   if (need_braces) {
     result += "\"{\"";
@@ -2214,8 +2208,7 @@ std::string JSONSchemaConverter::GenerateObject(
                         effective_suffix,
                         spec.min_properties,
                         spec.max_properties,
-                        pp_override,
-                        is_root_object
+                        pp_override
                     );
     could_be_empty = spec.required.empty() && spec.min_properties == 0;
   } else if (!spec.pattern_properties.empty() || spec.property_names) {
@@ -2262,9 +2255,7 @@ std::string JSONSchemaConverter::GenerateObject(
                         rule_name,
                         additional_suffix,
                         spec.min_properties,
-                        spec.max_properties,
-                        "",
-                        is_root_object
+                        spec.max_properties
                     );
     could_be_empty = spec.required.empty() && spec.min_properties == 0;
   } else if (additional_property) {
@@ -2289,8 +2280,6 @@ std::string JSONSchemaConverter::GenerateObject(
     // The object is unconditionally empty.
     could_be_empty = true;
   }
-
-  --object_depth_;
 
   indent_manager_.EndIndent();
 

@@ -2653,7 +2653,7 @@ def test_any_order_pattern_properties_unbounded():
     _accept_any_order(schema, '{"x_": 5, "a": 1}', False)
 
 
-def test_any_order_nested_keeps_fixed_order():
+def test_any_order_applies_to_nested_objects():
     schema = {
         "type": "object",
         "properties": {
@@ -2668,10 +2668,10 @@ def test_any_order_nested_keeps_fixed_order():
         "required": ["outer_a", "nested"],
         "additionalProperties": False,
     }
-    # top-level object is reorderable
+    # any_order applies to every object: both the top-level and the nested object are reorderable.
     _accept_any_order(schema, '{"nested": {"x": 1, "y": 2}, "outer_a": 5}', True)
-    # but the nested object keeps the fixed declared order
-    _accept_any_order(schema, '{"outer_a": 5, "nested": {"y": 2, "x": 1}}', False)
+    _accept_any_order(schema, '{"outer_a": 5, "nested": {"y": 2, "x": 1}}', True)
+    _accept_any_order(schema, '{"nested": {"y": 2, "x": 1}, "outer_a": 5}', True)
 
 
 def test_any_order_no_required_fields():

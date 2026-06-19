@@ -183,7 +183,7 @@ class GrammarCompiler(XGRObject):
             It should be a positive integer.
 
         any_order : bool, default: False
-            Whether to allow the properties of the top-level object to appear in any order. See
+            Whether to allow object properties to appear in any order. See
             :meth:`xgrammar.Grammar.from_json_schema` for the detailed semantics.
 
         Returns

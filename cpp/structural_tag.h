@@ -84,7 +84,7 @@ struct JSONSchemaFormat {
   static constexpr const char* type = "json_schema";
   std::string json_schema;
   std::string style = "json";  // "json","qwen_xml","minimax_xml","deepseek_xml","glm_xml"
-  // Whether to allow the top-level object's properties to appear in any order. See
+  // Whether to allow object properties to appear in any order. See
   // Grammar::FromJSONSchema / JSONSchemaToEBNF for the semantics.
   bool any_order = false;
   JSONSchemaFormat(std::string json_schema, std::string style = "json", bool any_order = false)
