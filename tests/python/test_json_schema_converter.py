@@ -2686,21 +2686,74 @@ def test_any_order_no_required_fields():
     _accept_any_order(schema, '{"a": 1, "a": 2, "b": "x"}', False)
 
 
-def test_any_order_min_properties_falls_back_to_ordered():
+def test_any_order_min_max_properties_bounds_optional_block():
+    # required {a}, optional {b, c}; total properties must be in [2, 3].
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}, "c": {"type": "boolean"}},
+        "required": ["a"],
+        "additionalProperties": False,
+        "minProperties": 2,
+        "maxProperties": 3,
+    }
+    # any_order still reorders (within the optional group), and now honors the property-count bounds.
+    _accept_any_order(schema, '{"a": 1, "b": "x"}', True)  # 2 props
+    _accept_any_order(schema, '{"a": 1, "c": true}', True)  # 2 props
+    _accept_any_order(schema, '{"a": 1, "b": "x", "c": true}', True)  # 3 props
+    _accept_any_order(schema, '{"a": 1, "c": true, "b": "x"}', True)  # 3 props, optional reordered
+    _accept_any_order(schema, '{"a": 1}', False)  # 1 prop < minProperties=2
+    _accept_any_order(schema, '{"b": "x", "a": 1}', False)  # optional before the required group
+
+
+def test_any_order_max_properties_caps_entries():
+    # required {a}; optional {b, c, d}; maxProperties=2 => at most 1 optional entry.
+    schema = {
+        "type": "object",
+        "properties": {
+            "a": {"type": "integer"},
+            "b": {"type": "string"},
+            "c": {"type": "boolean"},
+            "d": {"type": "integer"},
+        },
+        "required": ["a"],
+        "additionalProperties": False,
+        "maxProperties": 2,
+    }
+    _accept_any_order(schema, '{"a": 1}', True)  # 1 prop
+    _accept_any_order(schema, '{"a": 1, "c": true}', True)  # 2 props
+    _accept_any_order(schema, '{"a": 1, "d": 5}', True)  # 2 props (different optional key)
+    _accept_any_order(schema, '{"a": 1, "b": "x", "c": true}', False)  # 3 props > max=2
+    _accept_any_order(schema, '{"c": true, "a": 1}', False)  # optional before the required group
+
+
+def test_any_order_min_properties_with_additional():
+    # required {a}; additionalProperties allowed; minProperties=3 => >= 2 optional/extra entries.
     schema = {
         "type": "object",
         "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
-        "required": ["a", "b"],
+        "required": ["a"],
+        "additionalProperties": True,
+        "minProperties": 3,
+    }
+    _accept_any_order(schema, '{"a": 1, "b": "x"}', False)  # 2 props < min=3
+    _accept_any_order(schema, '{"a": 1, "b": "x", "z": 5}', True)  # 3 props (extra key)
+    _accept_any_order(schema, '{"a": 1, "z": 5, "y": 6, "w": 7}', True)  # 4 props, unbounded above
+
+
+def test_any_order_no_required_with_min_properties():
+    # no required; optional {a, b, c}; minProperties=2, maxProperties=2 => exactly 2 entries.
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}, "c": {"type": "boolean"}},
         "additionalProperties": False,
         "minProperties": 2,
+        "maxProperties": 2,
     }
-    # With min/maxProperties, any_order falls back to the fixed-order grammar.
-    ordered = _json_schema_to_ebnf(schema, any_whitespace=False, any_order=False)
-    any_order = _json_schema_to_ebnf(schema, any_whitespace=False, any_order=True)
-    assert ordered == any_order
-    # The fixed order is still enforced.
-    _accept_any_order(schema, '{"a": 1, "b": "x"}', True)
-    _accept_any_order(schema, '{"b": "x", "a": 1}', False)
+    _accept_any_order(schema, "{}", False)  # 0 < min=2
+    _accept_any_order(schema, '{"a": 1}', False)  # 1 < min=2
+    _accept_any_order(schema, '{"a": 1, "b": "x"}', True)  # exactly 2
+    _accept_any_order(schema, '{"c": true, "a": 1}', True)  # exactly 2, reordered
+    _accept_any_order(schema, '{"a": 1, "b": "x", "c": true}', False)  # 3 > max=2
 
 
 def test_any_order_backward_compatible():

@@ -378,8 +378,9 @@ class JSONSchemaConverter {
    *  properties is not fixed: the required group (exactly required.size() entries, each any
    *  required key) comes first, then the optional group (named optional keys, plus any
    *  additional/pattern keys, in any order). Duplicates and missing fields are not checked; only
-   *  the count of required entries is enforced. Applies to every object (including nested ones)
-   *  when any_order is enabled and there are no min/max property constraints.
+   *  the count of required entries is enforced. min_properties / max_properties are honored by
+   *  bounding the number of optional-group entries. Applies to every object (including nested ones)
+   *  when any_order is enabled.
    */
   std::string GetAnyOrderRuleForProperties(
       const std::vector<ObjectSpec::Property>& properties,
@@ -387,6 +388,8 @@ class JSONSchemaConverter {
       const SchemaSpecPtr& additional,
       const std::string& rule_name,
       const std::string& additional_suffix,
+      int min_properties,
+      int max_properties,
       const std::string& additional_prop_pattern_override = ""
   );
 

@@ -1657,6 +1657,8 @@ std::string JSONSchemaConverter::GetAnyOrderRuleForProperties(
     const SchemaSpecPtr& additional,
     const std::string& rule_name,
     const std::string& additional_suffix,
+    int min_properties,
+    int max_properties,
     const std::string& additional_prop_pattern_override
 ) {
   std::string first_sep = NextSeparator();
@@ -1728,23 +1730,43 @@ std::string JSONSchemaConverter::GetAnyOrderRuleForProperties(
   const int n_req = static_cast<int>(req_patterns.size());
   const int n_opt = static_cast<int>(opt_patterns.size());
 
-  // The optional block: each occurrence prefixed by mid_sep. Unbounded ("*") when extra keys are
-  // allowed; otherwise bounded by the number of named optional fields. `opt_already` is the number
-  // of optional entries already emitted before this block (1 when there is no required group and
-  // the first optional entry already consumed first_sep).
+  // The optional block: each occurrence prefixed by mid_sep. The number of optional-group entries
+  // `k` must satisfy the object-level property-count bounds: total entries = n_req + k must lie in
+  // [min_properties, max_properties], so k lies in [min_properties - n_req, max_properties -
+  // n_req]. The upper bound is additionally capped by the number of named optional fields when no
+  // extra (additional/pattern) keys are allowed. `opt_already` is the number of optional entries
+  // already emitted before this block (1 when there is no required group and the first optional
+  // entry already consumed first_sep).
   auto make_opt_block = [&](int opt_already) -> std::string {
     if (opt_alternatives.empty()) {
       return "";
     }
     std::string unit = "(" + mid_sep + " " + opt_item_rule + ")";
+
+    // Bounds on the number of optional-group entries (-1 upper means unbounded).
+    int opt_lo = std::max(0, min_properties - n_req);
+    int opt_hi;
     if (allow_extra) {
-      return unit + "*";
+      opt_hi = (max_properties == -1) ? -1 : std::max(0, max_properties - n_req);
+    } else {
+      opt_hi =
+          (max_properties == -1) ? n_opt : std::min(n_opt, std::max(0, max_properties - n_req));
     }
-    int upper = n_opt - opt_already;
-    if (upper <= 0) {
+
+    // Remaining repetition after the entries already emitted.
+    int lower = std::max(0, opt_lo - opt_already);
+    int upper = (opt_hi == -1) ? -1 : (opt_hi - opt_already);
+
+    if (upper == 0) {
       return "";
     }
-    return unit + "{0," + std::to_string(upper) + "}";
+    if (lower == 0 && upper == -1) {
+      return unit + "*";
+    }
+    if (upper == -1) {
+      return unit + "{" + std::to_string(lower) + ",}";
+    }
+    return unit + "{" + std::to_string(lower) + "," + std::to_string(upper) + "}";
   };
 
   std::string content;
@@ -1786,15 +1808,17 @@ std::string JSONSchemaConverter::GetPartialRuleForProperties(
     return "";
   }
 
-  // any_order applies to every object, but only when there are no min/max property count
-  // constraints (those fall back to the fixed-order generation below).
-  if (any_order_ && min_properties == 0 && max_properties == -1) {
+  // any_order applies to every object. min/max property count constraints are honored by bounding
+  // the number of optional-group entries (see GetAnyOrderRuleForProperties).
+  if (any_order_) {
     return GetAnyOrderRuleForProperties(
         properties,
         required,
         additional,
         rule_name,
         additional_suffix,
+        min_properties,
+        max_properties,
         additional_prop_pattern_override
     );
   }
