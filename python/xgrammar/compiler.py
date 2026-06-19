@@ -183,8 +183,13 @@ class GrammarCompiler(XGRObject):
             It should be a positive integer.
 
         any_order : bool, default: False
-            Whether to allow object properties to appear in any order. See
-            :meth:`xgrammar.Grammar.from_json_schema` for the detailed semantics.
+            Whether to relax object property ordering. When False (default), properties must appear
+            in their declared order and are fully validated (no duplicate keys, all required keys
+            present). When True, the required properties come first and the non-required ones
+            (optional fields, plus additional/pattern properties) follow, but the order within each
+            group is free; only the count of required properties is checked (duplicate and missing
+            keys are not validated). minProperties/maxProperties still bound the total count.
+            Applies to every object, including nested ones.
 
         Returns
         -------

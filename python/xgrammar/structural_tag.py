@@ -37,8 +37,13 @@ class JSONSchemaFormat(BaseModel):
     \"deepseek_xml\" (DeepSeek XML(DeepSeek-v3.2): <{dsml_token}parameter name=\"key\" string=\"true|false\">value</{dsml_token}parameter>),
     \"glm_xml\" (GLM XML: <arg_key>key</arg_key><arg_value>value</arg_value>)."""
     any_order: bool = False
-    """Whether to allow object properties to appear in any order. See
-    :meth:`xgrammar.Grammar.from_json_schema` for the detailed semantics. Default: False."""
+    """Whether to relax object property ordering. When False (default), properties must appear in
+    their declared order and are fully validated (no duplicate keys, all required keys present).
+    When True, the required properties come first and the non-required ones (optional fields, plus
+    additional/pattern properties) follow, but the order within each group is free; only the count
+    of required properties is checked (duplicate and missing keys are not validated).
+    minProperties/maxProperties still bound the total count. Applies to every object, including
+    nested ones. Default: False."""
 
 
 class AnyTextFormat(BaseModel):

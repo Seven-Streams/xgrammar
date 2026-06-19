@@ -231,14 +231,13 @@ class Grammar(XGRObject):
             It should be a positive integer.
 
         any_order : bool, default: False
-            Whether to allow the properties of an object to appear in any order. When False
-            (default), properties must follow the schema's declared order. When True, this applies
-            to every object (including nested ones): the required properties form one group and the
-            non-required properties (including additional/pattern properties) form a second group
-            that follows it; within each group the order is unconstrained. Only the count of
-            required properties is enforced: duplicate and missing properties are not checked.
-            minProperties/maxProperties are honored by bounding the number of entries. This is
-            useful for tool-calling where models do not reliably emit keys in schema order.
+            Whether to relax object property ordering. When False (default), properties must appear
+            in their declared order and are fully validated (no duplicate keys, all required keys
+            present). When True, the required properties come first and the non-required ones
+            (optional fields, plus additional/pattern properties) follow, but the order within each
+            group is free; only the count of required properties is checked (duplicate and missing
+            keys are not validated). minProperties/maxProperties still bound the total count.
+            Applies to every object, including nested ones.
 
         print_converted_ebnf : bool, default: False
             If True, the converted EBNF string will be printed. For debugging purposes.
