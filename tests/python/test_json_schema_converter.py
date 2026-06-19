@@ -2604,6 +2604,10 @@ root ::= "{" "" (root_req_item (", " root_req_item){1,1} (", " root_opt_item){0,
     [
         ('{"a": 1, "b": "x"}', True),  # declared order
         ('{"b": "x", "a": 1}', True),  # reordered required
+        (
+            '{"a": 1, "a": 2}',
+            True,
+        ),  # duplicate required, b missing -> only the count (2) is enforced
         ('{"a": 1, "b": "x", "c": true}', True),  # with optional
         ('{"b": "x", "a": 1, "c": true}', True),  # reordered required + optional
         ('{"a": 1}', False),  # only one required entry
@@ -2718,6 +2722,22 @@ def test_any_order_max_properties_caps_entries():
     _accept_any_order(schema, '{"a": 1, "c": true}', True)  # 2 props
     _accept_any_order(schema, '{"a": 1, "d": 5}', True)  # 2 props (different optional key)
     _accept_any_order(schema, '{"a": 1, "b": "x", "c": true}', False)  # 3 props > max=2
+
+
+def test_any_order_max_properties_equals_required_count():
+    # required {a, b}, optional {c}; maxProperties == N_req (2) => optional block must be empty.
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}, "b": {"type": "string"}, "c": {"type": "boolean"}},
+        "required": ["a", "b"],
+        "additionalProperties": False,
+        "maxProperties": 2,
+    }
+    _accept_any_order(schema, '{"a": 1, "b": "x"}', True)  # exactly the 2 required
+    _accept_any_order(schema, '{"b": "x", "a": 1}', True)  # reordered required
+    _accept_any_order(
+        schema, '{"a": 1, "b": "x", "c": true}', False
+    )  # 3 props > max=2, no optional allowed
 
 
 def test_any_order_min_properties_with_additional():

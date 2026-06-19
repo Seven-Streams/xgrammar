@@ -4087,6 +4087,7 @@ any_order_additional_instance_is_accepted = [
     ('{"a": 1}', True),
     ('{"a": 1, "b": "x"}', True),
     ('{"a": 1, "z": 5, "y": "q", "w": true}', True),  # additional keys, unbounded, after required
+    ('{"b": "x"}', False),  # missing required 'a' even though additional keys are allowed
 ]
 
 
@@ -4102,15 +4103,23 @@ def test_json_schema_format_any_order_additional_properties(instance: str, is_ac
 
 any_order_xml_schema = {
     "type": "object",
-    "properties": {"a": {"type": "integer"}, "b": {"type": "string"}},
+    "properties": {"a": {"type": "integer"}, "b": {"type": "string"}, "c": {"type": "boolean"}},
     "required": ["a", "b"],
     "additionalProperties": False,
 }
 
 any_order_xml_instance_is_accepted = [
     ("<parameter=a>1</parameter><parameter=b>hello</parameter>", True),  # declared order
-    ("<parameter=b>hello</parameter><parameter=a>1</parameter>", True),  # reordered
+    ("<parameter=b>hello</parameter><parameter=a>1</parameter>", True),  # reordered required
+    # optional field after the required group, exercised through the XML tail
+    ("<parameter=a>1</parameter><parameter=b>hello</parameter><parameter=c>true</parameter>", True),
     ("<parameter=a>1</parameter>", False),  # only one required entry
+    # two optional entries exceed the optional bound (n_opt == 1), via the XML path
+    (
+        "<parameter=a>1</parameter><parameter=b>hello</parameter>"
+        "<parameter=c>true</parameter><parameter=d>false</parameter>",
+        False,
+    ),
 ]
 
 
