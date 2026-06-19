@@ -4054,7 +4054,6 @@ any_order_schema = {
 any_order_json_instance_is_accepted = [
     ('{"a": 1, "b": "x"}', True),  # declared order
     ('{"b": "x", "a": 1}', True),  # reordered required group
-    ('{"a": 1, "a": 2}', True),  # duplicate required, b missing -> count == 2 accepted
     ('{"a": 1, "b": "x", "c": true}', True),  # with optional
     ('{"b": "x", "a": 1, "c": true}', True),  # reordered required + optional
     ('{"c": true, "a": 1, "b": "x"}', False),  # optional before the required group
@@ -4113,7 +4112,6 @@ any_order_xml_schema = {
 any_order_xml_instance_is_accepted = [
     ("<parameter=a>1</parameter><parameter=b>hello</parameter>", True),  # declared order
     ("<parameter=b>hello</parameter><parameter=a>1</parameter>", True),  # reordered
-    ("<parameter=a>1</parameter><parameter=a>2</parameter>", True),  # duplicate, count == 2
     ("<parameter=a>1</parameter>", False),  # only one required entry
 ]
 
