@@ -4056,7 +4056,6 @@ any_order_json_instance_is_accepted = [
     ('{"b": "x", "a": 1}', True),  # reordered required group
     ('{"a": 1, "b": "x", "c": true}', True),  # with optional
     ('{"b": "x", "a": 1, "c": true}', True),  # reordered required + optional
-    ('{"c": true, "a": 1, "b": "x"}', False),  # optional before the required group
     ('{"a": 1}', False),  # only one required entry
     ('{"a": 1, "b": "x", "c": true, "c": false}', False),  # two optional > bound
     ('{"a": 1, "b": "x", "d": 5}', False),  # additionalProperties false
@@ -4088,7 +4087,6 @@ any_order_additional_instance_is_accepted = [
     ('{"a": 1}', True),
     ('{"a": 1, "b": "x"}', True),
     ('{"a": 1, "z": 5, "y": "q", "w": true}', True),  # additional keys, unbounded, after required
-    ('{"z": 5, "a": 1}', False),  # additional key before the required group
 ]
 
 

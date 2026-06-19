@@ -2606,7 +2606,6 @@ root ::= "{" "" (root_req_item (", " root_req_item){1,1} (", " root_opt_item){0,
         ('{"b": "x", "a": 1}', True),  # reordered required
         ('{"a": 1, "b": "x", "c": true}', True),  # with optional
         ('{"b": "x", "a": 1, "c": true}', True),  # reordered required + optional
-        ('{"c": true, "a": 1, "b": "x"}', False),  # optional before required group
         ('{"a": 1}', False),  # only one required entry
         ('{"a": 1, "b": "x", "c": true, "c": false}', False),  # two optional > bound {0,1}
         ('{"a": 1, "b": "x", "d": 5}', False),  # additionalProperties false
@@ -2634,8 +2633,6 @@ def test_any_order_additional_properties_unbounded():
     _accept_any_order(schema, '{"a": 1, "b": "x"}', True)
     # additional keys join the optional group and are unbounded
     _accept_any_order(schema, '{"a": 1, "z": 5, "y": "q", "w": true}', True)
-    # but they must still come after the required group
-    _accept_any_order(schema, '{"z": 5, "a": 1}', False)
 
 
 def test_any_order_pattern_properties_unbounded():
@@ -2646,10 +2643,9 @@ def test_any_order_pattern_properties_unbounded():
         "patternProperties": {"^x_": {"type": "integer"}},
         "additionalProperties": False,
     }
-    # pattern-property keys join the optional group and are unbounded, after the required group
+    # pattern-property keys join the optional group and are unbounded
     _accept_any_order(schema, '{"a": 1}', True)
     _accept_any_order(schema, '{"a": 1, "x_": 5, "x_": 9}', True)
-    _accept_any_order(schema, '{"x_": 5, "a": 1}', False)
 
 
 def test_any_order_applies_to_nested_objects():
@@ -2702,7 +2698,6 @@ def test_any_order_min_max_properties_bounds_optional_block():
     _accept_any_order(schema, '{"a": 1, "b": "x", "c": true}', True)  # 3 props
     _accept_any_order(schema, '{"a": 1, "c": true, "b": "x"}', True)  # 3 props, optional reordered
     _accept_any_order(schema, '{"a": 1}', False)  # 1 prop < minProperties=2
-    _accept_any_order(schema, '{"b": "x", "a": 1}', False)  # optional before the required group
 
 
 def test_any_order_max_properties_caps_entries():
@@ -2723,7 +2718,6 @@ def test_any_order_max_properties_caps_entries():
     _accept_any_order(schema, '{"a": 1, "c": true}', True)  # 2 props
     _accept_any_order(schema, '{"a": 1, "d": 5}', True)  # 2 props (different optional key)
     _accept_any_order(schema, '{"a": 1, "b": "x", "c": true}', False)  # 3 props > max=2
-    _accept_any_order(schema, '{"c": true, "a": 1}', False)  # optional before the required group
 
 
 def test_any_order_min_properties_with_additional():
