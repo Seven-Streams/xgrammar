@@ -1,5 +1,6 @@
 """Tests for get_structural_tag_for_model and generated structural tags."""
 
+import inspect
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -152,6 +153,16 @@ def _collect_json_schema_values(structural_tag: StructuralTag) -> List[Any]:
 
     return [
         format_obj.json_schema
+        for format_obj in _walk_structural_format(structural_tag.format)
+        if isinstance(format_obj, JSONSchemaFormat)
+    ]
+
+
+def _collect_json_schema_nodes(structural_tag: StructuralTag) -> List[JSONSchemaFormat]:
+    """Collect nested JSONSchemaFormat nodes."""
+
+    return [
+        format_obj
         for format_obj in _walk_structural_format(structural_tag.format)
         if isinstance(format_obj, JSONSchemaFormat)
     ]
@@ -1206,3 +1217,30 @@ def test_deepseek_dsml_parallel_invokes_double_newline_rejected(
         f"Grammar wrongly accepted double-newline join for {model}/{tool_choice}:\n"
         f"{double_newline_output!r}"
     )
+
+
+def test_get_model_structural_tag_max_whitespace_cnt_propagates():
+    """get_model_structural_tag applies max_whitespace_cnt to every JSONSchemaFormat node."""
+    tools = make_tools(["f", "g"])
+
+    nodes_default = _collect_json_schema_nodes(
+        get_model_structural_tag("qwen_3", tools=tools, reasoning=False)
+    )
+    assert nodes_default  # the generated tag actually contains JSON-schema nodes
+    assert all(n.max_whitespace_cnt is None for n in nodes_default)
+
+    nodes_bounded = _collect_json_schema_nodes(
+        get_model_structural_tag("qwen_3", tools=tools, reasoning=False, max_whitespace_cnt=2)
+    )
+    assert nodes_bounded
+    assert all(n.max_whitespace_cnt == 2 for n in nodes_bounded)
+
+
+def test_get_model_structural_tag_does_not_expose_any_whitespace():
+    """any_whitespace is intentionally not a builtin parameter; nodes keep the default (True)."""
+    assert "any_whitespace" not in inspect.signature(get_model_structural_tag).parameters
+    nodes = _collect_json_schema_nodes(
+        get_model_structural_tag("qwen_3", tools=make_tools(["f"]), reasoning=False)
+    )
+    assert nodes
+    assert all(n.any_whitespace is True for n in nodes)

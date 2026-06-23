@@ -37,14 +37,9 @@ class JSONSchemaFormat(BaseModel):
     \"deepseek_xml\" (DeepSeek XML(DeepSeek-v3.2): <{dsml_token}parameter name=\"key\" string=\"true|false\">value</{dsml_token}parameter>),
     \"glm_xml\" (GLM XML: <arg_key>key</arg_key><arg_value>value</arg_value>)."""
     any_whitespace: bool = True
-    """Whether to allow any whitespace between tokens in this JSON-schema content. When True
-    (default), arbitrary whitespace is allowed. When False, the content uses fixed compact
-    formatting. Applies to this tag only."""
+    """Whether to allow arbitrary whitespace in this content. If False, use fixed formatting."""
     max_whitespace_cnt: Optional[int] = None
-    """The maximum number of consecutive whitespace characters allowed in this JSON-schema content.
-    When None (default), there is no limit. If set, it bounds consecutive whitespace to at most
-    ``max_whitespace_cnt``, which avoids unbounded grammar states. Must be a positive integer.
-    Applies to this tag only."""
+    """Max consecutive whitespace characters in this content. None means no limit."""
 
 
 class AnyTextFormat(BaseModel):

@@ -84,10 +84,8 @@ struct JSONSchemaFormat {
   static constexpr const char* type = "json_schema";
   std::string json_schema;
   std::string style = "json";  // "json","qwen_xml","minimax_xml","deepseek_xml","glm_xml"
-  // Whether to allow any whitespace in the JSON-schema content of this tag. Default: true.
+  // Per-tag whitespace control for the JSON-schema content.
   bool any_whitespace = true;
-  // The maximum number of consecutive whitespace characters allowed in the JSON-schema content of
-  // this tag. If std::nullopt, there is no limit. Bounding it avoids self-loop state explosion.
   std::optional<int> max_whitespace_cnt = std::nullopt;
   JSONSchemaFormat(
       std::string json_schema,
@@ -391,8 +389,7 @@ struct StructuralTag {
  * \param structural_tag_json The JSON string of the structural tag.
  * \param tokenizer_info The tokenizer info used to resolve token-level formats.
  * \return A grammar if the JSON is valid, otherwise an error message in std::string.
- * \note Whitespace control (any_whitespace / max_whitespace_cnt) is configured per
- *   JSONSchemaFormat node, not at this conversion entry point.
+ * \note Whitespace control is configured per JSONSchemaFormat node.
  */
 Result<Grammar, StructuralTagError> StructuralTagToGrammar(
     const std::string& structural_tag_json,

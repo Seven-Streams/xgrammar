@@ -1844,9 +1844,7 @@ Result<int, ISTError> StructuralTagGrammarConverter::VisitSub(const ConstStringF
 }
 
 Result<int, ISTError> StructuralTagGrammarConverter::VisitSub(const JSONSchemaFormat& format) {
-  // any_whitespace and max_whitespace_cnt come from the JSONSchemaFormat node itself (per-tag):
-  // any_whitespace toggles free whitespace between tokens, and max_whitespace_cnt bounds
-  // consecutive whitespace to avoid Earley self-loop state explosion.
+  // Whitespace control comes from the JSONSchemaFormat node (per-tag).
   const static std::unordered_map<
       std::string,
       std::function<std::string(const std::string&, bool, std::optional<int>)>>

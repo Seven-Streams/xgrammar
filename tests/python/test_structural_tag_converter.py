@@ -4042,13 +4042,7 @@ def test_token_tag_dispatch_need_tokenizer_info():
         xgr.Grammar.from_structural_tag(stag)
 
 
-# ---------------------------------------------------------------------------
-# Whitespace control for the JSON-schema content of a structural tag.
-#
-# any_whitespace and max_whitespace_cnt are fields of each JSONSchemaFormat node
-# (per-tag granularity), mirroring how the rest of JSONSchemaFormat is configured.
-# These tests verify they actually affect the generated grammar.
-# ---------------------------------------------------------------------------
+# Per-tag whitespace control (JSONSchemaFormat.any_whitespace / max_whitespace_cnt).
 
 _WS_SCHEMA = {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"]}
 
@@ -4099,8 +4093,7 @@ def test_structural_tag_any_whitespace_false():
 
 
 def test_structural_tag_per_tag_whitespace_independent():
-    # Two JSONSchemaFormat nodes in the same structural tag can carry different whitespace
-    # controls: the first is bounded to 2 consecutive whitespaces, the second is unbounded.
+    # Two JSONSchemaFormat nodes can carry different whitespace controls: <a> bounded, <b> not.
     stag = StructuralTag(
         format=SequenceFormat(
             elements=[
@@ -4128,9 +4121,7 @@ def test_structural_tag_per_tag_whitespace_independent():
 
 
 def test_structural_tag_max_whitespace_cnt_compile_cache():
-    # The whitespace control is embedded in the JSONSchemaFormat node, so it is part of the
-    # serialized structural tag JSON that forms the GrammarCompiler cache key. Two tags that
-    # differ only in max_whitespace_cnt must therefore not collide in the cache.
+    # The per-tag setting is part of the serialized tag JSON (the cache key), so no collision.
     compiler = xgr.GrammarCompiler(xgr.TokenizerInfo([]), cache_enabled=True)
     g_unbounded = compiler.compile_structural_tag(_ws_stag()).grammar
     g_bounded = compiler.compile_structural_tag(_ws_stag(max_whitespace_cnt=2)).grammar

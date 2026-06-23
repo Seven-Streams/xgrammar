@@ -274,8 +274,7 @@ class GrammarCompiler(XGRObject):
         The legacy pattern compile_structural_tag(tags, triggers) is deprecated. Use the
         StructuralTag class to construct structural tags instead.
 
-        Whitespace control (``any_whitespace`` / ``max_whitespace_cnt``) is configured per
-        :class:`JSONSchemaFormat` node inside the structural tag, not on this method.
+        Whitespace control is configured per :class:`JSONSchemaFormat` node.
         """
         structural_tag_str = _get_structural_tag_str_from_args(args, kwargs)
         return CompiledGrammar._create_from_handle(

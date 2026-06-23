@@ -94,8 +94,7 @@ class GrammarCompiler {
 
   /*! \brief Get the compiled grammar for a structural tag.
    * \param structural_tag_json The structural tag JSON string.
-   * \note Whitespace control (any_whitespace / max_whitespace_cnt) is configured per
-   * JSONSchemaFormat node inside the structural tag, not at this entry point.
+   * \note Whitespace control is configured per JSONSchemaFormat node.
    */
   CompiledGrammar CompileStructuralTag(const std::string& structural_tag_json);
 

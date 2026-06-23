@@ -19,12 +19,9 @@ The `reasoning` parameter controls whether the model-specific reasoning section 
 
 `get_model_structural_tag` generates a `StructuralTag` for the given model type with the specified tools and options. The returned `StructuralTag` can be used with `Grammar.from_structural_tag` or `GrammarCompiler.compile_structural_tag` to obtain the corresponding grammar.
 
-Whitespace control is configured **per JSON-schema node** via the `any_whitespace` and `max_whitespace_cnt` fields of `JSONSchemaFormat` (not at compile time), so different tool-argument schemas in the same structural tag can use different settings. As a convenience, `get_model_structural_tag` accepts two whitespace controls that it applies to every `JSONSchemaFormat` in the generated structural tag:
+`get_model_structural_tag` accepts an optional `max_whitespace_cnt` that it applies to every tool-argument schema in the generated structural tag:
 
-- **any_whitespace** (`bool`, default `True`): whether to allow arbitrary whitespace between tokens. Set to `False` to require fixed formatting.
 - **max_whitespace_cnt** (`Optional[int]`, default `None`): caps the number of consecutive whitespace characters. Setting it (e.g. `2`) bounds runs of whitespace, which avoids the unbounded-whitespace outputs some models emit in bad cases that would otherwise blow up grammar compilation/matching.
-
-When building a `StructuralTag` by hand, set these fields directly on each `JSONSchemaFormat` node instead.
 
 Use it when you need to constrain the model to output in a fixed pattern such as "tool name + parameter JSON", e.g. for Llama, Qwen, Kimi, DeepSeek, OpenAI Harmony, etc.
 
@@ -55,7 +52,6 @@ Use it when you need to constrain the model to output in a fixed pattern such as
   - `{"type": <builtin_type>}`: forces one builtin tool (matched by `type`).
   - `{"type": "allowed_tools", "allowed_tools": {"mode": ..., "tools": [...]}}`: limits available tools before applying its `mode`. The `tools` list may contain both function refs and builtin refs (matched by `type`).
 - **reasoning** (`bool`, optional): Whether to enable reasoning mode (`<think>`/`</think>` tags or model-specific equivalents). Default `True`.
-- **any_whitespace** (`bool`, optional): Applied to every tool-argument schema in the generated structural tag. Default `True`. See above.
 - **max_whitespace_cnt** (`Optional[int]`, optional): Applied to every tool-argument schema in the generated structural tag. Default `None`. See above.
 
 Passing an unsupported `model` or an invalid `tool_choice` will raise `ValueError`.

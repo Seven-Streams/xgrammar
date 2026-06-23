@@ -346,8 +346,7 @@ class Grammar(XGRObject):
         Advanced Topics of the Structural Tag in XGrammar documentation for its semantic.
         Structural Tag in XGrammar documentation for its semantic.
 
-        Whitespace control (``any_whitespace`` / ``max_whitespace_cnt``) is configured per
-        :class:`JSONSchemaFormat` node inside the structural tag, not on this method.
+        Whitespace control is configured per :class:`JSONSchemaFormat` node.
         """
         structural_tag_str = _get_structural_tag_str_from_args(args, kwargs)
         return Grammar._create_from_handle(_core.Grammar.from_structural_tag(structural_tag_str))

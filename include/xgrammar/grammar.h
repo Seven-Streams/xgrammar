@@ -133,8 +133,7 @@ class Grammar {
    * \brief Construct a grammar from a structural tag string.
    * \param structural_tag_json The structural tag string.
    * \param tokenizer_info Optional tokenizer info for resolving string token references.
-   * \note Whitespace control (any_whitespace / max_whitespace_cnt) is configured per
-   * JSONSchemaFormat node inside the structural tag, not at this entry point.
+   * \note Whitespace control is configured per JSONSchemaFormat node.
    */
   static std::variant<Grammar, StructuralTagError> FromStructuralTag(
       const std::string& structural_tag_json,
