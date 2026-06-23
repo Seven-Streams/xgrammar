@@ -1418,13 +1418,21 @@ std::string JSONSchemaConverter::GenerateInteger(
     start = spec.minimum;
   }
   if (spec.exclusive_minimum.has_value()) {
-    start = *spec.exclusive_minimum + 1;
+    // Smallest integer strictly greater than exclusive_minimum (the parser
+    // rejects exclusive_minimum == INT64_MAX, so +1 cannot overflow). When
+    // minimum is also present the stricter (larger) lower bound wins.
+    int64_t excl_start = *spec.exclusive_minimum + 1;
+    start = start.has_value() ? std::max(*start, excl_start) : excl_start;
   }
   if (spec.maximum.has_value()) {
     end = spec.maximum;
   }
   if (spec.exclusive_maximum.has_value()) {
-    end = *spec.exclusive_maximum - 1;
+    // Largest integer strictly less than exclusive_maximum (the parser rejects
+    // exclusive_maximum == INT64_MIN, so -1 cannot underflow). When maximum is
+    // also present the stricter (smaller) upper bound wins.
+    int64_t excl_end = *spec.exclusive_maximum - 1;
+    end = end.has_value() ? std::min(*end, excl_end) : excl_end;
   }
 
   if (start.has_value() || end.has_value()) {
@@ -2425,12 +2433,70 @@ size_t JSONSchemaConverter::StringSpecKeyHash::operator()(const StringSpecKey& k
 
 namespace {
 
+// Stateless helper that builds anchored regexes matching JSON integers/numbers
+// within a range. All methods are static; the class only groups the helpers so
+// the internal ones stay private.
+class NumberGenerator {
+ public:
+  static std::string IntegerRangeRegex(std::optional<int64_t> start, std::optional<int64_t> end);
+  static std::string FloatRangeRegex(
+      std::optional<double> start,
+      std::optional<double> end,
+      int precision,
+      bool exclusive_start,
+      bool exclusive_end
+  );
+
+ private:
+  struct FracPatternSet {
+    // Each pattern matches a non-empty fraction digit string.
+    std::vector<std::string> parts;
+    // Whether having no fraction digits at all also satisfies the bound.
+    bool include_empty = false;
+  };
+
+  static std::string DigitClass(char lo, char hi);
+  static std::string ExactDigits(int k);
+  static std::string FreeDigits(int max_count);
+  static std::string OptionalZeros(int max_count);
+  static std::string SomeZeros(int max_count);
+  static bool AllChar(const std::string& s, char c);
+  static std::vector<std::string> IntSameLen(const std::string& a, const std::string& b);
+  static int CompareDigitStr(const std::string& a, const std::string& b);
+  static std::vector<std::string> NumberPatternsStr(const std::string& lo, const std::string& hi);
+  static std::string SubRangeRegexStr(const std::string& lo, const std::string& hi);
+  static std::vector<std::string> AtLeastPositivePatternsStr(const std::string& v_str);
+  static std::string AbsDigits(int64_t v);
+  static FracPatternSet FracGreaterPatterns(const std::string& s, bool strict, int max_len);
+  static FracPatternSet FracLessPatterns(const std::string& s, bool strict, int max_len);
+  static FracPatternSet FracBetweenPatterns(
+      const std::string& a, bool strict_a, const std::string& b, bool strict_b, int max_len
+  );
+  static void SplitDecimal(const std::string& s, std::string* int_part, std::string* frac_part);
+  static int CompareDecimal(
+      const std::string& int_a,
+      const std::string& frac_a,
+      const std::string& int_b,
+      const std::string& frac_b
+  );
+  static std::string StripAnchors(const std::string& regex);
+  static int64_t ParseIntCapped(const std::string& digits);
+  static std::vector<std::string> PositiveRangeParts(
+      const std::string& low,
+      bool strict_low,
+      const std::optional<std::string>& high,
+      bool strict_high,
+      int precision
+  );
+  static std::string FormatFloat(double value, int precision);
+};
+
 // Helpers for integer range regex generation. They operate purely on
 // fixed-length decimal digit strings (suffixes may carry leading zeros), so the
 // patterns are correct by construction regardless of digit position.
 
 // A regex fragment matching a single digit in [lo, hi].
-std::string IntDigitClass(char lo, char hi) {
+std::string NumberGenerator::DigitClass(char lo, char hi) {
   if (lo == hi) {
     return std::string(1, lo);
   }
@@ -2441,7 +2507,7 @@ std::string IntDigitClass(char lo, char hi) {
 }
 
 // A regex fragment matching k free digits (each 0-9). Empty when k <= 0.
-std::string IntFreeDigits(int k) {
+std::string NumberGenerator::ExactDigits(int k) {
   if (k <= 0) {
     return "";
   }
@@ -2451,7 +2517,7 @@ std::string IntFreeDigits(int k) {
   return "\\d{" + std::to_string(k) + "}";
 }
 
-bool AllChar(const std::string& s, char c) {
+bool NumberGenerator::AllChar(const std::string& s, char c) {
   return std::all_of(s.begin(), s.end(), [c](char ch) { return ch == c; });
 }
 
@@ -2463,13 +2529,13 @@ bool AllChar(const std::string& s, char c) {
 //   * first digit == b[0]: the suffix must be <= b's suffix (>= 00..0).
 // The partition is exact and non-overlapping, so the union is sound and
 // complete for [a, b].
-std::vector<std::string> IntSameLen(const std::string& a, const std::string& b) {
+std::vector<std::string> NumberGenerator::IntSameLen(const std::string& a, const std::string& b) {
   int n = static_cast<int>(a.size());
   if (a == b) {
     return {a};
   }
   if (n == 1) {
-    return {IntDigitClass(a[0], b[0])};
+    return {DigitClass(a[0], b[0])};
   }
   if (a[0] == b[0]) {
     std::vector<std::string> res;
@@ -2484,9 +2550,9 @@ std::vector<std::string> IntSameLen(const std::string& a, const std::string& b) 
   if (AllChar(a_suf, '0') && AllChar(b_suf, '9')) {
     // The whole suffix space is free: collapse to one box pattern.
     if (a[0] == '0' && b[0] == '9') {
-      return {IntFreeDigits(n)};
+      return {ExactDigits(n)};
     }
-    return {IntDigitClass(a[0], b[0]) + IntFreeDigits(n - 1)};
+    return {DigitClass(a[0], b[0]) + ExactDigits(n - 1)};
   }
   std::vector<std::string> res;
   std::string nines(n - 1, '9');
@@ -2496,8 +2562,7 @@ std::vector<std::string> IntSameLen(const std::string& a, const std::string& b) 
   }
   if (b[0] - a[0] >= 2) {
     res.push_back(
-        IntDigitClass(static_cast<char>(a[0] + 1), static_cast<char>(b[0] - 1)) +
-        IntFreeDigits(n - 1)
+        DigitClass(static_cast<char>(a[0] + 1), static_cast<char>(b[0] - 1)) + ExactDigits(n - 1)
     );
   }
   for (auto& p : IntSameLen(zeros, b_suf)) {
@@ -2508,7 +2573,7 @@ std::vector<std::string> IntSameLen(const std::string& a, const std::string& b) 
 
 // Compares two non-negative decimal magnitude strings (no leading zeros except
 // "0") by value.
-int CompareDigitStr(const std::string& a, const std::string& b) {
+int NumberGenerator::CompareDigitStr(const std::string& a, const std::string& b) {
   if (a.size() != b.size()) {
     return a.size() < b.size() ? -1 : 1;
   }
@@ -2523,7 +2588,9 @@ int CompareDigitStr(const std::string& a, const std::string& b) {
 // "0"). An empty range (value(lo) > value(hi)) yields no patterns. Operating on
 // strings keeps the whole int64 range representable, including
 // |INT64_MIN| = 9223372036854775808, which does not fit in int64.
-std::vector<std::string> NumberPatternsStr(const std::string& lo, const std::string& hi) {
+std::vector<std::string> NumberGenerator::NumberPatternsStr(
+    const std::string& lo, const std::string& hi
+) {
   std::vector<std::string> patterns;
   if (CompareDigitStr(lo, hi) > 0) {
     return patterns;
@@ -2543,7 +2610,7 @@ std::vector<std::string> NumberPatternsStr(const std::string& lo, const std::str
 }
 
 // Joins NumberPatternsStr alternatives into a parenthesised regex group.
-std::string SubRangeRegexStr(const std::string& lo, const std::string& hi) {
+std::string NumberGenerator::SubRangeRegexStr(const std::string& lo, const std::string& hi) {
   std::vector<std::string> patterns = NumberPatternsStr(lo, hi);
   std::string joined;
   for (size_t i = 0; i < patterns.size(); ++i) {
@@ -2558,7 +2625,7 @@ std::string SubRangeRegexStr(const std::string& lo, const std::string& hi) {
 // Patterns matching every integer in [value(v_str), +infinity) for v_str a
 // positive magnitude string (no leading zeros). Same-length values come from
 // IntSameLen(v_str, 99..9); strictly longer values are any non-zero-led number.
-std::vector<std::string> AtLeastPositivePatternsStr(const std::string& v_str) {
+std::vector<std::string> NumberGenerator::AtLeastPositivePatternsStr(const std::string& v_str) {
   int len = static_cast<int>(v_str.size());
   std::vector<std::string> res = IntSameLen(v_str, std::string(len, '9'));
   res.push_back("[1-9]\\d{" + std::to_string(len) + ",}");
@@ -2567,14 +2634,12 @@ std::vector<std::string> AtLeastPositivePatternsStr(const std::string& v_str) {
 
 // The magnitude (absolute value) of v as a decimal string. Derived from the
 // signed text rather than by negating v, so INT64_MIN is handled correctly.
-std::string AbsDigits(int64_t v) {
+std::string NumberGenerator::AbsDigits(int64_t v) {
   std::string s = std::to_string(v);
   return (!s.empty() && s[0] == '-') ? s.substr(1) : s;
 }
 
-}  // namespace
-
-std::string JSONSchemaConverter::GenerateRangeRegex(
+std::string NumberGenerator::IntegerRangeRegex(
     std::optional<int64_t> start, std::optional<int64_t> end
 ) {
   std::vector<std::string> parts;
@@ -2655,7 +2720,7 @@ std::string JSONSchemaConverter::GenerateRangeRegex(
   return result.str();
 }
 
-std::string JSONSchemaConverter::FormatFloat(double value, int precision) {
+std::string NumberGenerator::FormatFloat(double value, int precision) {
   if (value == static_cast<int64_t>(value)) {
     return std::to_string(static_cast<int64_t>(value));
   }
@@ -2677,28 +2742,12 @@ std::string JSONSchemaConverter::FormatFloat(double value, int precision) {
   return result;
 }
 
-namespace {
-
 // Helpers for GenerateFloatRangeRegex. Fraction patterns operate on the
 // digit string after the decimal point, compared against a canonical bound
 // fraction (canonical: produced by FormatFloat, so no trailing zeros).
 
-struct FracPatternSet {
-  // Each pattern matches a non-empty fraction digit string.
-  std::vector<std::string> parts;
-  // Whether having no fraction digits at all also satisfies the bound.
-  bool include_empty = false;
-};
-
-std::string DigitClass(char low, char high) {
-  if (low == high) {
-    return std::string(1, low);
-  }
-  return "[" + std::string(1, low) + "-" + std::string(1, high) + "]";
-}
-
 // Matches 0 to max_count free digits.
-std::string FreeDigits(int max_count) {
+std::string NumberGenerator::FreeDigits(int max_count) {
   if (max_count <= 0) {
     return "";
   }
@@ -2706,7 +2755,7 @@ std::string FreeDigits(int max_count) {
 }
 
 // Matches 0 to max_count zeros.
-std::string OptionalZeros(int max_count) {
+std::string NumberGenerator::OptionalZeros(int max_count) {
   if (max_count <= 0) {
     return "";
   }
@@ -2714,11 +2763,15 @@ std::string OptionalZeros(int max_count) {
 }
 
 // Matches 1 to max_count zeros.
-std::string SomeZeros(int max_count) { return "0{1," + std::to_string(max_count) + "}"; }
+std::string NumberGenerator::SomeZeros(int max_count) {
+  return "0{1," + std::to_string(max_count) + "}";
+}
 
 // Patterns for fraction strings t (1 <= |t| <= max_len) whose value 0.t is
 // greater than 0.s (or equal when !strict). |s| <= max_len.
-FracPatternSet FracGreaterPatterns(const std::string& s, bool strict, int max_len) {
+NumberGenerator::FracPatternSet NumberGenerator::FracGreaterPatterns(
+    const std::string& s, bool strict, int max_len
+) {
   FracPatternSet result;
   int n = static_cast<int>(s.size());
   // t agrees with s up to position i, then has a larger digit
@@ -2749,7 +2802,9 @@ FracPatternSet FracGreaterPatterns(const std::string& s, bool strict, int max_le
 
 // Patterns for fraction strings t (1 <= |t| <= max_len) whose value 0.t is
 // less than 0.s (or equal when !strict). |s| <= max_len.
-FracPatternSet FracLessPatterns(const std::string& s, bool strict, int max_len) {
+NumberGenerator::FracPatternSet NumberGenerator::FracLessPatterns(
+    const std::string& s, bool strict, int max_len
+) {
   FracPatternSet result;
   int n = static_cast<int>(s.size());
   // t agrees with s up to position i, then has a smaller digit
@@ -2785,7 +2840,7 @@ FracPatternSet FracLessPatterns(const std::string& s, bool strict, int max_len) 
 
 // Patterns for fraction strings t whose value 0.t lies between 0.a and 0.b.
 // Requires value(0.a) < value(0.b) and b non-empty.
-FracPatternSet FracBetweenPatterns(
+NumberGenerator::FracPatternSet NumberGenerator::FracBetweenPatterns(
     const std::string& a, bool strict_a, const std::string& b, bool strict_b, int max_len
 ) {
   FracPatternSet result;
@@ -2849,7 +2904,9 @@ FracPatternSet FracBetweenPatterns(
 
 // Splits a canonical decimal string from FormatFloat ("12" or "12.34") into
 // integer and fraction parts.
-void SplitDecimal(const std::string& s, std::string* int_part, std::string* frac_part) {
+void NumberGenerator::SplitDecimal(
+    const std::string& s, std::string* int_part, std::string* frac_part
+) {
   size_t dot = s.find('.');
   if (dot == std::string::npos) {
     *int_part = s;
@@ -2861,7 +2918,7 @@ void SplitDecimal(const std::string& s, std::string* int_part, std::string* frac
 }
 
 // Compares the values of two canonical non-negative decimals.
-int CompareDecimal(
+int NumberGenerator::CompareDecimal(
     const std::string& int_a,
     const std::string& frac_a,
     const std::string& int_b,
@@ -2884,10 +2941,12 @@ int CompareDecimal(
   return 0;
 }
 
-// Strips the ^( )$ anchors added by GenerateRangeRegex, keeping the group.
-std::string StripAnchors(const std::string& regex) { return regex.substr(1, regex.size() - 2); }
+// Strips the ^( )$ anchors added by IntegerRangeRegex, keeping the group.
+std::string NumberGenerator::StripAnchors(const std::string& regex) {
+  return regex.substr(1, regex.size() - 2);
+}
 
-int64_t ParseIntCapped(const std::string& digits) {
+int64_t NumberGenerator::ParseIntCapped(const std::string& digits) {
   // Bounds beyond 18 digits exceed double's integer precision anyway; cap to
   // keep the int64 arithmetic below safe.
   if (digits.size() > 18) {
@@ -2901,7 +2960,7 @@ int64_t ParseIntCapped(const std::string& digits) {
 // non-negative; `high` is optional. Patterns for the value 0 are never
 // produced: when low's value is 0 the bound is treated as strict, and the
 // caller emits the zero pattern itself.
-std::vector<std::string> PositiveRangeParts(
+std::vector<std::string> NumberGenerator::PositiveRangeParts(
     const std::string& low,
     bool strict_low,
     const std::optional<std::string>& high,
@@ -2930,7 +2989,7 @@ std::vector<std::string> PositiveRangeParts(
     add_with_int_part(int_low, FracGreaterPatterns(frac_low, strict_low, precision));
     if (int_low_value < INT64_MAX - 1) {
       parts.push_back(
-          StripAnchors(GenerateRangeRegex(int_low_value + 1, std::nullopt)) + opt_any_frac
+          StripAnchors(IntegerRangeRegex(int_low_value + 1, std::nullopt)) + opt_any_frac
       );
     }
     return parts;
@@ -2962,7 +3021,7 @@ std::vector<std::string> PositiveRangeParts(
     add_with_int_part(int_low, FracGreaterPatterns(frac_low, strict_low, precision));
     if (int_high_value - int_low_value >= 2) {
       parts.push_back(
-          StripAnchors(GenerateRangeRegex(int_low_value + 1, int_high_value - 1)) + opt_any_frac
+          StripAnchors(IntegerRangeRegex(int_low_value + 1, int_high_value - 1)) + opt_any_frac
       );
     }
     add_with_int_part(int_high, FracLessPatterns(frac_high, strict_high, precision));
@@ -2970,9 +3029,7 @@ std::vector<std::string> PositiveRangeParts(
   return parts;
 }
 
-}  // namespace
-
-std::string JSONSchemaConverter::GenerateFloatRangeRegex(
+std::string NumberGenerator::FloatRangeRegex(
     std::optional<double> start,
     std::optional<double> end,
     int precision,
@@ -3050,6 +3107,24 @@ std::string JSONSchemaConverter::GenerateFloatRangeRegex(
   result << ")$";
 
   return result.str();
+}
+
+}  // namespace
+
+std::string JSONSchemaConverter::GenerateRangeRegex(
+    std::optional<int64_t> start, std::optional<int64_t> end
+) {
+  return NumberGenerator::IntegerRangeRegex(start, end);
+}
+
+std::string JSONSchemaConverter::GenerateFloatRangeRegex(
+    std::optional<double> start,
+    std::optional<double> end,
+    int precision,
+    bool exclusive_start,
+    bool exclusive_end
+) {
+  return NumberGenerator::FloatRangeRegex(start, end, precision, exclusive_start, exclusive_end);
 }
 
 // ==================== Public API Functions ====================

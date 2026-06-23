@@ -426,7 +426,6 @@ class JSONSchemaConverter {
       bool exclusive_start = false,
       bool exclusive_end = false
   );
-  static std::string FormatFloat(double value, int precision);
 
   // JSON string helpers
   static std::string JSONStrToPrintableStr(const std::string& json_str);

@@ -2405,6 +2405,98 @@ number_range_instances = [
     ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "100", False),
     ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "100.0001", True),
     ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "110", False),
+    # both minimum and exclusiveMinimum present: the stricter bound wins
+    ({"type": "number", "minimum": 1, "exclusiveMinimum": 3}, "2", False),
+    ({"type": "number", "minimum": 1, "exclusiveMinimum": 3}, "3", False),
+    ({"type": "number", "minimum": 1, "exclusiveMinimum": 3}, "3.5", True),
+    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "4", False),
+    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "5", True),
+    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3", False),
+    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3.000001", True),
+    # both maximum and exclusiveMaximum present
+    ({"type": "number", "maximum": 5, "exclusiveMaximum": 3}, "3", False),
+    ({"type": "number", "maximum": 5, "exclusiveMaximum": 3}, "2.9", True),
+    ({"type": "number", "maximum": 3, "exclusiveMaximum": 5}, "3", True),
+    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "3", False),
+    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "2.999999", True),
+    # all four bounds present
+    (
+        {
+            "type": "number",
+            "minimum": 1,
+            "exclusiveMinimum": 2,
+            "maximum": 9,
+            "exclusiveMaximum": 8,
+        },
+        "2",
+        False,
+    ),
+    (
+        {
+            "type": "number",
+            "minimum": 1,
+            "exclusiveMinimum": 2,
+            "maximum": 9,
+            "exclusiveMaximum": 8,
+        },
+        "2.5",
+        True,
+    ),
+    (
+        {
+            "type": "number",
+            "minimum": 1,
+            "exclusiveMinimum": 2,
+            "maximum": 9,
+            "exclusiveMaximum": 8,
+        },
+        "8",
+        False,
+    ),
+    # mixed inclusive/exclusive
+    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "2", True),
+    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "5", False),
+    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "2", False),
+    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "5", True),
+    # single-value range (minimum == maximum)
+    ({"type": "number", "minimum": 5, "maximum": 5}, "5", True),
+    ({"type": "number", "minimum": 5, "maximum": 5}, "5.0", True),
+    ({"type": "number", "minimum": 5, "maximum": 5}, "5.000001", False),
+    ({"type": "number", "minimum": 5, "maximum": 5}, "4.999999", False),
+    # empty range expressed via exclusivity: builds but matches nothing
+    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5", False),
+    ({"type": "number", "minimum": 5, "exclusiveMaximum": 5}, "5", False),
+    # negative exclusive bounds
+    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.5", False),
+    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.499999", True),
+    ({"type": "number", "exclusiveMinimum": -5.5}, "-6", False),
+    ({"type": "number", "exclusiveMinimum": -2.5, "exclusiveMaximum": -0.5}, "-2.5", False),
+    ({"type": "number", "exclusiveMinimum": -2.5, "exclusiveMaximum": -0.5}, "-1.5", True),
+    ({"type": "number", "exclusiveMinimum": -2.5, "exclusiveMaximum": -0.5}, "-0.5", False),
+    # Fractional-bound boundaries that earlier patch-style generators got wrong:
+    # the negative integer part below the lower bound must not be over-accepted,
+    # and interior fractions between the two boundary fractions must be matched.
+    ({"type": "number", "minimum": -3.14, "maximum": 2.71828}, "-3.9", False),
+    ({"type": "number", "minimum": -3.14, "maximum": 2.71828}, "-3.14", True),
+    ({"type": "number", "minimum": -3.14, "maximum": 2.71828}, "2.8", False),
+    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.2", True),
+    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.3", True),
+    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.4", True),
+    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.05", False),
+    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.5", True),
+    ({"type": "number", "minimum": -0.5, "maximum": 0.5}, "-0.9", False),
+    ({"type": "number", "minimum": -0.5, "maximum": 0.5}, "-0.5", True),
+    ({"type": "number", "minimum": -0.5, "maximum": 0.5}, "0.9", False),
+    # The [-4, 4] / integer-bound fractional cases (an integer minimum/maximum
+    # must still admit/reject fractions on the correct side of the bound).
+    ({"type": "number", "minimum": 4.0}, "4.1", True),
+    ({"type": "number", "minimum": 4.0}, "3.9", False),
+    ({"type": "number", "maximum": -4.0}, "-4.1", True),
+    ({"type": "number", "maximum": -4.0}, "-3.9", False),
+    ({"type": "number", "minimum": -4, "maximum": 4}, "3.9", True),
+    ({"type": "number", "minimum": -4, "maximum": 4}, "-3.9", True),
+    ({"type": "number", "minimum": -4, "maximum": 4}, "4.1", False),
+    ({"type": "number", "minimum": -4, "maximum": 4}, "-4.1", False),
 ]
 
 
@@ -2498,6 +2590,70 @@ integer_range_instances = [
         "9223372036854775808",
         False,
     ),
+    # both minimum and exclusiveMinimum present: the stricter bound wins (an
+    # inclusive minimum stricter than exclusiveMinimum must not be discarded)
+    ({"type": "integer", "minimum": 5, "exclusiveMinimum": 3}, "4", False),
+    ({"type": "integer", "minimum": 5, "exclusiveMinimum": 3}, "5", True),
+    ({"type": "integer", "minimum": 1, "exclusiveMinimum": 3}, "3", False),
+    ({"type": "integer", "minimum": 1, "exclusiveMinimum": 3}, "4", True),
+    ({"type": "integer", "minimum": 3, "exclusiveMinimum": 3}, "3", False),
+    ({"type": "integer", "minimum": 3, "exclusiveMinimum": 3}, "4", True),
+    # both maximum and exclusiveMaximum present
+    ({"type": "integer", "maximum": 3, "exclusiveMaximum": 5}, "4", False),
+    ({"type": "integer", "maximum": 3, "exclusiveMaximum": 5}, "3", True),
+    ({"type": "integer", "maximum": 3, "exclusiveMaximum": 3}, "3", False),
+    ({"type": "integer", "maximum": 3, "exclusiveMaximum": 3}, "2", True),
+    # all four bounds present
+    (
+        {
+            "type": "integer",
+            "minimum": 1,
+            "exclusiveMinimum": 2,
+            "maximum": 9,
+            "exclusiveMaximum": 8,
+        },
+        "2",
+        False,
+    ),
+    (
+        {
+            "type": "integer",
+            "minimum": 1,
+            "exclusiveMinimum": 2,
+            "maximum": 9,
+            "exclusiveMaximum": 8,
+        },
+        "3",
+        True,
+    ),
+    (
+        {
+            "type": "integer",
+            "minimum": 1,
+            "exclusiveMinimum": 2,
+            "maximum": 9,
+            "exclusiveMaximum": 8,
+        },
+        "8",
+        False,
+    ),
+    # mixed inclusive/exclusive
+    ({"type": "integer", "minimum": 2, "exclusiveMaximum": 5}, "2", True),
+    ({"type": "integer", "minimum": 2, "exclusiveMaximum": 5}, "4", True),
+    ({"type": "integer", "minimum": 2, "exclusiveMaximum": 5}, "5", False),
+    # single-value range (minimum == maximum)
+    ({"type": "integer", "minimum": 5, "maximum": 5}, "5", True),
+    ({"type": "integer", "minimum": 5, "maximum": 5}, "4", False),
+    ({"type": "integer", "minimum": 5, "maximum": 5}, "6", False),
+    ({"type": "integer", "minimum": -3, "maximum": -3}, "-3", True),
+    ({"type": "integer", "minimum": -3, "maximum": -3}, "-2", False),
+    # exclusive bound at a multi-digit boundary
+    ({"type": "integer", "exclusiveMinimum": 99}, "99", False),
+    ({"type": "integer", "exclusiveMinimum": 99}, "100", True),
+    ({"type": "integer", "exclusiveMaximum": 100}, "100", False),
+    ({"type": "integer", "exclusiveMaximum": 100}, "99", True),
+    ({"type": "integer", "exclusiveMinimum": -100}, "-100", False),
+    ({"type": "integer", "exclusiveMinimum": -100}, "-99", True),
 ]
 
 
@@ -2539,6 +2695,13 @@ number_range_sweep_bounds = [
     {"maximum": -10.5},
     {"minimum": 1000.5},
     {"minimum": -120, "maximum": 120},
+    # fractional bounds with non-trivial boundary fractions on both sides
+    {"minimum": -3.14, "maximum": 2.71828},
+    {"minimum": 0.1, "maximum": 0.5},
+    {"minimum": -0.5, "maximum": 0.5},
+    {"minimum": 4.0},
+    {"maximum": -4.0},
+    {"minimum": -4, "maximum": 4},
 ]
 
 
