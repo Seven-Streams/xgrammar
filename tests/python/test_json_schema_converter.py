@@ -1593,7 +1593,7 @@ def test_generate_range_regex():
     assert _generate_range_regex(1, 10) == r"^(([1-9]|10))$"
     assert (
         _generate_range_regex(2134, 3459)
-        == r"^((2[2-9]\d{2}|2[2-9]\d{2}|21[4-9]\d{1}|213[5-9]|2134|3[0-3]\d{2}|3[0-3]\d{2}|34[0-4]\d{1}|345[0-8]|3459))$"
+        == r"^((213[4-9]|21[4-8]\d|219\d|2[2-8]\d{2}|29\d{2}|30\d{2}|3[1-3]\d{2}|34[0-5]\d))$"
     )
 
     # Negative to positive range
@@ -1603,11 +1603,8 @@ def test_generate_range_regex():
     assert _generate_range_regex(-15, -10) == r"^(-(1[0-5]))$"
 
     # Large ranges
-    assert (
-        _generate_range_regex(-1999, -100)
-        == r"^(-([1-9]\d{2}|1[0-8]\d{2}|19[0-8]\d{1}|199[0-8]|1999))$"
-    )
-    assert _generate_range_regex(1, 9999) == r"^(([1-9]|[1-9]\d{1}|[1-9]\d{2}|[1-9]\d{3}))$"
+    assert _generate_range_regex(-1999, -100) == r"^(-([1-9]\d{2}|1\d{3}))$"
+    assert _generate_range_regex(1, 9999) == r"^(([1-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}))$"
 
     # Unbounded ranges (None cases)
     assert _generate_range_regex(None, None) == r"^-?\d+$"
@@ -1619,16 +1616,17 @@ def test_generate_range_regex():
     # Medium range
     assert (
         _generate_range_regex(78, 1278)
-        == r"^(([8-9]\d{1}|79|78|[1-9]\d{2}|1[0-1]\d{2}|12[0-6]\d{1}|127[0-7]|1278))$"
+        == r"^((7[8-9]|8\d|9\d|[1-9]\d{2}|10\d{2}|11\d{2}|120\d|12[1-6]\d|127[0-8]))$"
     )
 
     # Symmetric range around zero
-    assert (
-        _generate_range_regex(-100, 100) == r"^(-([1-9]|[1-9]\d{1}|100)|0|([1-9]|[1-9]\d{1}|100))$"
-    )
+    assert _generate_range_regex(-100, 100) == r"^(-([1-9]|[1-9]\d|100)|0|([1-9]|[1-9]\d|100))$"
 
     # Upper bound negative
-    assert _generate_range_regex(None, -123) == r"^(-123|-1[0-1]\d{1}|-12[0-2]|-[1-9]\d{3,})$"
+    assert (
+        _generate_range_regex(None, -123)
+        == r"^(-12[3-9]|-1[3-8]\d|-19\d|-[2-8]\d{2}|-9\d{2}|-[1-9]\d{3,})$"
+    )
 
     # Additional edge cases
     # Single number
@@ -1637,6 +1635,18 @@ def test_generate_range_regex():
     # Zero-inclusive ranges
     assert _generate_range_regex(-10, 0) == r"^(-([1-9]|10)|0)$"
     assert _generate_range_regex(0, 10) == r"^(0|([1-9]|10))$"
+
+    # Regression: multi-digit two-sided ranges must not over-accept values that
+    # share the lower bound's leading digits (e.g. [100, 110] rejecting 111).
+    assert _generate_range_regex(100, 110) == r"^((10\d|110))$"
+    assert _generate_range_regex(12345, 12347) == r"^((1234[5-7]))$"
+    # Regression: negative multi-digit maximum must cover every value below it.
+    assert _generate_range_regex(None, -10) == r"^(-[1-9]\d|-[1-9]\d{2,})$"
+    assert _generate_range_regex(None, -50) == r"^(-[5-9]\d|-[1-9]\d{2,})$"
+    # Regression: positive multi-digit minimum.
+    assert _generate_range_regex(100, None) == r"^([1-9]\d{2}|[1-9]\d{3,})$"
+    # Bounds beyond 32 bits (the generator operates on int64).
+    assert _generate_range_regex(10000000000, 10000000002) == r"^((1000000000[0-2]))$"
 
 
 instance__accepted__test_email_format = [
@@ -2377,6 +2387,24 @@ number_range_instances = [
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.2", True),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.05", False),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.35", False),
+    # multi-digit integer part: the integer "middle" of the range must not leak
+    # over-broad alternatives. With [140, 159], 159.5 is above the maximum.
+    ({"type": "number", "minimum": 140, "maximum": 159}, "140", True),
+    ({"type": "number", "minimum": 140, "maximum": 159}, "149.5", True),
+    ({"type": "number", "minimum": 140, "maximum": 159}, "159", True),
+    ({"type": "number", "minimum": 140, "maximum": 159}, "159.5", False),
+    ({"type": "number", "minimum": 140, "maximum": 159}, "139.999999", False),
+    ({"type": "number", "minimum": 140, "maximum": 159}, "160", False),
+    ({"type": "number", "minimum": 100, "maximum": 110}, "105.5", True),
+    ({"type": "number", "minimum": 100, "maximum": 110}, "110", True),
+    ({"type": "number", "minimum": 100, "maximum": 110}, "110.5", False),
+    ({"type": "number", "minimum": 100, "maximum": 110}, "111", False),
+    ({"type": "number", "maximum": -10.5}, "-10.5", True),
+    ({"type": "number", "maximum": -10.5}, "-10.4", False),
+    ({"type": "number", "maximum": -10.5}, "-100.25", True),
+    ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "100", False),
+    ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "100.0001", True),
+    ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "110", False),
 ]
 
 
@@ -2401,6 +2429,75 @@ integer_range_instances = [
     ({"type": "integer", "minimum": -5}, "-6", False),
     ({"type": "integer", "minimum": -5}, "0", True),
     ({"type": "integer", "minimum": -5}, "7", True),
+    # multi-digit two-sided range: values above the maximum that share the
+    # lower bound's leading digits must be rejected (e.g. 111-119 for [100, 110]).
+    ({"type": "integer", "minimum": 100, "maximum": 110}, "99", False),
+    ({"type": "integer", "minimum": 100, "maximum": 110}, "100", True),
+    ({"type": "integer", "minimum": 100, "maximum": 110}, "105", True),
+    ({"type": "integer", "minimum": 100, "maximum": 110}, "110", True),
+    ({"type": "integer", "minimum": 100, "maximum": 110}, "111", False),
+    ({"type": "integer", "minimum": 100, "maximum": 110}, "119", False),
+    ({"type": "integer", "minimum": 100, "maximum": 110}, "120", False),
+    # negative multi-digit maximum: every value <= -10 must be representable.
+    ({"type": "integer", "maximum": -10}, "-9", False),
+    ({"type": "integer", "maximum": -10}, "-10", True),
+    ({"type": "integer", "maximum": -10}, "-11", True),
+    ({"type": "integer", "maximum": -10}, "-99", True),
+    ({"type": "integer", "maximum": -10}, "-100", True),
+    ({"type": "integer", "maximum": -50}, "-49", False),
+    ({"type": "integer", "maximum": -50}, "-50", True),
+    ({"type": "integer", "maximum": -50}, "-51", True),
+    ({"type": "integer", "maximum": -50}, "-11", False),
+    # multi-digit positive minimum
+    ({"type": "integer", "minimum": 100}, "99", False),
+    ({"type": "integer", "minimum": 100}, "100", True),
+    ({"type": "integer", "minimum": 100}, "150", True),
+    ({"type": "integer", "minimum": 100}, "1000", True),
+    # bounds beyond 32 bits (the converter operates on int64)
+    ({"type": "integer", "minimum": 10000000000}, "9999999999", False),
+    ({"type": "integer", "minimum": 10000000000}, "10000000000", True),
+    ({"type": "integer", "minimum": 10000000000}, "10000000001", True),
+    # two-sided spanning zero, multi-digit
+    ({"type": "integer", "minimum": -120, "maximum": 120}, "-121", False),
+    ({"type": "integer", "minimum": -120, "maximum": 120}, "-120", True),
+    ({"type": "integer", "minimum": -120, "maximum": 120}, "0", True),
+    ({"type": "integer", "minimum": -120, "maximum": 120}, "120", True),
+    ({"type": "integer", "minimum": -120, "maximum": 120}, "121", False),
+    # negative-only multi-digit range
+    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-2000", False),
+    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-1999", True),
+    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-500", True),
+    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-100", True),
+    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-99", False),
+    # exclusive integer bounds
+    ({"type": "integer", "exclusiveMaximum": 10}, "9", True),
+    ({"type": "integer", "exclusiveMaximum": 10}, "10", False),
+    ({"type": "integer", "exclusiveMinimum": -1, "exclusiveMaximum": 1}, "-1", False),
+    ({"type": "integer", "exclusiveMinimum": -1, "exclusiveMaximum": 1}, "0", True),
+    ({"type": "integer", "exclusiveMinimum": -1, "exclusiveMaximum": 1}, "1", False),
+    # int64 boundaries: negating INT64_MIN must not overflow
+    (
+        {"type": "integer", "minimum": -9223372036854775808, "maximum": 0},
+        "-9223372036854775808",
+        True,
+    ),
+    ({"type": "integer", "minimum": -9223372036854775808, "maximum": 0}, "-1000", True),
+    ({"type": "integer", "minimum": -9223372036854775808, "maximum": 0}, "0", True),
+    ({"type": "integer", "minimum": -9223372036854775808, "maximum": 0}, "1", False),
+    ({"type": "integer", "minimum": -9223372036854775808}, "-9223372036854775808", True),
+    ({"type": "integer", "minimum": -9223372036854775808}, "999", True),
+    ({"type": "integer", "maximum": -9223372036854775808}, "-9223372036854775808", True),
+    ({"type": "integer", "maximum": -9223372036854775808}, "-9223372036854775807", False),
+    (
+        {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+        "9223372036854775807",
+        True,
+    ),
+    (
+        {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+        "9223372036854775808",
+        False,
+    ),
 ]
 
 
@@ -2431,6 +2528,17 @@ number_range_sweep_bounds = [
     {"minimum": -5.5, "maximum": -2.25},
     {"minimum": 9, "maximum": 31},
     {"minimum": 5.123456, "maximum": 5.123457},
+    # multi-digit integer parts: stress the integer "middle" reuse
+    {"minimum": 140, "maximum": 159},
+    {"minimum": 100, "maximum": 110},
+    {"minimum": -159, "maximum": -140},
+    {"minimum": -110, "maximum": -100},
+    {"minimum": 99, "maximum": 101},
+    {"minimum": 12.5, "maximum": 130.25},
+    {"exclusiveMinimum": 100, "exclusiveMaximum": 110},
+    {"maximum": -10.5},
+    {"minimum": 1000.5},
+    {"minimum": -120, "maximum": 120},
 ]
 
 
@@ -2453,9 +2561,21 @@ def test_number_range_acceptance_sweep(bounds):
 
     candidates = {0.0, 1.0, -1.0, 0.5, -0.5, 10.0, -10.0, 100.0, -100.0}
     for bound in bounds.values():
-        for delta in (0.0, 0.000001, 0.1, 0.5, 1.0, 2.0, 10.0):
+        # Larger deltas reach the multi-digit interior on the unbounded side of
+        # one-sided ranges (where the dense floor-loop below cannot help).
+        for delta in (0.0, 0.000001, 0.1, 0.5, 1.0, 2.0, 10.0, 37.0, 123.5, 1234.0):
             candidates.add(bound + delta)
             candidates.add(bound - delta)
+    # Densely cover the interior of bounded ranges so multi-digit integer parts
+    # (the integer "middle" of the float range) are exercised, not just the
+    # immediate neighbourhood of each bound.
+    numeric = list(bounds.values())
+    lo_i = int(min(numeric)) - 3
+    hi_i = int(max(numeric)) + 3
+    if hi_i - lo_i <= 400:
+        for k in range(lo_i, hi_i + 1):
+            candidates.add(float(k))
+            candidates.add(k + 0.5)
 
     grammar = xgr.Grammar.from_json_schema(json.dumps({"type": "number", **bounds}))
     for value in sorted(candidates):
@@ -2467,6 +2587,65 @@ def test_number_range_acceptance_sweep(bounds):
         assert accepted == in_range(value), (
             f"bounds={bounds} value={text}: grammar "
             f"{'accepted' if accepted else 'rejected'}, float comparison says "
+            f"{'in range' if in_range(value) else 'out of range'}"
+        )
+
+
+integer_range_sweep_bounds = [
+    {"minimum": 2},
+    {"exclusiveMinimum": 2},
+    {"maximum": -2},
+    {"minimum": -5},
+    {"minimum": 100},
+    {"maximum": -10},
+    {"maximum": -50},
+    {"maximum": -99},
+    {"maximum": -100},
+    {"minimum": 100, "maximum": 110},
+    {"minimum": 0, "maximum": 9},
+    {"minimum": 78, "maximum": 1278},
+    {"minimum": -120, "maximum": 120},
+    {"minimum": -1999, "maximum": -100},
+    {"minimum": 5, "maximum": 100},
+    {"minimum": 999, "maximum": 1001},
+    {"minimum": 95, "maximum": 105},
+    {"minimum": -10, "maximum": -5},
+    {"exclusiveMinimum": 9, "exclusiveMaximum": 31},
+    {"minimum": 12345, "maximum": 54321},
+    {"minimum": 10000000000},
+]
+
+
+@pytest.mark.parametrize("bounds", integer_range_sweep_bounds)
+def test_integer_range_acceptance_sweep(bounds):
+    """The grammar for a range-constrained integer must agree with plain integer
+    comparison for every candidate value around the bounds."""
+
+    def in_range(value: int) -> bool:
+        if "minimum" in bounds and not value >= bounds["minimum"]:
+            return False
+        if "exclusiveMinimum" in bounds and not value > bounds["exclusiveMinimum"]:
+            return False
+        if "maximum" in bounds and not value <= bounds["maximum"]:
+            return False
+        if "exclusiveMaximum" in bounds and not value < bounds["exclusiveMaximum"]:
+            return False
+        return True
+
+    candidates = set(range(-30, 31))
+    for bound in bounds.values():
+        for delta in range(-12, 13):
+            candidates.add(bound + delta)
+        candidates |= {bound * 10, bound * 100, -bound}
+    candidates |= {0, 999, 1000, 1001, -999, -1000, -1001, 12344, 12345, 54321, 54322}
+
+    grammar = xgr.Grammar.from_json_schema(json.dumps({"type": "integer", **bounds}))
+    for value in sorted(candidates):
+        text = str(value)
+        accepted = _is_grammar_accept_string(grammar, text)
+        assert accepted == in_range(value), (
+            f"bounds={bounds} value={text}: grammar "
+            f"{'accepted' if accepted else 'rejected'}, integer comparison says "
             f"{'in range' if in_range(value) else 'out of range'}"
         )
 

@@ -786,8 +786,8 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       .def(
           "xgrammar.tvm_ffi_binding.testing._generate_range_regex",
           [](ffi::AnyView start, ffi::AnyView end) {
-            std::optional<int> start_value = OptionalIntFromView(start);
-            std::optional<int> end_value = OptionalIntFromView(end);
+            std::optional<int64_t> start_value = OptionalIntFromView(start);
+            std::optional<int64_t> end_value = OptionalIntFromView(end);
             std::string regex_string = GenerateRangeRegex(start_value, end_value);
             regex_string.erase(
                 std::remove(regex_string.begin(), regex_string.end(), '\0'), regex_string.end()

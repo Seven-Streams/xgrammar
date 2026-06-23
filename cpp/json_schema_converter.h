@@ -426,9 +426,6 @@ class JSONSchemaConverter {
       bool exclusive_start = false,
       bool exclusive_end = false
   );
-  static std::string MakePatternForDigitRange(char start, char end, int remainingDigits);
-  static std::vector<std::string> GenerateNumberPatterns(int64_t lower, int64_t upper);
-  static std::string GenerateSubRangeRegex(int64_t lower, int64_t upper);
   static std::string FormatFloat(double value, int precision);
 
   // JSON string helpers
