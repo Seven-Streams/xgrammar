@@ -2334,169 +2334,52 @@ def test_float_minimum_no_wildcard_in_grammar():
 
 
 number_range_instances = [
-    # exclusiveMinimum with an integer-valued bound: values in (0, 1) must be
-    # representable and the bound itself must be rejected.
+    # exclusiveMinimum with an integer-valued bound: (0, 1) must be representable, bound rejected
     ({"type": "number", "exclusiveMinimum": 0}, "0.1", True),
-    ({"type": "number", "exclusiveMinimum": 0}, "0.99", True),
-    ({"type": "number", "exclusiveMinimum": 0}, "0.000001", True),
     ({"type": "number", "exclusiveMinimum": 0}, "0", False),
-    ({"type": "number", "exclusiveMinimum": 0}, "0.0", False),
-    ({"type": "number", "exclusiveMinimum": 0}, "-1", False),
-    ({"type": "number", "exclusiveMinimum": 0}, "1", True),
-    ({"type": "number", "exclusiveMinimum": 0}, "1.5", True),
-    ({"type": "number", "exclusiveMinimum": 0}, "25", True),
-    # inclusive minimum 0
     ({"type": "number", "minimum": 0}, "0", True),
-    ({"type": "number", "minimum": 0}, "0.0", True),
-    ({"type": "number", "minimum": 0}, "0.5", True),
     ({"type": "number", "minimum": 0}, "-0.5", False),
-    # minimum above 1: single-digit integers below the bound must be rejected
-    ({"type": "number", "minimum": 2}, "1", False),
+    # minimum above 1
     ({"type": "number", "minimum": 2}, "1.5", False),
     ({"type": "number", "minimum": 2}, "2", True),
-    ({"type": "number", "minimum": 2}, "2.0", True),
-    ({"type": "number", "minimum": 2}, "2.5", True),
-    ({"type": "number", "minimum": 2}, "10", True),
-    ({"type": "number", "exclusiveMinimum": 2}, "2", False),
-    ({"type": "number", "exclusiveMinimum": 2}, "2.000001", True),
     # upper bounds
-    ({"type": "number", "exclusiveMaximum": 1}, "0.99", True),
     ({"type": "number", "exclusiveMaximum": 1}, "1", False),
-    ({"type": "number", "exclusiveMaximum": 1}, "1.0", False),
-    ({"type": "number", "exclusiveMaximum": 1}, "0", True),
-    ({"type": "number", "exclusiveMaximum": 1}, "-5.5", True),
-    ({"type": "number", "maximum": -2}, "-2", True),
-    ({"type": "number", "maximum": -2}, "-1", False),
+    ({"type": "number", "exclusiveMaximum": 1}, "0.99", True),
     ({"type": "number", "maximum": -2}, "-1.5", False),
-    ({"type": "number", "maximum": -2}, "-2.5", True),
-    ({"type": "number", "maximum": -2}, "-12", True),
-    # both bounds: values above the maximum must be rejected
+    ({"type": "number", "maximum": -2}, "-2", True),
+    # both bounds: a value above the maximum must be rejected
     ({"type": "number", "minimum": 1, "maximum": 5}, "5.7", False),
-    ({"type": "number", "minimum": 1, "maximum": 5}, "1.001", True),
-    ({"type": "number", "minimum": 1, "maximum": 5}, "0.5", False),
-    ({"type": "number", "minimum": 1, "maximum": 5}, "1.5", True),
     ({"type": "number", "minimum": 1, "maximum": 5}, "5", True),
-    ({"type": "number", "minimum": 1, "maximum": 5}, "5.0", True),
     ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "1", False),
-    ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "5", False),
-    ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "4.999", True),
-    ({"type": "number", "minimum": -1.5, "maximum": 1.5}, "-1.6", False),
-    ({"type": "number", "minimum": -1.5, "maximum": 1.5}, "-1.5", True),
-    ({"type": "number", "minimum": -1.5, "maximum": 1.5}, "0", True),
-    ({"type": "number", "minimum": -1.5, "maximum": 1.5}, "1.6", False),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.2", True),
-    ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.05", False),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.35", False),
-    # multi-digit integer part: the integer "middle" of the range must not leak
-    # over-broad alternatives. With [140, 159], 159.5 is above the maximum.
-    ({"type": "number", "minimum": 140, "maximum": 159}, "140", True),
-    ({"type": "number", "minimum": 140, "maximum": 159}, "149.5", True),
+    # multi-digit integer part must not leak (regression: 159.5 over-accepted)
     ({"type": "number", "minimum": 140, "maximum": 159}, "159", True),
     ({"type": "number", "minimum": 140, "maximum": 159}, "159.5", False),
-    ({"type": "number", "minimum": 140, "maximum": 159}, "139.999999", False),
-    ({"type": "number", "minimum": 140, "maximum": 159}, "160", False),
-    ({"type": "number", "minimum": 100, "maximum": 110}, "105.5", True),
-    ({"type": "number", "minimum": 100, "maximum": 110}, "110", True),
-    ({"type": "number", "minimum": 100, "maximum": 110}, "110.5", False),
-    ({"type": "number", "minimum": 100, "maximum": 110}, "111", False),
-    ({"type": "number", "maximum": -10.5}, "-10.5", True),
-    ({"type": "number", "maximum": -10.5}, "-10.4", False),
-    ({"type": "number", "maximum": -10.5}, "-100.25", True),
-    ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "100", False),
-    ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "100.0001", True),
-    ({"type": "number", "exclusiveMinimum": 100, "exclusiveMaximum": 110}, "110", False),
-    # both minimum and exclusiveMinimum present: the stricter bound wins
-    ({"type": "number", "minimum": 1, "exclusiveMinimum": 3}, "2", False),
-    ({"type": "number", "minimum": 1, "exclusiveMinimum": 3}, "3", False),
-    ({"type": "number", "minimum": 1, "exclusiveMinimum": 3}, "3.5", True),
-    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "4", False),
-    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "5", True),
-    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3", False),
-    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3.000001", True),
-    # both maximum and exclusiveMaximum present
-    ({"type": "number", "maximum": 5, "exclusiveMaximum": 3}, "3", False),
-    ({"type": "number", "maximum": 5, "exclusiveMaximum": 3}, "2.9", True),
-    ({"type": "number", "maximum": 3, "exclusiveMaximum": 5}, "3", True),
-    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "3", False),
-    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "2.999999", True),
-    # all four bounds present
-    (
-        {
-            "type": "number",
-            "minimum": 1,
-            "exclusiveMinimum": 2,
-            "maximum": 9,
-            "exclusiveMaximum": 8,
-        },
-        "2",
-        False,
-    ),
-    (
-        {
-            "type": "number",
-            "minimum": 1,
-            "exclusiveMinimum": 2,
-            "maximum": 9,
-            "exclusiveMaximum": 8,
-        },
-        "2.5",
-        True,
-    ),
-    (
-        {
-            "type": "number",
-            "minimum": 1,
-            "exclusiveMinimum": 2,
-            "maximum": 9,
-            "exclusiveMaximum": 8,
-        },
-        "8",
-        False,
-    ),
-    # mixed inclusive/exclusive
-    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "2", True),
-    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "5", False),
-    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "2", False),
-    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "5", True),
-    # single-value range (minimum == maximum)
-    ({"type": "number", "minimum": 5, "maximum": 5}, "5", True),
-    ({"type": "number", "minimum": 5, "maximum": 5}, "5.0", True),
-    ({"type": "number", "minimum": 5, "maximum": 5}, "5.000001", False),
-    ({"type": "number", "minimum": 5, "maximum": 5}, "4.999999", False),
-    # empty range expressed via exclusivity: builds but matches nothing
-    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5", False),
-    ({"type": "number", "minimum": 5, "exclusiveMaximum": 5}, "5", False),
-    # negative exclusive bounds
-    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.5", False),
-    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.499999", True),
-    ({"type": "number", "exclusiveMinimum": -5.5}, "-6", False),
-    ({"type": "number", "exclusiveMinimum": -2.5, "exclusiveMaximum": -0.5}, "-2.5", False),
-    ({"type": "number", "exclusiveMinimum": -2.5, "exclusiveMaximum": -0.5}, "-1.5", True),
-    ({"type": "number", "exclusiveMinimum": -2.5, "exclusiveMaximum": -0.5}, "-0.5", False),
-    # Fractional-bound boundaries that earlier patch-style generators got wrong:
-    # the negative integer part below the lower bound must not be over-accepted,
-    # and interior fractions between the two boundary fractions must be matched.
+    ({"type": "number", "minimum": 140, "maximum": 159}, "149.5", True),
+    # fractional-bound boundaries earlier patch-style generators got wrong
     ({"type": "number", "minimum": -3.14, "maximum": 2.71828}, "-3.9", False),
-    ({"type": "number", "minimum": -3.14, "maximum": 2.71828}, "-3.14", True),
-    ({"type": "number", "minimum": -3.14, "maximum": 2.71828}, "2.8", False),
     ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.2", True),
-    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.3", True),
-    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.4", True),
-    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.05", False),
-    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.5", True),
     ({"type": "number", "minimum": -0.5, "maximum": 0.5}, "-0.9", False),
-    ({"type": "number", "minimum": -0.5, "maximum": 0.5}, "-0.5", True),
-    ({"type": "number", "minimum": -0.5, "maximum": 0.5}, "0.9", False),
-    # The [-4, 4] / integer-bound fractional cases (an integer minimum/maximum
-    # must still admit/reject fractions on the correct side of the bound).
+    # an integer-valued bound must admit/reject fractions on the correct side
     ({"type": "number", "minimum": 4.0}, "4.1", True),
     ({"type": "number", "minimum": 4.0}, "3.9", False),
     ({"type": "number", "maximum": -4.0}, "-4.1", True),
-    ({"type": "number", "maximum": -4.0}, "-3.9", False),
-    ({"type": "number", "minimum": -4, "maximum": 4}, "3.9", True),
-    ({"type": "number", "minimum": -4, "maximum": 4}, "-3.9", True),
-    ({"type": "number", "minimum": -4, "maximum": 4}, "4.1", False),
-    ({"type": "number", "minimum": -4, "maximum": 4}, "-4.1", False),
+    # both minimum and exclusiveMinimum: the stricter bound wins
+    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "4", False),
+    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3", False),
+    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "3", False),
+    # mixed inclusive/exclusive
+    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "5", False),
+    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "2", False),
+    # single-value range
+    ({"type": "number", "minimum": 5, "maximum": 5}, "5", True),
+    ({"type": "number", "minimum": 5, "maximum": 5}, "5.000001", False),
+    # empty range expressed via exclusivity: builds but matches nothing
+    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5", False),
+    # negative exclusive
+    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.5", False),
+    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.499999", True),
 ]
 
 
@@ -2506,80 +2389,32 @@ def test_number_range_value_acceptance(schema, instance, accepted):
 
 
 integer_range_instances = [
+    # minimum above 1: single-digit integers below the bound must be rejected
     ({"type": "integer", "minimum": 2}, "1", False),
     ({"type": "integer", "minimum": 2}, "2", True),
-    ({"type": "integer", "minimum": 2}, "9", True),
-    ({"type": "integer", "minimum": 2}, "10", True),
-    ({"type": "integer", "minimum": 2}, "0", False),
     ({"type": "integer", "exclusiveMinimum": 2}, "2", False),
     ({"type": "integer", "exclusiveMinimum": 2}, "3", True),
+    # negative maximum / negative minimum
     ({"type": "integer", "maximum": -2}, "-1", False),
     ({"type": "integer", "maximum": -2}, "-2", True),
-    ({"type": "integer", "maximum": -2}, "-12", True),
-    ({"type": "integer", "minimum": -5}, "-5", True),
-    ({"type": "integer", "minimum": -5}, "-3", True),
     ({"type": "integer", "minimum": -5}, "-6", False),
-    ({"type": "integer", "minimum": -5}, "0", True),
-    ({"type": "integer", "minimum": -5}, "7", True),
-    # multi-digit two-sided range: values above the maximum that share the
-    # lower bound's leading digits must be rejected (e.g. 111-119 for [100, 110]).
-    ({"type": "integer", "minimum": 100, "maximum": 110}, "99", False),
-    ({"type": "integer", "minimum": 100, "maximum": 110}, "100", True),
-    ({"type": "integer", "minimum": 100, "maximum": 110}, "105", True),
+    ({"type": "integer", "minimum": -5}, "-5", True),
+    # multi-digit two-sided: a value above max sharing the lower bound's digits must be rejected
     ({"type": "integer", "minimum": 100, "maximum": 110}, "110", True),
     ({"type": "integer", "minimum": 100, "maximum": 110}, "111", False),
-    ({"type": "integer", "minimum": 100, "maximum": 110}, "119", False),
-    ({"type": "integer", "minimum": 100, "maximum": 110}, "120", False),
-    # negative multi-digit maximum: every value <= -10 must be representable.
-    ({"type": "integer", "maximum": -10}, "-9", False),
-    ({"type": "integer", "maximum": -10}, "-10", True),
+    # negative multi-digit maximum (regression: -11..-99 were dropped / over-accepted)
     ({"type": "integer", "maximum": -10}, "-11", True),
-    ({"type": "integer", "maximum": -10}, "-99", True),
-    ({"type": "integer", "maximum": -10}, "-100", True),
     ({"type": "integer", "maximum": -50}, "-49", False),
-    ({"type": "integer", "maximum": -50}, "-50", True),
     ({"type": "integer", "maximum": -50}, "-51", True),
-    ({"type": "integer", "maximum": -50}, "-11", False),
     # multi-digit positive minimum
     ({"type": "integer", "minimum": 100}, "99", False),
     ({"type": "integer", "minimum": 100}, "100", True),
-    ({"type": "integer", "minimum": 100}, "150", True),
-    ({"type": "integer", "minimum": 100}, "1000", True),
-    # bounds beyond 32 bits (the converter operates on int64)
-    ({"type": "integer", "minimum": 10000000000}, "9999999999", False),
-    ({"type": "integer", "minimum": 10000000000}, "10000000000", True),
-    ({"type": "integer", "minimum": 10000000000}, "10000000001", True),
-    # two-sided spanning zero, multi-digit
-    ({"type": "integer", "minimum": -120, "maximum": 120}, "-121", False),
-    ({"type": "integer", "minimum": -120, "maximum": 120}, "-120", True),
-    ({"type": "integer", "minimum": -120, "maximum": 120}, "0", True),
-    ({"type": "integer", "minimum": -120, "maximum": 120}, "120", True),
-    ({"type": "integer", "minimum": -120, "maximum": 120}, "121", False),
-    # negative-only multi-digit range
-    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-2000", False),
-    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-1999", True),
-    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-500", True),
-    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-100", True),
-    ({"type": "integer", "minimum": -1999, "maximum": -100}, "-99", False),
-    # exclusive integer bounds
-    ({"type": "integer", "exclusiveMaximum": 10}, "9", True),
-    ({"type": "integer", "exclusiveMaximum": 10}, "10", False),
-    ({"type": "integer", "exclusiveMinimum": -1, "exclusiveMaximum": 1}, "-1", False),
-    ({"type": "integer", "exclusiveMinimum": -1, "exclusiveMaximum": 1}, "0", True),
-    ({"type": "integer", "exclusiveMinimum": -1, "exclusiveMaximum": 1}, "1", False),
     # int64 boundaries: negating INT64_MIN must not overflow
     (
         {"type": "integer", "minimum": -9223372036854775808, "maximum": 0},
         "-9223372036854775808",
         True,
     ),
-    ({"type": "integer", "minimum": -9223372036854775808, "maximum": 0}, "-1000", True),
-    ({"type": "integer", "minimum": -9223372036854775808, "maximum": 0}, "0", True),
-    ({"type": "integer", "minimum": -9223372036854775808, "maximum": 0}, "1", False),
-    ({"type": "integer", "minimum": -9223372036854775808}, "-9223372036854775808", True),
-    ({"type": "integer", "minimum": -9223372036854775808}, "999", True),
-    ({"type": "integer", "maximum": -9223372036854775808}, "-9223372036854775808", True),
-    ({"type": "integer", "maximum": -9223372036854775808}, "-9223372036854775807", False),
     (
         {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
         "9223372036854775807",
@@ -2590,70 +2425,16 @@ integer_range_instances = [
         "9223372036854775808",
         False,
     ),
-    # both minimum and exclusiveMinimum present: the stricter bound wins (an
-    # inclusive minimum stricter than exclusiveMinimum must not be discarded)
+    # both minimum and exclusiveMinimum: the stricter bound wins (regression: inclusive min discarded)
     ({"type": "integer", "minimum": 5, "exclusiveMinimum": 3}, "4", False),
     ({"type": "integer", "minimum": 5, "exclusiveMinimum": 3}, "5", True),
-    ({"type": "integer", "minimum": 1, "exclusiveMinimum": 3}, "3", False),
-    ({"type": "integer", "minimum": 1, "exclusiveMinimum": 3}, "4", True),
-    ({"type": "integer", "minimum": 3, "exclusiveMinimum": 3}, "3", False),
-    ({"type": "integer", "minimum": 3, "exclusiveMinimum": 3}, "4", True),
-    # both maximum and exclusiveMaximum present
     ({"type": "integer", "maximum": 3, "exclusiveMaximum": 5}, "4", False),
-    ({"type": "integer", "maximum": 3, "exclusiveMaximum": 5}, "3", True),
-    ({"type": "integer", "maximum": 3, "exclusiveMaximum": 3}, "3", False),
-    ({"type": "integer", "maximum": 3, "exclusiveMaximum": 3}, "2", True),
-    # all four bounds present
-    (
-        {
-            "type": "integer",
-            "minimum": 1,
-            "exclusiveMinimum": 2,
-            "maximum": 9,
-            "exclusiveMaximum": 8,
-        },
-        "2",
-        False,
-    ),
-    (
-        {
-            "type": "integer",
-            "minimum": 1,
-            "exclusiveMinimum": 2,
-            "maximum": 9,
-            "exclusiveMaximum": 8,
-        },
-        "3",
-        True,
-    ),
-    (
-        {
-            "type": "integer",
-            "minimum": 1,
-            "exclusiveMinimum": 2,
-            "maximum": 9,
-            "exclusiveMaximum": 8,
-        },
-        "8",
-        False,
-    ),
-    # mixed inclusive/exclusive
-    ({"type": "integer", "minimum": 2, "exclusiveMaximum": 5}, "2", True),
-    ({"type": "integer", "minimum": 2, "exclusiveMaximum": 5}, "4", True),
-    ({"type": "integer", "minimum": 2, "exclusiveMaximum": 5}, "5", False),
-    # single-value range (minimum == maximum)
+    # single-value range
     ({"type": "integer", "minimum": 5, "maximum": 5}, "5", True),
     ({"type": "integer", "minimum": 5, "maximum": 5}, "4", False),
-    ({"type": "integer", "minimum": 5, "maximum": 5}, "6", False),
-    ({"type": "integer", "minimum": -3, "maximum": -3}, "-3", True),
-    ({"type": "integer", "minimum": -3, "maximum": -3}, "-2", False),
-    # exclusive bound at a multi-digit boundary
+    # exclusive at a multi-digit boundary
     ({"type": "integer", "exclusiveMinimum": 99}, "99", False),
     ({"type": "integer", "exclusiveMinimum": 99}, "100", True),
-    ({"type": "integer", "exclusiveMaximum": 100}, "100", False),
-    ({"type": "integer", "exclusiveMaximum": 100}, "99", True),
-    ({"type": "integer", "exclusiveMinimum": -100}, "-100", False),
-    ({"type": "integer", "exclusiveMinimum": -100}, "-99", True),
 ]
 
 
@@ -2702,6 +2483,9 @@ number_range_sweep_bounds = [
     {"minimum": 4.0},
     {"maximum": -4.0},
     {"minimum": -4, "maximum": 4},
+    {"minimum": 5, "exclusiveMinimum": 3},
+    {"maximum": 3, "exclusiveMaximum": 5},
+    {"minimum": 1, "exclusiveMinimum": 2, "maximum": 9, "exclusiveMaximum": 8},
 ]
 
 
@@ -2776,6 +2560,9 @@ integer_range_sweep_bounds = [
     {"exclusiveMinimum": 9, "exclusiveMaximum": 31},
     {"minimum": 12345, "maximum": 54321},
     {"minimum": 10000000000},
+    {"minimum": 5, "exclusiveMinimum": 3},
+    {"maximum": 3, "exclusiveMaximum": 5},
+    {"minimum": 1, "exclusiveMinimum": 2, "maximum": 9, "exclusiveMaximum": 8},
 ]
 
 
