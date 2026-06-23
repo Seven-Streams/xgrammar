@@ -94,16 +94,10 @@ class GrammarCompiler {
 
   /*! \brief Get the compiled grammar for a structural tag.
    * \param structural_tag_json The structural tag JSON string.
-   * \param any_whitespace Whether to allow any whitespace in the JSON-schema content of the
-   * structural tag. Default: true.
-   * \param max_whitespace_cnt The maximum number of consecutive whitespace characters allowed in
-   * the JSON-schema content of the structural tag. If std::nullopt, there is no limit.
+   * \note Whitespace control (any_whitespace / max_whitespace_cnt) is configured per
+   * JSONSchemaFormat node inside the structural tag, not at this entry point.
    */
-  CompiledGrammar CompileStructuralTag(
-      const std::string& structural_tag_json,
-      bool any_whitespace = true,
-      std::optional<int> max_whitespace_cnt = std::nullopt
-  );
+  CompiledGrammar CompileStructuralTag(const std::string& structural_tag_json);
 
   /*! \brief Get the compiled grammar for a regex. */
   CompiledGrammar CompileRegex(const std::string& regex);

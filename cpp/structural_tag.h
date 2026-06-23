@@ -84,8 +84,21 @@ struct JSONSchemaFormat {
   static constexpr const char* type = "json_schema";
   std::string json_schema;
   std::string style = "json";  // "json","qwen_xml","minimax_xml","deepseek_xml","glm_xml"
-  JSONSchemaFormat(std::string json_schema, std::string style = "json")
-      : json_schema(std::move(json_schema)), style(std::move(style)) {}
+  // Whether to allow any whitespace in the JSON-schema content of this tag. Default: true.
+  bool any_whitespace = true;
+  // The maximum number of consecutive whitespace characters allowed in the JSON-schema content of
+  // this tag. If std::nullopt, there is no limit. Bounding it avoids self-loop state explosion.
+  std::optional<int> max_whitespace_cnt = std::nullopt;
+  JSONSchemaFormat(
+      std::string json_schema,
+      std::string style = "json",
+      bool any_whitespace = true,
+      std::optional<int> max_whitespace_cnt = std::nullopt
+  )
+      : json_schema(std::move(json_schema)),
+        style(std::move(style)),
+        any_whitespace(any_whitespace),
+        max_whitespace_cnt(max_whitespace_cnt) {}
   picojson::value ToJSON() const;
 };
 
@@ -377,17 +390,13 @@ struct StructuralTag {
  * \brief Convert a structural tag JSON string to a grammar.
  * \param structural_tag_json The JSON string of the structural tag.
  * \param tokenizer_info The tokenizer info used to resolve token-level formats.
- * \param any_whitespace Whether to allow any whitespace in the JSON-schema content of the
- *   structural tag. Default: true.
- * \param max_whitespace_cnt The maximum number of consecutive whitespace characters allowed in
- *   the JSON-schema content of the structural tag. If std::nullopt, there is no limit.
  * \return A grammar if the JSON is valid, otherwise an error message in std::string.
+ * \note Whitespace control (any_whitespace / max_whitespace_cnt) is configured per
+ *   JSONSchemaFormat node, not at this conversion entry point.
  */
 Result<Grammar, StructuralTagError> StructuralTagToGrammar(
     const std::string& structural_tag_json,
-    const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt,
-    bool any_whitespace = true,
-    std::optional<int> max_whitespace_cnt = std::nullopt
+    const std::optional<TokenizerInfo>& tokenizer_info = std::nullopt
 );
 
 }  // namespace xgrammar

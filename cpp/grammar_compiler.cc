@@ -1017,11 +1017,7 @@ class GrammarCompilerSub {
 
   CompiledGrammar CompileRegex(const std::string& regex);
 
-  CompiledGrammar CompileStructuralTag(
-      const std::string& structural_tag_json,
-      bool any_whitespace = true,
-      std::optional<int> max_whitespace_cnt = std::nullopt
-  );
+  CompiledGrammar CompileStructuralTag(const std::string& structural_tag_json);
 
   CompiledGrammar CompileGrammar(const Grammar& grammar);
 
@@ -1152,14 +1148,8 @@ CompiledGrammar GrammarCompilerSub::CompileJSONSchema(
   ));
 }
 
-CompiledGrammar GrammarCompilerSub::CompileStructuralTag(
-    const std::string& structural_tag_json,
-    bool any_whitespace,
-    std::optional<int> max_whitespace_cnt
-) {
-  auto result = Grammar::FromStructuralTag(
-      structural_tag_json, tokenizer_info_, any_whitespace, max_whitespace_cnt
-  );
+CompiledGrammar GrammarCompilerSub::CompileStructuralTag(const std::string& structural_tag_json) {
+  auto result = Grammar::FromStructuralTag(structural_tag_json, tokenizer_info_);
   XGRAMMAR_CHECK(std::holds_alternative<Grammar>(result))
       << GetMessageFromVariantError(std::get<1>(result));
   return MultiThreadCompileGrammar(std::get<0>(result));
@@ -1260,15 +1250,8 @@ class GrammarCompilerCacheKeys {
 
   struct StructuralTagKey {
     std::string structural_tag_json;
-    bool any_whitespace;
-    std::optional<int> max_whitespace_cnt;
 
-    XGRAMMAR_EQUAL_BY_MEMBERS(
-        StructuralTagKey,
-        &StructuralTagKey::structural_tag_json,
-        &StructuralTagKey::any_whitespace,
-        &StructuralTagKey::max_whitespace_cnt
-    );
+    XGRAMMAR_EQUAL_BY_MEMBERS(StructuralTagKey, &StructuralTagKey::structural_tag_json);
   };
 
   struct GrammarKey {
@@ -1306,9 +1289,7 @@ XGRAMMAR_HASH_BY_MEMBERS(
 
 XGRAMMAR_HASH_BY_MEMBERS(
     xgrammar::GrammarCompilerCacheKeys::StructuralTagKey,
-    &xgrammar::GrammarCompilerCacheKeys::StructuralTagKey::structural_tag_json,
-    &xgrammar::GrammarCompilerCacheKeys::StructuralTagKey::any_whitespace,
-    &xgrammar::GrammarCompilerCacheKeys::StructuralTagKey::max_whitespace_cnt
+    &xgrammar::GrammarCompilerCacheKeys::StructuralTagKey::structural_tag_json
 );
 
 XGRAMMAR_HASH_BY_MEMBERS(
@@ -1371,11 +1352,7 @@ class GrammarCompiler::Impl {
       std::optional<int> max_whitespace_cnt
   );
 
-  CompiledGrammar CompileStructuralTag(
-      const std::string& structural_tag_json,
-      bool any_whitespace = true,
-      std::optional<int> max_whitespace_cnt = std::nullopt
-  );
+  CompiledGrammar CompileStructuralTag(const std::string& structural_tag_json);
 
   CompiledGrammar CompileRegex(const std::string& regex);
 
@@ -1437,10 +1414,8 @@ CompiledGrammar GrammarCompiler::Impl::Compute(const UnionKey& key) {
               schema, any_whitespace, indent, separators, strict_mode, max_whitespace_cnt
           );
         } else if constexpr (std::is_same_v<KeyType, StructuralTagKey>) {
-          const auto& [structural_tag_json, any_whitespace, max_whitespace_cnt] = key;
-          return this->no_cache_compiler_.CompileStructuralTag(
-              structural_tag_json, any_whitespace, max_whitespace_cnt
-          );
+          const auto& [structural_tag_json] = key;
+          return this->no_cache_compiler_.CompileStructuralTag(structural_tag_json);
         } else if constexpr (std::is_same_v<KeyType, RegexKey>) {
           const auto& [regex] = key;
           return this->no_cache_compiler_.CompileRegex(regex);
@@ -1479,19 +1454,12 @@ CompiledGrammar GrammarCompiler::Impl::CompileJSONSchema(
   );
 }
 
-CompiledGrammar GrammarCompiler::Impl::CompileStructuralTag(
-    const std::string& structural_tag_json,
-    bool any_whitespace,
-    std::optional<int> max_whitespace_cnt
+CompiledGrammar GrammarCompiler::Impl::CompileStructuralTag(const std::string& structural_tag_json
 ) {
   if (!cache_enabled_) {
-    return no_cache_compiler_.CompileStructuralTag(
-        structural_tag_json, any_whitespace, max_whitespace_cnt
-    );
+    return no_cache_compiler_.CompileStructuralTag(structural_tag_json);
   }
-  return grammar_level_cache_.Get(
-      StructuralTagKey{structural_tag_json, any_whitespace, max_whitespace_cnt}
-  );
+  return grammar_level_cache_.Get(StructuralTagKey{structural_tag_json});
 }
 
 CompiledGrammar GrammarCompiler::Impl::CompileRegex(const std::string& regex) {
@@ -1565,12 +1533,8 @@ CompiledGrammar GrammarCompiler::CompileBuiltinJSONGrammar() {
   return pimpl_->CompileBuiltinJSONGrammar();
 }
 
-CompiledGrammar GrammarCompiler::CompileStructuralTag(
-    const std::string& structural_tag_json,
-    bool any_whitespace,
-    std::optional<int> max_whitespace_cnt
-) {
-  return pimpl_->CompileStructuralTag(structural_tag_json, any_whitespace, max_whitespace_cnt);
+CompiledGrammar GrammarCompiler::CompileStructuralTag(const std::string& structural_tag_json) {
+  return pimpl_->CompileStructuralTag(structural_tag_json);
 }
 
 CompiledGrammar GrammarCompiler::CompileRegex(const std::string& regex) {

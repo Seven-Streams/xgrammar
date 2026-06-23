@@ -1,7 +1,7 @@
 """Defines all structural tag formats."""
 
 import json
-from typing import Any, Dict, List, Literal, Tuple, Type, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
 
 try:
     # Python 3.9+
@@ -36,6 +36,15 @@ class JSONSchemaFormat(BaseModel):
     <parameter=key>value</parameter>), \"minimax_xml\" (MiniMax XML: <parameter name=\"key\">value</parameter>),
     \"deepseek_xml\" (DeepSeek XML(DeepSeek-v3.2): <{dsml_token}parameter name=\"key\" string=\"true|false\">value</{dsml_token}parameter>),
     \"glm_xml\" (GLM XML: <arg_key>key</arg_key><arg_value>value</arg_value>)."""
+    any_whitespace: bool = True
+    """Whether to allow any whitespace between tokens in this JSON-schema content. When True
+    (default), arbitrary whitespace is allowed. When False, the content uses fixed compact
+    formatting. Applies to this tag only."""
+    max_whitespace_cnt: Optional[int] = None
+    """The maximum number of consecutive whitespace characters allowed in this JSON-schema content.
+    When None (default), there is no limit. If set, it bounds consecutive whitespace to at most
+    ``max_whitespace_cnt``, which avoids unbounded grammar states. Must be a positive integer.
+    Applies to this tag only."""
 
 
 class AnyTextFormat(BaseModel):

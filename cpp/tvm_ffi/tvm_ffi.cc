@@ -382,15 +382,9 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       )
       .def_static(
           "from_structural_tag",
-          [](ffi::String structural_tag_json, bool any_whitespace, ffi::AnyView max_whitespace_cnt
-          ) {
+          [](ffi::String structural_tag_json) {
             XGRAMMAR_FFI_TRY_BEGIN();
-            Grammar grammar = Grammar_FromStructuralTag(
-                structural_tag_json,
-                std::nullopt,
-                any_whitespace,
-                OptionalIntFromView(max_whitespace_cnt)
-            );
+            Grammar grammar = Grammar_FromStructuralTag(structural_tag_json);
             return ffi::ObjectRef(ffi::make_object<GrammarObj>(std::move(grammar)));
             XGRAMMAR_FFI_TRY_END();
           }
@@ -502,15 +496,10 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       )
       .def(
           "compile_structural_tag",
-          [](GrammarCompilerObj* o,
-             ffi::String structural_tag_json,
-             bool any_whitespace,
-             ffi::AnyView max_whitespace_cnt) {
-            return ffi::ObjectRef(
-                ffi::make_object<CompiledGrammarObj>(o->value.CompileStructuralTag(
-                    structural_tag_json, any_whitespace, OptionalIntFromView(max_whitespace_cnt)
-                ))
-            );
+          [](GrammarCompilerObj* o, ffi::String structural_tag_json) {
+            return ffi::ObjectRef(ffi::make_object<CompiledGrammarObj>(
+                o->value.CompileStructuralTag(structural_tag_json)
+            ));
           }
       )
       .def(

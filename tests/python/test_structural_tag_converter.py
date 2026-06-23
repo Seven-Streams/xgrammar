@@ -6,7 +6,7 @@ import pytest
 from transformers import AutoTokenizer
 
 import xgrammar as xgr
-from xgrammar.structural_tag import JSONSchemaFormat, StructuralTag, TagFormat
+from xgrammar.structural_tag import JSONSchemaFormat, SequenceFormat, StructuralTag, TagFormat
 from xgrammar.testing import _is_grammar_accept_string
 
 
@@ -4045,19 +4045,26 @@ def test_token_tag_dispatch_need_tokenizer_info():
 # ---------------------------------------------------------------------------
 # Whitespace control for the JSON-schema content of a structural tag.
 #
-# any_whitespace and max_whitespace_cnt are parameters of the compile interface
-# (Grammar.from_structural_tag / GrammarCompiler.compile_structural_tag), mirroring
-# compile_json_schema. These tests verify they actually affect the generated grammar.
+# any_whitespace and max_whitespace_cnt are fields of each JSONSchemaFormat node
+# (per-tag granularity), mirroring how the rest of JSONSchemaFormat is configured.
+# These tests verify they actually affect the generated grammar.
 # ---------------------------------------------------------------------------
 
 _WS_SCHEMA = {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"]}
 
 
-def _ws_stag() -> StructuralTag:
+def _ws_stag(
+    *, any_whitespace: bool = True, max_whitespace_cnt: Optional[int] = None
+) -> StructuralTag:
     return StructuralTag(
         format=TagFormat(
             begin="<call>",
-            content=JSONSchemaFormat(json_schema=_WS_SCHEMA, style="json"),
+            content=JSONSchemaFormat(
+                json_schema=_WS_SCHEMA,
+                style="json",
+                any_whitespace=any_whitespace,
+                max_whitespace_cnt=max_whitespace_cnt,
+            ),
             end="</call>",
         )
     )
@@ -4069,7 +4076,7 @@ def _ws_instance(num_spaces: int) -> str:
 
 def test_structural_tag_max_whitespace_cnt():
     g_unbounded = xgr.Grammar.from_structural_tag(_ws_stag())
-    g_bounded = xgr.Grammar.from_structural_tag(_ws_stag(), max_whitespace_cnt=2)
+    g_bounded = xgr.Grammar.from_structural_tag(_ws_stag(max_whitespace_cnt=2))
     # Within the bound: accepted by both.
     for n in (1, 2):
         assert _is_grammar_accept_string(g_unbounded, _ws_instance(n))
@@ -4080,8 +4087,8 @@ def test_structural_tag_max_whitespace_cnt():
 
 
 def test_structural_tag_any_whitespace_false():
-    g_any = xgr.Grammar.from_structural_tag(_ws_stag(), any_whitespace=True)
-    g_fixed = xgr.Grammar.from_structural_tag(_ws_stag(), any_whitespace=False)
+    g_any = xgr.Grammar.from_structural_tag(_ws_stag(any_whitespace=True))
+    g_fixed = xgr.Grammar.from_structural_tag(_ws_stag(any_whitespace=False))
     # any_whitespace=True accepts arbitrary spacing.
     assert _is_grammar_accept_string(g_any, _ws_instance(0))
     assert _is_grammar_accept_string(g_any, _ws_instance(3))
@@ -4091,12 +4098,42 @@ def test_structural_tag_any_whitespace_false():
     assert not _is_grammar_accept_string(g_fixed, _ws_instance(3))
 
 
+def test_structural_tag_per_tag_whitespace_independent():
+    # Two JSONSchemaFormat nodes in the same structural tag can carry different whitespace
+    # controls: the first is bounded to 2 consecutive whitespaces, the second is unbounded.
+    stag = StructuralTag(
+        format=SequenceFormat(
+            elements=[
+                TagFormat(
+                    begin="<a>",
+                    content=JSONSchemaFormat(
+                        json_schema=_WS_SCHEMA, style="json", max_whitespace_cnt=2
+                    ),
+                    end="</a>",
+                ),
+                TagFormat(
+                    begin="<b>",
+                    content=JSONSchemaFormat(json_schema=_WS_SCHEMA, style="json"),
+                    end="</b>",
+                ),
+            ]
+        )
+    )
+    g = xgr.Grammar.from_structural_tag(stag)
+    a = lambda n: '<a>{"a":' + " " * n + "1}</a>"
+    b = lambda n: '<b>{"a":' + " " * n + "1}</b>"
+    assert _is_grammar_accept_string(g, a(2) + b(5))
+    # The first tag rejects 5 consecutive whitespaces even though the second one allows them.
+    assert not _is_grammar_accept_string(g, a(5) + b(5))
+
+
 def test_structural_tag_max_whitespace_cnt_compile_cache():
-    # Same structural tag compiled with different max_whitespace_cnt must not collide in the
-    # GrammarCompiler cache (the cache key includes the whitespace-control params).
+    # The whitespace control is embedded in the JSONSchemaFormat node, so it is part of the
+    # serialized structural tag JSON that forms the GrammarCompiler cache key. Two tags that
+    # differ only in max_whitespace_cnt must therefore not collide in the cache.
     compiler = xgr.GrammarCompiler(xgr.TokenizerInfo([]), cache_enabled=True)
     g_unbounded = compiler.compile_structural_tag(_ws_stag()).grammar
-    g_bounded = compiler.compile_structural_tag(_ws_stag(), max_whitespace_cnt=2).grammar
+    g_bounded = compiler.compile_structural_tag(_ws_stag(max_whitespace_cnt=2)).grammar
     assert _is_grammar_accept_string(g_unbounded, _ws_instance(5))
     assert not _is_grammar_accept_string(g_bounded, _ws_instance(5))
 

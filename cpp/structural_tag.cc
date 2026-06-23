@@ -100,6 +100,12 @@ picojson::value JSONSchemaFormat::ToJSON() const {
     obj["json_schema"] = picojson::value(json_schema);
   }
   obj["style"] = picojson::value(style);
+  obj["any_whitespace"] = picojson::value(any_whitespace);
+  if (max_whitespace_cnt.has_value()) {
+    obj["max_whitespace_cnt"] = picojson::value(static_cast<int64_t>(*max_whitespace_cnt));
+  } else {
+    obj["max_whitespace_cnt"] = picojson::value();
+  }
   return picojson::value(std::move(obj));
 }
 
@@ -539,8 +545,26 @@ Result<JSONSchemaFormat, ISTError> StructuralTagParser::ParseJSONSchemaFormat(
       }
     }
   }
+  bool any_whitespace = true;
+  auto any_whitespace_it = obj.find("any_whitespace");
+  if (any_whitespace_it != obj.end() && !any_whitespace_it->second.is<picojson::null>()) {
+    if (!any_whitespace_it->second.is<bool>()) {
+      return ResultErr<ISTError>("any_whitespace must be a boolean");
+    }
+    any_whitespace = any_whitespace_it->second.get<bool>();
+  }
+  std::optional<int> max_whitespace_cnt = std::nullopt;
+  auto max_whitespace_cnt_it = obj.find("max_whitespace_cnt");
+  if (max_whitespace_cnt_it != obj.end() && !max_whitespace_cnt_it->second.is<picojson::null>()) {
+    if (!max_whitespace_cnt_it->second.is<double>()) {
+      return ResultErr<ISTError>("max_whitespace_cnt must be an integer or null");
+    }
+    max_whitespace_cnt = static_cast<int>(max_whitespace_cnt_it->second.get<int64_t>());
+  }
   // here introduces a serialization/deserialization overhead; try to avoid it in the future.
-  return ResultOk<JSONSchemaFormat>(json_schema_it->second.serialize(false), style);
+  return ResultOk<JSONSchemaFormat>(
+      json_schema_it->second.serialize(false), style, any_whitespace, max_whitespace_cnt
+  );
 }
 
 Result<AnyTextFormat, ISTError> StructuralTagParser::ParseAnyTextFormat(const picojson::object& obj
@@ -1717,17 +1741,10 @@ std::optional<ISTError> StructuralTagAnalyzer::VisitSub(RepeatFormat* format) {
 
 class StructuralTagGrammarConverter {
  public:
-  static Result<Grammar, ISTError> Convert(
-      const StructuralTag& structural_tag,
-      bool any_whitespace = true,
-      std::optional<int> max_whitespace_cnt = std::nullopt
-  );
+  static Result<Grammar, ISTError> Convert(const StructuralTag& structural_tag);
 
  private:
-  explicit StructuralTagGrammarConverter(
-      bool any_whitespace = true, std::optional<int> max_whitespace_cnt = std::nullopt
-  )
-      : any_whitespace_(any_whitespace), max_whitespace_cnt_(max_whitespace_cnt) {}
+  StructuralTagGrammarConverter() = default;
 
   /*!
    * \brief Visit a Format and return the rule id of the added rule.
@@ -1769,17 +1786,6 @@ class StructuralTagGrammarConverter {
    * This enables deduplication of identical formats to reduce grammar size.
    */
   std::unordered_map<std::string, int> serialization_to_rule_id_;
-
-  /*!
-   * \brief Whether to allow any whitespace in the JSON-schema content of the structural tag.
-   */
-  bool any_whitespace_ = true;
-
-  /*!
-   * \brief The maximum number of consecutive whitespace characters allowed in the JSON-schema
-   * content of the structural tag. If std::nullopt, there is no limit.
-   */
-  std::optional<int> max_whitespace_cnt_ = std::nullopt;
 };
 
 bool StructuralTagGrammarConverter::IsPrefix(
@@ -1789,10 +1795,9 @@ bool StructuralTagGrammarConverter::IsPrefix(
          std::string_view(full_str).substr(0, prefix.size()) == prefix;
 }
 
-Result<Grammar, ISTError> StructuralTagGrammarConverter::Convert(
-    const StructuralTag& structural_tag, bool any_whitespace, std::optional<int> max_whitespace_cnt
+Result<Grammar, ISTError> StructuralTagGrammarConverter::Convert(const StructuralTag& structural_tag
 ) {
-  StructuralTagGrammarConverter converter(any_whitespace, max_whitespace_cnt);
+  StructuralTagGrammarConverter converter;
   auto result = converter.Visit(structural_tag.format);
   if (result.IsErr()) {
     return ResultErr(std::move(result).UnwrapErr());
@@ -1839,9 +1844,9 @@ Result<int, ISTError> StructuralTagGrammarConverter::VisitSub(const ConstStringF
 }
 
 Result<int, ISTError> StructuralTagGrammarConverter::VisitSub(const JSONSchemaFormat& format) {
-  // any_whitespace and max_whitespace_cnt come from the structural-tag compile call (not from the
-  // tag node itself): any_whitespace toggles free whitespace between tokens, and max_whitespace_cnt
-  // bounds consecutive whitespace to avoid Earley self-loop state explosion.
+  // any_whitespace and max_whitespace_cnt come from the JSONSchemaFormat node itself (per-tag):
+  // any_whitespace toggles free whitespace between tokens, and max_whitespace_cnt bounds
+  // consecutive whitespace to avoid Earley self-loop state explosion.
   const static std::unordered_map<
       std::string,
       std::function<std::string(const std::string&, bool, std::optional<int>)>>
@@ -1883,9 +1888,9 @@ Result<int, ISTError> StructuralTagGrammarConverter::VisitSub(const JSONSchemaFo
   if (converter == style_to_grammar_converter.end()) {
     return ResultErr<ISTError>("Unsupported parsing type: " + format.style);
   }
-  auto sub_grammar =
-      Grammar::FromEBNF(converter->second(format.json_schema, any_whitespace_, max_whitespace_cnt_)
-      );
+  auto sub_grammar = Grammar::FromEBNF(
+      converter->second(format.json_schema, format.any_whitespace, format.max_whitespace_cnt)
+  );
   auto added_root_rule_id = SubGrammarAdder().Apply(&grammar_builder_, sub_grammar);
   return ResultOk(added_root_rule_id);
 }
@@ -2432,10 +2437,7 @@ Result<int, ISTError> StructuralTagGrammarConverter::VisitSub(const TokenDispatc
 /************** StructuralTag Conversion Public API **************/
 
 Result<Grammar, StructuralTagError> StructuralTagToGrammar(
-    const std::string& structural_tag_json,
-    const std::optional<TokenizerInfo>& tokenizer_info,
-    bool any_whitespace,
-    std::optional<int> max_whitespace_cnt
+    const std::string& structural_tag_json, const std::optional<TokenizerInfo>& tokenizer_info
 ) {
   auto structural_tag_result = StructuralTagParser::FromJSON(structural_tag_json);
   if (structural_tag_result.IsErr()) {
@@ -2453,8 +2455,7 @@ Result<Grammar, StructuralTagError> StructuralTagToGrammar(
     return ResultErr(std::move(err).value());
   }
 
-  auto result =
-      StructuralTagGrammarConverter::Convert(structural_tag, any_whitespace, max_whitespace_cnt);
+  auto result = StructuralTagGrammarConverter::Convert(structural_tag);
   if (result.IsErr()) {
     return ResultErr(std::move(result).UnwrapErr());
   }
