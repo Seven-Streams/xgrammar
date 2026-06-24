@@ -2733,7 +2733,12 @@ std::string NumberGenerator::IntegerRangeRegex(
 }
 
 std::string NumberGenerator::FormatFloat(double value, int precision) {
-  if (value == static_cast<int64_t>(value)) {
+  // Casting a double outside [INT64_MIN, INT64_MAX] (or NaN/Inf) to int64_t is
+  // undefined behavior, so range-check before the integer fast path. 2^63 ==
+  // 9223372036854775808.0 is exactly representable and one past INT64_MAX, so the
+  // upper comparison must be strict.
+  if (value >= -9223372036854775808.0 && value < 9223372036854775808.0 &&
+      value == static_cast<int64_t>(value)) {
     return std::to_string(static_cast<int64_t>(value));
   }
 
