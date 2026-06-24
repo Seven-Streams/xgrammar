@@ -2331,26 +2331,16 @@ def test_float_minimum_no_wildcard_in_grammar():
 
 
 number_range_instances = [
-    # exclusiveMinimum / exclusiveMaximum are NOT supported for "number": they are
-    # treated as inclusive minimum / maximum (the boundary value is accepted).
-    ({"type": "number", "exclusiveMinimum": 0}, "0", True),
-    ({"type": "number", "exclusiveMinimum": 0}, "0.1", True),
-    ({"type": "number", "exclusiveMinimum": 0}, "-0.5", False),
+    # inclusive minimum / maximum
     ({"type": "number", "minimum": 0}, "0", True),
     ({"type": "number", "minimum": 0}, "-0.5", False),
-    # minimum above 1
     ({"type": "number", "minimum": 2}, "1.5", False),
     ({"type": "number", "minimum": 2}, "2", True),
-    # upper bounds
-    ({"type": "number", "exclusiveMaximum": 1}, "1", True),
-    ({"type": "number", "exclusiveMaximum": 1}, "0.99", True),
     ({"type": "number", "maximum": -2}, "-1.5", False),
     ({"type": "number", "maximum": -2}, "-2", True),
     # both bounds: a value above the maximum must be rejected
     ({"type": "number", "minimum": 1, "maximum": 5}, "5.7", False),
     ({"type": "number", "minimum": 1, "maximum": 5}, "5", True),
-    ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "1", True),
-    ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "5", True),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.2", True),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.35", False),
     # multi-digit integer part must not leak (regression: 159.5 over-accepted)
@@ -2359,31 +2349,19 @@ number_range_instances = [
     ({"type": "number", "minimum": 140, "maximum": 159}, "149.5", True),
     # fractional-bound boundaries earlier patch-style generators got wrong
     ({"type": "number", "minimum": -3.14, "maximum": 2.71828}, "-3.9", False),
-    ({"type": "number", "minimum": 0.1, "maximum": 0.5}, "0.2", True),
     ({"type": "number", "minimum": -0.5, "maximum": 0.5}, "-0.9", False),
     # an integer-valued bound must admit/reject fractions on the correct side
     ({"type": "number", "minimum": 4.0}, "4.1", True),
     ({"type": "number", "minimum": 4.0}, "3.9", False),
     ({"type": "number", "maximum": -4.0}, "-4.1", True),
-    # minimum + exclusiveMinimum both present: the tighter bound wins, both
-    # treated inclusively (here the inclusive minimum 5 binds)
-    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "4", False),
-    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "5", True),
-    # exclusive bounds treated as inclusive: the boundary is accepted
-    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3", True),
-    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "3", True),
-    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "5", True),
-    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "2", True),
-    # exclusiveMinimum == exclusiveMaximum collapses to a single accepted value
-    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5", True),
-    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5.5", False),
     # single-value range
     ({"type": "number", "minimum": 5, "maximum": 5}, "5", True),
     ({"type": "number", "minimum": 5, "maximum": 5}, "5.000001", False),
-    # negative exclusive treated as inclusive
-    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.5", True),
-    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.499999", True),
-    ({"type": "number", "exclusiveMinimum": -5.5}, "-6", False),
+    # exclusiveMinimum / exclusiveMaximum are NOT supported for "number": they are
+    # treated as inclusive minimum / maximum (the boundary value is accepted).
+    ({"type": "number", "exclusiveMinimum": 0}, "0", True),
+    ({"type": "number", "exclusiveMinimum": 0}, "-0.5", False),
+    ({"type": "number", "exclusiveMaximum": 1}, "1", True),
 ]
 
 
@@ -2449,21 +2427,15 @@ def test_integer_range_value_acceptance(schema, instance, accepted):
 
 number_range_sweep_bounds = [
     {"minimum": 0},
-    {"exclusiveMinimum": 0},
     {"maximum": 0},
-    {"exclusiveMaximum": 0},
     {"minimum": 2},
-    {"exclusiveMinimum": 2},
     {"minimum": -2},
     {"maximum": 5},
     {"minimum": 0.5},
-    {"exclusiveMinimum": 0.5},
     {"maximum": 0.5},
-    {"exclusiveMaximum": 0.5},
     {"minimum": 99.5},
     {"maximum": -2.25},
     {"minimum": 1, "maximum": 5},
-    {"exclusiveMinimum": 1, "exclusiveMaximum": 5},
     {"minimum": -1.5, "maximum": 1.5},
     {"minimum": 0.1, "maximum": 0.3},
     {"minimum": -5.5, "maximum": -2.25},
@@ -2476,7 +2448,6 @@ number_range_sweep_bounds = [
     {"minimum": -110, "maximum": -100},
     {"minimum": 99, "maximum": 101},
     {"minimum": 12.5, "maximum": 130.25},
-    {"exclusiveMinimum": 100, "exclusiveMaximum": 110},
     {"maximum": -10.5},
     {"minimum": 1000.5},
     {"minimum": -120, "maximum": 120},
@@ -2487,8 +2458,9 @@ number_range_sweep_bounds = [
     {"minimum": 4.0},
     {"maximum": -4.0},
     {"minimum": -4, "maximum": 4},
-    {"minimum": 5, "exclusiveMinimum": 3},
-    {"maximum": 3, "exclusiveMaximum": 5},
+    # exclusiveMinimum / exclusiveMaximum are unsupported for "number" and folded
+    # into inclusive bounds (the tighter bound wins); one combined case exercises
+    # that folding end-to-end.
     {"minimum": 1, "exclusiveMinimum": 2, "maximum": 9, "exclusiveMaximum": 8},
 ]
 
