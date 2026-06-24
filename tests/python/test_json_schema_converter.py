@@ -2299,15 +2299,12 @@ def test_generate_float_regex():
 
     assert _generate_float_regex(-0.000001, 0.000001) == r"^(-0\.000001|0(\.0{1,6})?|0\.000001)$"
 
-    # exclusive bounds drop the boundary value itself
-    assert (
-        _generate_float_regex(0, None, exclusive_start=True)
-        == r"^(0\.[1-9]\d{0,5}|0\.0[1-9]\d{0,4}|0\.00[1-9]\d{0,3}|0\.000[1-9]\d{0,2}|0\.0000[1-9]\d{0,1}|0\.00000[1-9]|([1-9]|[1-9]\d{1,})(\.\d{1,6})?)$"
-    )
+    # the float range generator is inclusive-only (exclusive bounds are not
+    # supported for "number"); a single-point range matches just that value
     assert _generate_float_regex(0, None) == (
         r"^(0(\.0{1,6})?|0\.[1-9]\d{0,5}|0\.0[1-9]\d{0,4}|0\.00[1-9]\d{0,3}|0\.000[1-9]\d{0,2}|0\.0000[1-9]\d{0,1}|0\.00000[1-9]|([1-9]|[1-9]\d{1,})(\.\d{1,6})?)$"
     )
-    assert _generate_float_regex(2.5, 2.5, exclusive_end=True) == r"^()$"
+    assert _generate_float_regex(2.5, 2.5) == r"^(2\.50{0,5})$"
 
 
 def test_float_minimum_no_wildcard_in_grammar():
@@ -2334,23 +2331,26 @@ def test_float_minimum_no_wildcard_in_grammar():
 
 
 number_range_instances = [
-    # exclusiveMinimum with an integer-valued bound: (0, 1) must be representable, bound rejected
+    # exclusiveMinimum / exclusiveMaximum are NOT supported for "number": they are
+    # treated as inclusive minimum / maximum (the boundary value is accepted).
+    ({"type": "number", "exclusiveMinimum": 0}, "0", True),
     ({"type": "number", "exclusiveMinimum": 0}, "0.1", True),
-    ({"type": "number", "exclusiveMinimum": 0}, "0", False),
+    ({"type": "number", "exclusiveMinimum": 0}, "-0.5", False),
     ({"type": "number", "minimum": 0}, "0", True),
     ({"type": "number", "minimum": 0}, "-0.5", False),
     # minimum above 1
     ({"type": "number", "minimum": 2}, "1.5", False),
     ({"type": "number", "minimum": 2}, "2", True),
     # upper bounds
-    ({"type": "number", "exclusiveMaximum": 1}, "1", False),
+    ({"type": "number", "exclusiveMaximum": 1}, "1", True),
     ({"type": "number", "exclusiveMaximum": 1}, "0.99", True),
     ({"type": "number", "maximum": -2}, "-1.5", False),
     ({"type": "number", "maximum": -2}, "-2", True),
     # both bounds: a value above the maximum must be rejected
     ({"type": "number", "minimum": 1, "maximum": 5}, "5.7", False),
     ({"type": "number", "minimum": 1, "maximum": 5}, "5", True),
-    ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "1", False),
+    ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "1", True),
+    ({"type": "number", "exclusiveMinimum": 1, "exclusiveMaximum": 5}, "5", True),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.2", True),
     ({"type": "number", "minimum": 0.1, "maximum": 0.3}, "0.35", False),
     # multi-digit integer part must not leak (regression: 159.5 over-accepted)
@@ -2365,21 +2365,25 @@ number_range_instances = [
     ({"type": "number", "minimum": 4.0}, "4.1", True),
     ({"type": "number", "minimum": 4.0}, "3.9", False),
     ({"type": "number", "maximum": -4.0}, "-4.1", True),
-    # both minimum and exclusiveMinimum: the stricter bound wins
+    # minimum + exclusiveMinimum both present: the tighter bound wins, both
+    # treated inclusively (here the inclusive minimum 5 binds)
     ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "4", False),
-    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3", False),
-    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "3", False),
-    # mixed inclusive/exclusive
-    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "5", False),
-    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "2", False),
+    ({"type": "number", "minimum": 5, "exclusiveMinimum": 3}, "5", True),
+    # exclusive bounds treated as inclusive: the boundary is accepted
+    ({"type": "number", "minimum": 3, "exclusiveMinimum": 3}, "3", True),
+    ({"type": "number", "maximum": 3, "exclusiveMaximum": 3}, "3", True),
+    ({"type": "number", "minimum": 2, "exclusiveMaximum": 5}, "5", True),
+    ({"type": "number", "exclusiveMinimum": 2, "maximum": 5}, "2", True),
+    # exclusiveMinimum == exclusiveMaximum collapses to a single accepted value
+    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5", True),
+    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5.5", False),
     # single-value range
     ({"type": "number", "minimum": 5, "maximum": 5}, "5", True),
     ({"type": "number", "minimum": 5, "maximum": 5}, "5.000001", False),
-    # empty range expressed via exclusivity: builds but matches nothing
-    ({"type": "number", "exclusiveMinimum": 5, "exclusiveMaximum": 5}, "5", False),
-    # negative exclusive
-    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.5", False),
+    # negative exclusive treated as inclusive
+    ({"type": "number", "exclusiveMinimum": -5.5}, "-5.5", True),
     ({"type": "number", "exclusiveMinimum": -5.5}, "-5.499999", True),
+    ({"type": "number", "exclusiveMinimum": -5.5}, "-6", False),
 ]
 
 
@@ -2493,16 +2497,26 @@ number_range_sweep_bounds = [
 def test_number_range_acceptance_sweep(bounds):
     """The grammar for a range-constrained number must agree with plain float
     comparison for every candidate value around the bounds (limited to 6
-    fractional digits, the converter's precision)."""
+    fractional digits, the converter's precision). Note: exclusiveMinimum /
+    exclusiveMaximum are unsupported for "number" and treated as inclusive."""
+
+    # Fold exclusive bounds into inclusive ones (the tighter bound wins), matching
+    # how "number" handles them.
+    lower = bounds.get("minimum")
+    if "exclusiveMinimum" in bounds:
+        lower = (
+            bounds["exclusiveMinimum"] if lower is None else max(lower, bounds["exclusiveMinimum"])
+        )
+    upper = bounds.get("maximum")
+    if "exclusiveMaximum" in bounds:
+        upper = (
+            bounds["exclusiveMaximum"] if upper is None else min(upper, bounds["exclusiveMaximum"])
+        )
 
     def in_range(value: float) -> bool:
-        if "minimum" in bounds and not value >= bounds["minimum"]:
+        if lower is not None and not value >= lower:
             return False
-        if "exclusiveMinimum" in bounds and not value > bounds["exclusiveMinimum"]:
-            return False
-        if "maximum" in bounds and not value <= bounds["maximum"]:
-            return False
-        if "exclusiveMaximum" in bounds and not value < bounds["exclusiveMaximum"]:
+        if upper is not None and not value <= upper:
             return False
         return True
 

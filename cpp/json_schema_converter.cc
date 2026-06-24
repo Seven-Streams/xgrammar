@@ -463,6 +463,11 @@ Result<IntegerSpec, SchemaError> SchemaParser::ParseInteger(const picojson::obje
 
 Result<NumberSpec, SchemaError> SchemaParser::ParseNumber(const picojson::object& schema) {
   WarnUnsupportedKeywords(schema, {"multipleOf"});
+  if (schema.count("exclusiveMinimum") || schema.count("exclusiveMaximum")) {
+    XGRAMMAR_LOG(WARNING
+    ) << "exclusiveMinimum / exclusiveMaximum are not supported for \"number\" and are treated "
+         "as inclusive minimum / maximum; only \"integer\" applies strict-boundary semantics";
+  }
   NumberSpec spec;
 
   auto getDouble = [](const picojson::value& value) -> Result<double, SchemaError> {
@@ -1445,30 +1450,27 @@ std::string JSONSchemaConverter::GenerateInteger(
 std::string JSONSchemaConverter::GenerateNumber(
     const NumberSpec& spec, const std::string& rule_name
 ) {
+  // exclusiveMinimum / exclusiveMaximum are not supported for "number": they are
+  // treated as inclusive minimum / maximum (the tighter bound wins when both are
+  // present). Only "integer" applies strict-boundary semantics, in GenerateInteger.
   std::optional<double> start, end;
-  bool exclusive_start = false;
-  bool exclusive_end = false;
   if (spec.minimum.has_value()) {
     start = spec.minimum;
   }
-  // When both bounds are present the larger lower bound wins; on a tie the
-  // exclusive one is stricter.
-  if (spec.exclusive_minimum.has_value() &&
-      (!start.has_value() || *spec.exclusive_minimum >= *start)) {
-    start = spec.exclusive_minimum;
-    exclusive_start = true;
+  if (spec.exclusive_minimum.has_value()) {
+    start = start.has_value() ? std::make_optional(std::max(*start, *spec.exclusive_minimum))
+                              : spec.exclusive_minimum;
   }
   if (spec.maximum.has_value()) {
     end = spec.maximum;
   }
-  if (spec.exclusive_maximum.has_value() && (!end.has_value() || *spec.exclusive_maximum <= *end)) {
-    end = spec.exclusive_maximum;
-    exclusive_end = true;
+  if (spec.exclusive_maximum.has_value()) {
+    end = end.has_value() ? std::make_optional(std::min(*end, *spec.exclusive_maximum))
+                          : spec.exclusive_maximum;
   }
 
   if (start.has_value() || end.has_value()) {
-    std::string range_regex =
-        GenerateFloatRangeRegex(start, end, 6, exclusive_start, exclusive_end);
+    std::string range_regex = GenerateFloatRangeRegex(start, end, 6);
     return RegexToEBNF(range_regex, false);
   }
   // Note: The format must be "-"? ("0" | ...) not ("0" | "-"? ...)
@@ -2441,16 +2443,11 @@ class NumberGenerator {
   // span the whole int64 range (|INT64_MIN| is handled without negation overflow).
   static std::string IntegerRangeRegex(std::optional<int64_t> start, std::optional<int64_t> end);
 
-  // Anchored regex matching every number in the range, written with up to
-  // `precision` fraction digits. `exclusive_start` / `exclusive_end` exclude the
-  // boundary value itself (turning >= / <= into > / <). Either bound may be
+  // Anchored regex matching every number in the inclusive range [start, end],
+  // written with up to `precision` fraction digits. Either bound may be
   // std::nullopt for an open side; an empty range yields "^()$".
   static std::string FloatRangeRegex(
-      std::optional<double> start,
-      std::optional<double> end,
-      int precision,
-      bool exclusive_start,
-      bool exclusive_end
+      std::optional<double> start, std::optional<double> end, int precision
   );
 
  private:
@@ -3047,17 +3044,10 @@ std::vector<std::string> NumberGenerator::PositiveRangeParts(
 }
 
 std::string NumberGenerator::FloatRangeRegex(
-    std::optional<double> start,
-    std::optional<double> end,
-    int precision,
-    bool exclusive_start,
-    bool exclusive_end
+    std::optional<double> start, std::optional<double> end, int precision
 ) {
-  if (start && end) {
-    if (start.value() > end.value() ||
-        (start.value() == end.value() && (exclusive_start || exclusive_end))) {
-      return "^()$";
-    }
+  if (start && end && start.value() > end.value()) {
+    return "^()$";
   }
 
   if (!start && !end) {
@@ -3065,6 +3055,10 @@ std::string NumberGenerator::FloatRangeRegex(
   }
 
   std::vector<std::string> parts;
+
+  // The bounds are inclusive. `strict_low` below is the internal zero-boundary
+  // flag (set when the magnitude bound is exactly 0, whose pattern the
+  // caller emits separately), not an exclusive-bound flag.
 
   // Negative values: x is in [start, end] iff -x is in [-end, -start], so the
   // positive-range patterns are reused on the negated bounds and prefixed
@@ -3074,22 +3068,19 @@ std::string NumberGenerator::FloatRangeRegex(
     bool strict_low = true;
     if (end.has_value() && end.value() < 0) {
       low = FormatFloat(-end.value(), precision);
-      strict_low = exclusive_end;
+      strict_low = false;
     }
     std::optional<std::string> high;
-    bool strict_high = false;
     if (start.has_value()) {
       high = FormatFloat(-start.value(), precision);
-      strict_high = exclusive_start;
     }
-    for (auto& part : PositiveRangeParts(low, strict_low, high, strict_high, precision)) {
+    for (auto& part : PositiveRangeParts(low, strict_low, high, /*strict_high=*/false, precision)) {
       parts.push_back("-" + std::move(part));
     }
   }
 
   bool zero_allowed =
-      (!start.has_value() || start.value() < 0 || (start.value() == 0 && !exclusive_start)) &&
-      (!end.has_value() || end.value() > 0 || (end.value() == 0 && !exclusive_end));
+      (!start.has_value() || start.value() <= 0) && (!end.has_value() || end.value() >= 0);
   if (zero_allowed) {
     parts.push_back("0(\\." + SomeZeros(precision) + ")?");
   }
@@ -3100,15 +3091,13 @@ std::string NumberGenerator::FloatRangeRegex(
     bool strict_low = true;
     if (start.has_value() && start.value() > 0) {
       low = FormatFloat(start.value(), precision);
-      strict_low = exclusive_start;
+      strict_low = false;
     }
     std::optional<std::string> high;
-    bool strict_high = false;
     if (end.has_value()) {
       high = FormatFloat(end.value(), precision);
-      strict_high = exclusive_end;
     }
-    for (auto& part : PositiveRangeParts(low, strict_low, high, strict_high, precision)) {
+    for (auto& part : PositiveRangeParts(low, strict_low, high, /*strict_high=*/false, precision)) {
       parts.push_back(std::move(part));
     }
   }
@@ -3133,13 +3122,9 @@ std::string JSONSchemaConverter::GenerateRangeRegex(
 }
 
 std::string JSONSchemaConverter::GenerateFloatRangeRegex(
-    std::optional<double> start,
-    std::optional<double> end,
-    int precision,
-    bool exclusive_start,
-    bool exclusive_end
+    std::optional<double> start, std::optional<double> end, int precision
 ) {
-  return NumberGenerator::FloatRangeRegex(start, end, precision, exclusive_start, exclusive_end);
+  return NumberGenerator::FloatRangeRegex(start, end, precision);
 }
 
 // ==================== Public API Functions ====================
@@ -3215,12 +3200,8 @@ std::string GenerateRangeRegex(std::optional<int64_t> start, std::optional<int64
   return JSONSchemaConverter::GenerateRangeRegex(start, end);
 }
 
-std::string GenerateFloatRangeRegex(
-    std::optional<double> start, std::optional<double> end, bool exclusive_start, bool exclusive_end
-) {
-  return JSONSchemaConverter::GenerateFloatRangeRegex(
-      start, end, 6, exclusive_start, exclusive_end
-  );
+std::string GenerateFloatRangeRegex(std::optional<double> start, std::optional<double> end) {
+  return JSONSchemaConverter::GenerateFloatRangeRegex(start, end, 6);
 }
 
 std::string QwenXMLToolCallingToEBNF(const std::string& schema) {
