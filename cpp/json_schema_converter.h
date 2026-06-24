@@ -132,6 +132,12 @@ struct AnyOfSpec {
   std::string ToString() const;
 };
 
+struct OneOfSpec {
+  std::vector<SchemaSpecPtr> options;
+
+  std::string ToString() const;
+};
+
 struct AllOfSpec {
   std::vector<SchemaSpecPtr> schemas;
 
@@ -159,6 +165,7 @@ using SchemaSpecVariant = std::variant<
     EnumSpec,
     RefSpec,
     AnyOfSpec,
+    OneOfSpec,
     AllOfSpec,
     TypeArraySpec>;
 
@@ -292,6 +299,7 @@ class JSONSchemaConverter {
   virtual std::string GenerateEnum(const EnumSpec& spec, const std::string& rule_name);
   virtual std::string GenerateRef(const RefSpec& spec, const std::string& rule_name);
   virtual std::string GenerateAnyOf(const AnyOfSpec& spec, const std::string& rule_name);
+  virtual std::string GenerateOneOf(const OneOfSpec& spec, const std::string& rule_name);
   virtual std::string GenerateAllOf(const AllOfSpec& spec, const std::string& rule_name);
   virtual std::string GenerateTypeArray(const TypeArraySpec& spec, const std::string& rule_name);
 
