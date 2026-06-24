@@ -225,13 +225,6 @@ bool IsNumericValue(const picojson::value& value) {
   return value.is<int64_t>() || value.is<double>();
 }
 
-long double GetNumericValue(const picojson::value& value) {
-  if (value.is<int64_t>()) {
-    return static_cast<long double>(value.get<int64_t>());
-  }
-  return static_cast<long double>(value.get<double>());
-}
-
 bool IsIntegerValue(const picojson::value& value) {
   if (value.is<int64_t>()) {
     return true;
@@ -243,9 +236,15 @@ bool IsIntegerValue(const picojson::value& value) {
   return std::isfinite(number) && std::floor(number) == number;
 }
 
-bool JSONValuesEqual(const picojson::value& lhs, const picojson::value& rhs) {
-  if (IsNumericValue(lhs) && IsNumericValue(rhs)) {
-    return GetNumericValue(lhs) == GetNumericValue(rhs);
+bool JSONValuesMayOverlap(const picojson::value& lhs, const picojson::value& rhs) {
+  if (IsNumericValue(lhs) || IsNumericValue(rhs)) {
+    if (!IsNumericValue(lhs) || !IsNumericValue(rhs)) {
+      return false;
+    }
+    if (lhs.is<int64_t>() && rhs.is<int64_t>()) {
+      return lhs.get<int64_t>() == rhs.get<int64_t>();
+    }
+    return true;
   }
   if (lhs.is<picojson::null>() || rhs.is<picojson::null>()) {
     return lhs.is<picojson::null>() && rhs.is<picojson::null>();
@@ -267,7 +266,7 @@ bool JSONValuesEqual(const picojson::value& lhs, const picojson::value& rhs) {
       return false;
     }
     for (size_t i = 0; i < lhs_array.size(); ++i) {
-      if (!JSONValuesEqual(lhs_array[i], rhs_array[i])) {
+      if (!JSONValuesMayOverlap(lhs_array[i], rhs_array[i])) {
         return false;
       }
     }
@@ -284,7 +283,7 @@ bool JSONValuesEqual(const picojson::value& lhs, const picojson::value& rhs) {
     }
     for (const auto& [key, lhs_value] : lhs_object) {
       auto rhs_it = rhs_object.find(key);
-      if (rhs_it == rhs_object.end() || !JSONValuesEqual(lhs_value, rhs_it->second)) {
+      if (rhs_it == rhs_object.end() || !JSONValuesMayOverlap(lhs_value, rhs_it->second)) {
         return false;
       }
     }
@@ -340,7 +339,7 @@ bool FiniteValuesOverlap(
 ) {
   for (const auto& lhs_value : lhs) {
     for (const auto& rhs_value : rhs) {
-      if (JSONValuesEqual(lhs_value, rhs_value)) {
+      if (JSONValuesMayOverlap(lhs_value, rhs_value)) {
         return true;
       }
     }
@@ -352,6 +351,9 @@ bool FiniteValuesOverlapTypeSet(
     const std::vector<picojson::value>& values, const std::unordered_set<std::string>& type_set
 ) {
   for (const auto& value : values) {
+    if (IsNumericValue(value) && (type_set.count("integer") || type_set.count("number"))) {
+      return true;
+    }
     for (const auto& type : type_set) {
       if (ValueMatchesType(value, type)) {
         return true;
@@ -1361,6 +1363,10 @@ Result<OneOfSpec, SchemaError> SchemaParser::ParseOneOf(const picojson::object& 
   }
 
   const auto& options = schema.at("oneOf").get<picojson::array>();
+  if (options.empty()) {
+    return ResultErr<SchemaError>(SchemaErrorType::kUnsupportedSchema, kUnsupportedOneOfMessage);
+  }
+
   int idx = 0;
   for (const auto& option : options) {
     auto option_result = Parse(option, "case_" + std::to_string(idx));
