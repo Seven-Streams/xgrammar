@@ -34,6 +34,36 @@ python -c "import xgrammar; print(xgrammar)"
 # Prints: <module 'xgrammar' from '/path-to-env/lib/python3.11/site-packages/xgrammar/__init__.py'>
 ```
 
+### Optional Dependency: PyTorch
+
+PyTorch is an **optional** dependency. The C++ core operates on
+[DLPack](https://github.com/dmlc/dlpack) tensors, so `import xgrammar` and all core
+functionality (grammar compilation, the grammar matcher, tokenizer info, structural tags,
+JSON-schema generation, etc.) work without PyTorch installed.
+
+When PyTorch is **not** installed:
+
+* `allocate_token_bitmask` / `reset_token_bitmask` return and operate on **NumPy** arrays.
+* `fill_next_token_bitmask` accepts any array that supports the DLPack protocol (including
+  NumPy arrays), so the matcher can fill bitmasks without PyTorch.
+
+Install the `torch` extra if you need any of the PyTorch-backed features:
+
+```bash
+python -m pip install "xgrammar[torch]"
+```
+
+This is required for:
+
+* `allocate_token_bitmask` returning a `torch.Tensor` (convenient for inference engines that
+  manage logits on GPU).
+* `apply_token_bitmask_inplace` on real model logits via the CPU / Triton / Torch kernels.
+* the HuggingFace `model.generate()` integration `xgrammar.contrib.hf.LogitsProcessor`.
+* the PyTorch-based helpers in `xgrammar.testing`.
+
+> When PyTorch is installed, `allocate_token_bitmask` returns a `torch.Tensor` exactly as
+> before, so existing code keeps working unchanged.
+
 ## Method 2: Build XGrammar Python Package from Source
 
 This option is useful when you want to make modification or obtain a specific version of XGrammar.

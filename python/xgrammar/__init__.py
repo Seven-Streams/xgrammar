@@ -12,7 +12,6 @@ from .config import (
     max_recursion_depth,
     set_max_recursion_depth,
 )
-from .contrib import hf
 from .exception import (
     DeserializeFormatError,
     DeserializeVersionError,
@@ -64,3 +63,14 @@ __all__ = [
     "register_model_structural_tag",
     "get_builtin_structural_tag",
 ]
+
+
+def __getattr__(name: str):
+    # Lazily import the optional HuggingFace integration so that `import xgrammar`
+    # does not require torch / transformers unless `xgrammar.hf` is actually used.
+    if name == "hf":
+        from .contrib import hf as _hf
+
+        globals()["hf"] = _hf
+        return _hf
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

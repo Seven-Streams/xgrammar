@@ -2,18 +2,28 @@
 token.
 """
 
+from __future__ import annotations
+
 import math
 import warnings
 from typing import List, Literal, Optional, Tuple, Union
 
-import torch
+import numpy as np
 from numpy.typing import ArrayLike
 
 from .base import XGRObject, _core
 from .compiler import CompiledGrammar
 
-bitmask_dtype = torch.int32
-"""The dtype of the bitmask: int32."""
+try:
+    import torch
+
+    _HAS_TORCH = True
+except ImportError:  # pragma: no cover - torch is an optional dependency
+    torch = None
+    _HAS_TORCH = False
+
+bitmask_dtype = torch.int32 if _HAS_TORCH else np.int32
+"""The dtype of the bitmask: int32. Backed by torch when available, otherwise numpy."""
 
 
 def get_bitmask_shape(batch_size: int, vocab_size: int) -> Tuple[int, int]:
@@ -21,7 +31,7 @@ def get_bitmask_shape(batch_size: int, vocab_size: int) -> Tuple[int, int]:
     return (batch_size, math.ceil(vocab_size / 32))
 
 
-_FULL_MASK = torch.tensor(-1, dtype=bitmask_dtype)
+_FULL_MASK = -1
 
 
 def allocate_token_bitmask(batch_size: int, vocab_size: int) -> torch.Tensor:
@@ -47,12 +57,18 @@ def allocate_token_bitmask(batch_size: int, vocab_size: int) -> torch.Tensor:
         The allocated bitmask.
     """
     # In CUDA, use pinned memory to speed up data transfer from CPU to GPU
-    return torch.full(get_bitmask_shape(batch_size, vocab_size), _FULL_MASK, dtype=bitmask_dtype)
+    shape = get_bitmask_shape(batch_size, vocab_size)
+    if _HAS_TORCH:
+        return torch.full(shape, _FULL_MASK, dtype=torch.int32)
+    return np.full(shape, _FULL_MASK, dtype=np.int32)
 
 
-def reset_token_bitmask(bitmask: torch.Tensor) -> None:
+def reset_token_bitmask(bitmask: ArrayLike) -> None:
     """Reset the bitmask to the full mask."""
-    bitmask.fill_(_FULL_MASK)
+    if _HAS_TORCH and isinstance(bitmask, torch.Tensor):
+        bitmask.fill_(_FULL_MASK)
+    else:
+        bitmask.fill(_FULL_MASK)
 
 
 def apply_token_bitmask_inplace(

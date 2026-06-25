@@ -3,17 +3,31 @@
 The APIs in this module are used for testing and debugging and are prone to
 change. Don't use them in production."""
 
+from __future__ import annotations
+
 import time
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
-import torch
 from pydantic import BaseModel
+
+try:
+    import torch
+except ImportError:  # pragma: no cover - torch is an optional dependency
+    torch = None
 
 from .base import _core
 from .compiler import CompiledGrammar, GrammarCompiler
 from .grammar import Grammar, _convert_schema_to_str
 from .matcher import GrammarMatcher, bitmask_dtype
 from .tokenizer_info import TokenizerInfo
+
+
+def _require_torch() -> None:
+    if torch is None:
+        raise ImportError(
+            "This function requires PyTorch, which is an optional dependency of xgrammar. "
+            "Install it with `pip install torch`."
+        )
 
 
 def _json_schema_to_ebnf(
@@ -252,6 +266,7 @@ def bool_mask_to_bitmask(bool_mask: torch.Tensor) -> torch.Tensor:
     bitmask : torch.Tensor
         The rejected token bitmask.
     """
+    _require_torch()
     bool_mask_int32 = bool_mask.to(torch.int32)
     # Pad to multiple of 32
     pad_size = (32 - bool_mask.shape[1] % 32) % 32
@@ -282,6 +297,7 @@ def bitmask_to_bool_mask(bit_mask: torch.Tensor, vocab_size: Optional[int] = Non
     bool_mask : torch.Tensor
         The converted boolean mask tensor.
     """
+    _require_torch()
 
     # Validate input.
     if bit_mask.device.type != "cpu":

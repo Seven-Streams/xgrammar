@@ -17,9 +17,7 @@ requires-python = ">=3.8, <4"
 dependencies = [
   "apache-tvm-ffi>=0.1.9",
   "pydantic",
-  "torch>=1.10.0",
   "transformers>=4.38.0",
-  "triton; platform_system == 'Linux' and platform_machine == 'x86_64'",
   "numpy",
   "typing-extensions>=4.9.0",
 ]
@@ -29,7 +27,14 @@ Homepage = "https://xgrammar.mlc.ai/"
 GitHub = "https://github.com/mlc-ai/xgrammar"
 
 [project.optional-dependencies]
+# PyTorch is optional: the C++ core operates on DLPack tensors, and bitmasks fall
+# back to numpy when torch is absent. Install this extra to get torch tensors back
+# from allocate_token_bitmask and to use the torch/triton apply-bitmask kernels.
+torch = ["torch>=1.10.0", "triton; platform_system == 'Linux' and platform_machine == 'x86_64'"]
 test = [
+  # The test suite exercises the torch/triton kernels, so pull torch in explicitly
+  # now that it is no longer a core dependency.
+  "xgrammar[torch]",
   "huggingface-hub[cli]",
   "protobuf",
   "pytest",

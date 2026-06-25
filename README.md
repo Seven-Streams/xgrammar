@@ -55,6 +55,13 @@ For use with MPS on Apple Silicon, install with:
 pip install "xgrammar[metal]"
 ```
 
+PyTorch is optional — the core works with NumPy bitmasks out of the box. Install the `torch`
+extra to get `torch.Tensor` bitmasks, the GPU/Triton kernels, and the HuggingFace integration
+(see [Installation](https://xgrammar.mlc.ai/docs/start/installation) for details):
+```bash
+pip install "xgrammar[torch]"
+```
+
 Import XGrammar:
 ```python
 import xgrammar as xgr
