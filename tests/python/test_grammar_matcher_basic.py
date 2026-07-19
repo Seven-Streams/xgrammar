@@ -372,6 +372,95 @@ def test_is_completed():
     assert matcher2.is_terminated()
 
 
+def test_stop_token_as_grammar_terminal():
+    """A stop token whose decoded text is a terminal of the grammar can be accepted iff
+    consuming its text completes the grammar. See issue #701."""
+    vocab = ["<s>", "</s>", "hello", "world", "<|end|>", "<|call|>", "x", "y"]
+    tokenizer_info = xgr.TokenizerInfo(vocab)
+    stop_token_id = vocab.index("</s>")
+    assert tokenizer_info.stop_token_ids == [stop_token_id]
+
+    # Case 1: the stop token's text completes the grammar
+    grammar = xgr.Grammar.from_ebnf('root ::= "hello" ("<|end|>" | "</s>")')
+    matcher = _get_matcher_from_grammar_and_tokenizer_info(grammar, tokenizer_info)
+    bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
+
+    # Before "hello", neither completed nor completable by "</s>": masked out
+    matcher.fill_next_token_bitmask(bitmask)
+    assert stop_token_id in _get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size)
+
+    assert matcher.accept_token(vocab.index("hello"))
+    matcher.fill_next_token_bitmask(bitmask)
+    assert stop_token_id not in _get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size)
+    assert matcher.accept_token(stop_token_id)
+    assert matcher.is_terminated()
+
+    # Rollback the stop token: the matcher can continue with the other terminal
+    matcher.rollback(1)
+    assert not matcher.is_terminated()
+    assert matcher.accept_token(vocab.index("<|end|>"))
+    assert matcher.is_completed()
+
+    # Case 2: the stop token's text matches but does not complete the grammar: rejected,
+    # and the mask agrees
+    grammar2 = xgr.Grammar.from_ebnf('root ::= "hello" "</s>" "world"')
+    matcher2 = _get_matcher_from_grammar_and_tokenizer_info(grammar2, tokenizer_info)
+    assert matcher2.accept_token(vocab.index("hello"))
+    matcher2.fill_next_token_bitmask(bitmask)
+    assert stop_token_id in _get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size)
+    assert not matcher2.accept_token(stop_token_id)
+    # The grammar can still be completed through accept_string
+    assert matcher2.accept_string("</s>")
+    assert matcher2.accept_token(vocab.index("world"))
+    assert matcher2.is_completed()
+
+
+def test_override_stop_token_as_grammar_terminal():
+    """Stop tokens overridden at the matcher level are consistent between the bitmask and
+    accept_token when their text is a terminal of the grammar. See issue #701."""
+    vocab = ["<s>", "</s>", "hello", "world", "<|end|>", "<|call|>", "x", "y"]
+    tokenizer_info = xgr.TokenizerInfo(vocab)
+    call_token_id = vocab.index("<|call|>")
+    stop_token_id = vocab.index("</s>")
+    bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
+
+    # Case 1: an overridden stop token that is a regular vocab token completes the grammar
+    grammar = xgr.Grammar.from_ebnf('root ::= "x" "<|call|>"')
+    matcher = _get_matcher_from_grammar_and_tokenizer_info(
+        grammar, tokenizer_info, override_stop_tokens=[stop_token_id, call_token_id]
+    )
+    assert matcher.accept_token(vocab.index("x"))
+    matcher.fill_next_token_bitmask(bitmask)
+    assert call_token_id not in _get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size)
+    assert matcher.accept_token(call_token_id)
+    assert matcher.is_terminated()
+
+    # Case 2: the overridden stop token matches but does not complete the grammar: the mask
+    # must not allow it, and accept_token must reject it
+    grammar2 = xgr.Grammar.from_ebnf('root ::= "x" "<|call|>" "y"')
+    matcher2 = _get_matcher_from_grammar_and_tokenizer_info(
+        grammar2, tokenizer_info, override_stop_tokens=[stop_token_id, call_token_id]
+    )
+    assert matcher2.accept_token(vocab.index("x"))
+    matcher2.fill_next_token_bitmask(bitmask)
+    assert call_token_id in _get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size)
+    assert not matcher2.accept_token(call_token_id)
+
+    # Case 3: a tokenizer-level stop token not in override_stop_tokens is a regular token to
+    # the matcher; its text can be matched without completing the grammar
+    grammar3 = xgr.Grammar.from_ebnf('root ::= "x" "</s>" "y"')
+    matcher3 = _get_matcher_from_grammar_and_tokenizer_info(
+        grammar3, tokenizer_info, override_stop_tokens=[call_token_id]
+    )
+    assert matcher3.accept_token(vocab.index("x"))
+    matcher3.fill_next_token_bitmask(bitmask)
+    assert stop_token_id not in _get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size)
+    assert matcher3.accept_token(stop_token_id)
+    assert not matcher3.is_terminated()
+    assert matcher3.accept_token(vocab.index("y"))
+    assert matcher3.is_completed()
+
+
 def test_fork_initial_state():
     """Fork at initial state: forked matcher has same state and same next-token bitmask."""
     vocab = ["<s>", "</s>", "a", "b"]

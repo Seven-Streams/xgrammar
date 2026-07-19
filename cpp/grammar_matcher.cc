@@ -515,6 +515,16 @@ class GrammarMatcher::Impl : public EarleyParser {
    */
   bool AcceptStopToken();
 
+  /*! \brief The result of matching a token's content against the grammar. */
+  enum class TokenAcceptance : int8_t { kRejected, kAccepted, kAcceptedCompleted };
+
+  /*!
+   * \brief Check whether the grammar can accept the content of the given token (through its
+   * atomic token edges and its decoded text), and whether the grammar is completed after the
+   * acceptance. The parser state is restored before returning.
+   */
+  TokenAcceptance CheckTokenAcceptance(int32_t token_id);
+
   bool IsStopTokenAccepted() const;
 
   /*! \brief Check if the token bitmask is all-true. */
@@ -606,6 +616,43 @@ bool GrammarMatcher::Impl::IsTerminated() const {
 
 bool GrammarMatcher::Impl::IsStopTokenAccepted() const { return stop_token_is_accepted_; }
 
+GrammarMatcher::Impl::TokenAcceptance GrammarMatcher::Impl::CheckTokenAcceptance(int32_t token_id) {
+  bool accepted = false;
+  bool completed = false;
+
+  if (AdvanceAtomicToken(token_id)) {
+    accepted = true;
+    completed = IsCompleted();
+    PopLastStates(1);
+  }
+
+  const auto& decoded_vocab = tokenizer_info_.GetDecodedVocab();
+  if (!completed && token_id < static_cast<int32_t>(decoded_vocab.size())) {
+    const auto& token = decoded_vocab[token_id];
+    if (!token.empty()) {
+      int pos = 0;
+      bool success = true;
+      for (auto char_value : token) {
+        if (!Advance(char_value)) {
+          success = false;
+          break;
+        }
+        ++pos;
+      }
+      if (success) {
+        accepted = true;
+        completed = IsCompleted();
+      }
+      PopLastStates(pos);
+    }
+  }
+
+  if (!accepted) {
+    return TokenAcceptance::kRejected;
+  }
+  return completed ? TokenAcceptance::kAcceptedCompleted : TokenAcceptance::kAccepted;
+}
+
 // TODO(yixin): Polish verbose logging
 bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
   if (IsStopTokenAccepted()) {
@@ -630,22 +677,31 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
                        << "\", current state:\n"
                        << states_str;
   }
-  // Handle the stop token
-  if (std::find(stop_token_ids_.begin(), stop_token_ids_.end(), token_id) !=
-      stop_token_ids_.end()) {
-    bool accepted = AcceptStopToken();
+  // Handle the stop token. If the grammar is already completed, accept it and terminate.
+  // Otherwise fall through: the stop token may also be a terminal of the grammar (e.g.
+  // <|return|> in the harmony chat template). Since generation ends at the stop token, it can
+  // only be accepted if matching its content completes the grammar.
+  bool is_stop_token =
+      std::find(stop_token_ids_.begin(), stop_token_ids_.end(), token_id) != stop_token_ids_.end();
+  if (is_stop_token && AcceptStopToken()) {
     if (debug_print) {
-      XGRAMMAR_LOG(INFO) << "The token is an end token. Is accepted: " << accepted;
+      XGRAMMAR_LOG(INFO) << "The token is an end token. Is accepted: true";
     }
-    return accepted;
+    return true;
   }
 
   const auto& special_token_ids = tokenizer_info_.GetSpecialTokenIds();
   if (std::find(special_token_ids.begin(), special_token_ids.end(), token_id) !=
       special_token_ids.end()) {
-    XGRAMMAR_LOG(WARNING) << "GrammarMatcher cannot accept special token id " << token_id << ": "
-                          << tokenizer_info_.GetDecodedVocab()[token_id]
-                          << ". Rejecting the token.";
+    if (is_stop_token) {
+      if (debug_print) {
+        XGRAMMAR_LOG(INFO) << "The token is an end token. Is accepted: false";
+      }
+    } else {
+      XGRAMMAR_LOG(WARNING) << "GrammarMatcher cannot accept special token id " << token_id << ": "
+                            << tokenizer_info_.GetDecodedVocab()[token_id]
+                            << ". Rejecting the token.";
+    }
     return false;
   }
 
@@ -731,6 +787,20 @@ bool GrammarMatcher::Impl::AcceptToken(int32_t token_id, bool debug_print) {
       is_completed_.push_back(byte_completed || atomic_completed);
       token_length_history.push_back(token.size());
     }
+  }
+
+  if (is_stop_token) {
+    if (!IsCompleted()) {
+      // The stop token's content matches the grammar but does not complete it. Generation
+      // ends at the stop token, so an incomplete match cannot be accepted.
+      Rollback(1);
+      if (debug_print) {
+        XGRAMMAR_LOG(INFO) << "Token #" << token_id << "<" << EscapeString(token)
+                           << "> is a stop token and does not complete the grammar. Rejected.";
+      }
+      return false;
+    }
+    stop_token_is_accepted_ = true;
   }
 
   if (debug_print) {
@@ -955,6 +1025,37 @@ bool GrammarMatcher::Impl::FillNextTokenBitmask(
   SetTokenBitmask(
       bitmask_data_ptr, tmp_accepted_bitset_, tmp_rejected_indices_, can_reach_end, false
   );
+
+  DynamicBitset next_token_bitset(
+      tokenizer_info_.GetVocabSize(), reinterpret_cast<uint32_t*>(bitmask_data_ptr)
+  );
+  // A stop token may also be a terminal of the grammar (e.g. <|return|> in the harmony chat
+  // template). Since generation ends at the stop token, it is allowed iff the grammar is
+  // already completed, or matching its content completes the grammar. This also masks out
+  // overridden stop tokens whose content matches the grammar without completing it, keeping
+  // the bitmask consistent with AcceptToken.
+  if (!can_reach_end) {
+    for (auto token_id : stop_token_ids_) {
+      if (token_id < 0 || token_id >= tokenizer_info_.GetVocabSize()) {
+        continue;
+      }
+      next_token_bitset.Set(
+          token_id, CheckTokenAcceptance(token_id) == TokenAcceptance::kAcceptedCompleted
+      );
+    }
+  }
+  // Tokenizer-level stop tokens that are not stop tokens of this matcher (due to
+  // override_stop_tokens) are normal tokens to the matcher, but they are excluded from the
+  // sorted vocab, so their bits are set separately here.
+  for (auto token_id : tokenizer_info_.GetStopTokenIds()) {
+    if (token_id < 0 || token_id >= tokenizer_info_.GetVocabSize() ||
+        std::find(stop_token_ids_.begin(), stop_token_ids_.end(), token_id) !=
+            stop_token_ids_.end()) {
+      continue;
+    }
+    next_token_bitset.Set(token_id, CheckTokenAcceptance(token_id) != TokenAcceptance::kRejected);
+  }
+
   if (debug_print) {
     XGRAMMAR_LOG(INFO) << "Filled bitmask: " << PrintBitmask(bitmask_data_ptr, tokenizer_info_);
   }
