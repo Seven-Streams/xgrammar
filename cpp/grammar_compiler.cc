@@ -728,7 +728,11 @@ const std::vector<int32_t>& GrammarMatcherForTokenMaskCache::GetTokenEdgeAccepte
       auto info = fsm.GetFsm().GetFsm().GetTokenEdgeInfo(edge.GetAuxIndex());
       for (int32_t i = 0; i < info.Count(); ++i) {
         int32_t tid = info.TokenIds()[i];
-        XGRAMMAR_DCHECK(tid >= 0 && tid < static_cast<int32_t>(tid_to_sorted.size()));
+        // Token ids outside the tokenizer vocab can never be generated; skip them instead of
+        // indexing out of bounds.
+        if (tid < 0 || tid >= static_cast<int32_t>(tid_to_sorted.size())) {
+          continue;
+        }
         if (tid_to_sorted[tid] >= 0) {
           tmp_token_edge_accepted_.push_back(tid_to_sorted[tid]);
         }
@@ -738,7 +742,9 @@ const std::vector<int32_t>& GrammarMatcherForTokenMaskCache::GetTokenEdgeAccepte
       auto info = fsm.GetFsm().GetFsm().GetExcludeTokenEdgeInfo(edge.GetAuxIndex());
       for (int32_t i = 0; i < info.Count(); ++i) {
         int32_t tid = info.TokenIds()[i];
-        XGRAMMAR_DCHECK(tid >= 0 && tid < static_cast<int32_t>(tid_to_sorted.size()));
+        if (tid < 0 || tid >= static_cast<int32_t>(tid_to_sorted.size())) {
+          continue;
+        }
         if (tid_to_sorted[tid] >= 0) {
           tmp_token_edge_excluded_.push_back(tid_to_sorted[tid]);
         }

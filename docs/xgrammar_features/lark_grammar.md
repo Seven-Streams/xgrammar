@@ -110,7 +110,14 @@ TEXT: /(\n|.)*/
 ```
 
 The supported lazy form is deliberately narrow: an arbitrary-text terminal followed by one fixed
-string or special-token trigger. General shortest-match regex semantics are not approximated.
+string or special-token trigger. General shortest-match regex semantics are not approximated. The
+any-text terminal must be written exactly as `/(.|\n)*/`, `/(\n|.)*/`, `/(?s:.*)/`, or
+`/[\s\S]*/` (whitespace inside a regex is significant and disqualifies the pattern).
+
+Rules consumed by this lowering (the tail, the tools, and the lazy heads) keep their ordinary
+meanings, so a tool body may reference the tail or another tool recursively. When `%ignore` is
+active, ignored content is allowed between the trigger and the rest of the tool body, matching the
+skip inserted after every other lexeme.
 
 ## Special Tokens
 
@@ -119,6 +126,10 @@ Numeric token references do not require tokenizer metadata:
 ```python
 grammar = xgr.Grammar.from_lark("start: <[128000-128010]>")
 ```
+
+When `tokenizer_info` is supplied, numeric ids are validated against the vocabulary size at
+conversion time. Ids that are out of range for the tokenizer used at compile time can never be
+generated and are excluded from token masks.
 
 Named references are resolved by exact match against the decoded vocabulary:
 

@@ -1,9 +1,11 @@
+import itertools
 import json
 from typing import Optional, Sequence
 
 import pytest
 
 import xgrammar as xgr
+from xgrammar.testing import _get_masked_tokens_from_bitmask
 
 
 def _compile_lark(
@@ -920,3 +922,483 @@ def test_lark_error_reports_crlf_line_column_and_source_context() -> None:
     assert "line 3, column 6" in error
     assert "item missing" in error
     assert "     ^" in error
+
+
+@pytest.mark.parametrize(
+    "grammar, accepted, rejected",
+    [
+        pytest.param('start: ("a"?)*', ["", "a", "aaaa"], ["b", "ab"], id="nullable-star"),
+        pytest.param(
+            'start: ("a"?){2,3}', ["", "a", "aa", "aaa"], ["aaaa", "b"], id="nullable-brace-repeat"
+        ),
+        pytest.param(
+            'start: %json {"type":"boolean"} {2}',
+            ["truefalse", "falsefalse"],
+            ["true", "truefalsetrue"],
+            id="repetition-of-inline-json",
+        ),
+        pytest.param(
+            'start: item {2}\nitem: "a"', ["aa"], ["a", "aaa"], id="brace-repetition-after-space"
+        ),
+        pytest.param('?start: "a"', ["a"], ["", "aa"], id="question-prefixed-start"),
+        pytest.param('!start: "a"', ["a"], ["", "aa"], id="bang-prefixed-start"),
+        pytest.param(
+            'start: ("a" | "b") -> outer', ["a", "b"], ["outer", "ab"], id="alias-after-group"
+        ),
+        pytest.param(
+            'start: ( "a"\n  | "b"\n  )', ["a", "b"], ["", "ab"], id="multiline-group-body"
+        ),
+        pytest.param(
+            'start: [ "a"\n ] "b"', ["ab", "b"], ["", "a"], id="multiline-optional-group-body"
+        ),
+        pytest.param('start: "a"\r\n  | "b"\r\n', ["a", "b"], ["", "ab"], id="crlf-line-endings"),
+        pytest.param(r'start: "\/" "A"', ["/A"], ["\\/A", "/"], id="escaped-slash"),
+        pytest.param(
+            'start: "\\ud83d\\ude00"',
+            ["\U0001f600"],
+            ["", "\\ud83d\\ude00"],
+            id="surrogate-pair-escape",
+        ),
+        pytest.param(
+            'start: "😀".."😂"',
+            ["😀", "😁", "😂"],
+            ["", "😃", "a", "😀😁"],
+            id="supplementary-plane-range",
+        ),
+        pytest.param(
+            "start: NUM\n%import common.DIGIT\nNUM: DIGIT DIGIT",
+            ["12", "00"],
+            ["", "1", "123"],
+            id="terminal-composed-of-imported-terminal",
+        ),
+    ],
+)
+def test_lark_additional_core_languages(
+    grammar: str, accepted: Sequence[str], rejected: Sequence[str]
+) -> None:
+    _assert_language(grammar, accepted, rejected)
+
+
+def test_lark_deeply_nested_groups() -> None:
+    depth = 400
+    grammar = "start: " + "(" * depth + '"a"' + ")" * depth
+    _assert_language(grammar, ["a"], ["", "aa"])
+
+
+def test_lark_mutually_empty_recursion_matches_nothing() -> None:
+    grammar = "start: a\na: b\nb: a"
+    _assert_language(grammar, [], ["", "a", "x"])
+
+
+def test_lark_self_recursive_start_matches_nothing() -> None:
+    _assert_language("start: start", [], ["", "a"])
+
+
+@pytest.mark.parametrize(
+    "grammar, accepted, rejected",
+    [
+        pytest.param(
+            """
+            %import common.WS
+            %ignore WS
+            start: WS "a"
+            """,
+            [" a", "  a", "\ta "],
+            ["a", "b"],
+            id="ignored-terminal-also-referenced-directly",
+        ),
+        pytest.param(
+            """
+            %ignore PAD
+            PAD: ("_" | "-"){1,2}
+            start: "a" "b"
+            """,
+            ["ab", "a_b", "a-_b", "a___b"],
+            ["_ab", "a b"],
+            id="composed-ignore-terminal-loops",
+        ),
+        pytest.param(
+            """
+            %import common.WS
+            %ignore WS
+            start: "a".."z" "0".."9"
+            """,
+            ["a1", "a 1", "a1 "],
+            [" a1", "a1x"],
+            id="character-ranges-are-lexemes-for-skip",
+        ),
+        pytest.param(
+            """
+            %import common.WS
+            %ignore WS
+            start: ITEM{2}
+            ITEM: "x"
+            """,
+            ["xx", "x x", "x x "],
+            ["x", " xx"],
+            id="repeated-terminal-allows-skip-between",
+        ),
+        pytest.param(
+            """
+            %import common.WS -> W
+            %ignore W
+            start: "a" "b"
+            """,
+            ["ab", "a b"],
+            [" ab", "a-b"],
+            id="ignore-through-import-alias",
+        ),
+    ],
+)
+def test_lark_ignore_edge_cases(
+    grammar: str, accepted: Sequence[str], rejected: Sequence[str]
+) -> None:
+    _assert_language(grammar, accepted, rejected)
+
+
+def test_lark_dynamic_prefix_overlapping_triggers_are_both_reachable() -> None:
+    grammar = r"""
+        start: (foo | bar)* tail
+        tail: TEXT
+
+        foo_head[lazy]: TEXT "<a"
+        foo: foo_head ">" /[0-9]+/ "</>"
+
+        bar_head[lazy]: TEXT "<ab"
+        bar: bar_head ">" /[x-z]+/ "</>"
+
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(
+        grammar,
+        ["free", "<a>12</>", "<ab>x</>", "pre<a>1</>mid<ab>z</>post"],
+        ["<ab>12</>", "<a>x</>", "<a>"],
+    )
+
+
+def test_lark_dynamic_unicode_trigger_strings() -> None:
+    grammar = 'start: tool* tail\ntail: TEXT\nhead[lazy]: TEXT "工具>"\n'
+    grammar += 'tool: head /[0-9]+/ "</工具>"\nTEXT: /(\\n|.)*/'
+    _assert_language(
+        grammar, ["文本工具>42</工具>后面", "工具>1</工具>"], ["工具>x</工具>", "工具>42"]
+    )
+
+
+def test_lark_dynamic_tool_body_may_reference_the_tail_rule() -> None:
+    # The rules consumed by the dynamic start lowering keep their real bodies, so
+    # a tool body may reference them and still match the written language.
+    grammar = r"""
+        start: tool* tail
+        tail: TEXT
+        head[lazy]: TEXT "<t>"
+        tool: head "A" tail "B"
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(
+        grammar, ["x<t>ABy", "x<t>A hello By", "<t>A\nmulti\nline\nB"], ["x<t>A", "x<t>B"]
+    )
+
+
+def test_lark_dynamic_tool_body_may_reference_tools_recursively() -> None:
+    grammar = r"""
+        start: tool* tail
+        tail: TEXT
+        head[lazy]: TEXT "<t>"
+        tool: head "A" inner "B"
+        inner: tool | "i"
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(grammar, ["x<t>AiBy", "x<t>A<t>AiBBy"], ["x<t>ABy", "x<t>A<t>ABBy"])
+
+
+def test_lark_dynamic_allows_ignored_content_after_string_trigger() -> None:
+    grammar = r"""
+        %import common.WS
+        %ignore WS
+        start: tool* tail
+        tail: TEXT
+        head[lazy]: TEXT "<t>"
+        tool: head "a" "b" "</t>"
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(
+        grammar,
+        ["x<t>ab</t>y", "x<t>a b </t>y", "x<t> ab</t>y", "x<t>\na\nb\n</t>y"],
+        ["x<t>axb</t>y", "x<t>ab"],
+    )
+
+
+def test_lark_dynamic_allows_ignored_content_after_token_trigger() -> None:
+    tokenizer_info = xgr.TokenizerInfo(["<|call|>", "x", " ", "</c>", "plain"])
+    grammar = r"""
+        %ignore / +/
+        start: call* tail
+        tail: TEXT
+        call: TEXT <|call|> "x" "</c>"
+        TEXT: /(\n|.)*/
+    """
+    _assert_token_language(
+        grammar,
+        tokenizer_info,
+        accepted=[[4], [0, 1, 3], [0, 2, 1, 3], [0, 1, 2, 3]],
+        rejected=[[0, 3], [0, 1], [0, 4, 1, 3]],
+    )
+
+
+def test_lark_dynamic_tail_can_be_a_terminal_reference() -> None:
+    grammar = r"""
+        start: tool* TEXT
+        head[lazy]: TEXT "<c>"
+        tool: head /[0-9]+/ "</c>"
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(grammar, ["free", "x<c>12</c>y", "<c>1</c><c>2</c>"], ["<c>", "<c>x</c>"])
+
+
+def test_lark_dynamic_tool_with_empty_remainder() -> None:
+    grammar = r"""
+        start: tool* tail
+        tail: TEXT
+        head[lazy]: TEXT "<t>"
+        tool: head
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(grammar, ["", "plain", "x<t>y<t>z", "<t>"], [])
+
+
+def test_lark_non_dynamic_start_with_extra_element_falls_back_to_lazy_rules() -> None:
+    grammar = r"""
+        start: tool* tail "!"
+        tail: TEXT
+        head[lazy]: TEXT "<t>"
+        tool: head /[0-9]+/ "</t>"
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(grammar, ["plain!", "x<t>1</t>y!", "x<t>1</t>!"], ["plain", "x<t>1"])
+
+
+def test_lark_inline_dotall_group_regex_works_as_lazy_text() -> None:
+    grammar = 'start: head\nhead[lazy]: /(?s:.*)/ "<end>"'
+    _assert_language(grammar, ["ab", "ab<end>", "<end>"], ["<end>x", "a<end>b"])
+
+
+def test_lark_lazy_start_rule_itself() -> None:
+    grammar = 'start[lazy]: TEXT "<end>"\nTEXT: /(\\n|.)*/'
+    _assert_language(grammar, ["", "plain", "<end>", "plain<end>"], ["<end>x", "a<end>b"])
+
+
+def test_lark_lazy_rule_commits_at_the_first_trigger() -> None:
+    grammar = 'start: head "x"\nhead[lazy]: TEXT "<end>"\nTEXT: /(\\n|.)*/'
+    _assert_language(grammar, ["abc<end>x", "<end>x"], ["abc<end>", "a<end>b<end>x"])
+
+
+def test_lark_dead_rules_are_pruned_from_dynamic_grammars() -> None:
+    grammar = xgr.Grammar.from_lark(
+        r"""
+        start: tool* tail
+        tail: TEXT
+        tool_head[lazy]: TEXT "<tool_call>"
+        tool: tool_head /[0-9]+/ "</tool_call>"
+        TEXT: /(\n|.)*/
+        """
+    )
+    printed = str(grammar)
+    assert "TagDispatch" in printed
+    assert "tool_head" not in printed
+    assert "tail ::=" not in printed
+    assert "TEXT ::=" not in printed
+
+
+def test_lark_out_of_vocab_token_ids_never_match_and_do_not_corrupt_masks() -> None:
+    # The grammar is converted without tokenizer metadata, then compiled against a
+    # small vocab. Out-of-vocab ids must be ignored rather than corrupt the mask.
+    tokenizer_info = xgr.TokenizerInfo(["a", "b", "c", "d"])
+    grammar = xgr.Grammar.from_lark("start: <[2,100]>")
+    compiled = xgr.GrammarCompiler(tokenizer_info, cache_enabled=False).compile_grammar(grammar)
+
+    matcher = xgr.GrammarMatcher(compiled, terminate_without_stop_token=True)
+    bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
+    matcher.fill_next_token_bitmask(bitmask)
+    rejected = set(_get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size))
+    assert set(range(tokenizer_info.vocab_size)) - rejected == {2}
+
+    assert _matches_token_sequence(compiled, [2])
+    assert not _matches_token_sequence(compiled, [0])
+
+
+def test_lark_int32_max_token_id_compiles_against_small_vocab() -> None:
+    tokenizer_info = xgr.TokenizerInfo(["a", "b"])
+    grammar = xgr.Grammar.from_lark("start: <[2147483647]>")
+    compiled = xgr.GrammarCompiler(tokenizer_info, cache_enabled=False).compile_grammar(grammar)
+    assert not _matches_token_sequence(compiled, [0])
+    assert not _matches_token_sequence(compiled, [1])
+
+
+def test_lark_numeric_token_ids_are_validated_against_tokenizer_when_provided() -> None:
+    tokenizer_info = xgr.TokenizerInfo(["a", "b"])
+    _assert_lark_error(
+        "start: <[100]>", "out of range for vocab size 2", tokenizer_info=tokenizer_info
+    )
+    _assert_lark_error(
+        "start: <[0-100]>", "out of range for vocab size 2", tokenizer_info=tokenizer_info
+    )
+    _assert_lark_error(
+        "start: <[^0,100]>", "out of range for vocab size 2", tokenizer_info=tokenizer_info
+    )
+
+
+def test_lark_numeric_token_single_range_and_leading_zeros() -> None:
+    tokenizer_info = xgr.TokenizerInfo(["a", "b", "c"])
+    _assert_token_language(
+        "start: <[0-0]> <[01]>", tokenizer_info, accepted=[[0, 1]], rejected=[[0, 0], [1, 1]]
+    )
+
+
+def test_lark_special_token_sequence_allows_ignored_content() -> None:
+    tokenizer_info = xgr.TokenizerInfo(["<|t|>", "x", " "])
+    _assert_token_language(
+        '%ignore / +/\nstart: <|t|> "x"',
+        tokenizer_info,
+        accepted=[[0, 1], [0, 2, 1]],
+        rejected=[[1], [0, 2]],
+    )
+
+
+def test_lark_excluded_token_set_serialization_round_trip() -> None:
+    tokenizer_info = xgr.TokenizerInfo(["a", "b", "c", "d"])
+    grammar = xgr.Grammar.from_lark("start: <[^1]>")
+    restored = xgr.Grammar.deserialize_json(grammar.serialize_json())
+    compiled = xgr.GrammarCompiler(tokenizer_info, cache_enabled=False).compile_grammar(restored)
+
+    matcher = xgr.GrammarMatcher(compiled, terminate_without_stop_token=True)
+    bitmask = xgr.allocate_token_bitmask(1, tokenizer_info.vocab_size)
+    matcher.fill_next_token_bitmask(bitmask)
+    rejected = set(_get_masked_tokens_from_bitmask(bitmask, tokenizer_info.vocab_size))
+    assert set(range(tokenizer_info.vocab_size)) - rejected == {0, 2, 3}
+
+    assert _matches_token_sequence(compiled, [0])
+    assert not _matches_token_sequence(compiled, [1])
+
+
+def test_lark_token_level_grammars_do_not_accept_strings() -> None:
+    tokenizer_info = xgr.TokenizerInfo(["a", "b"])
+    compiled = _compile_lark("start: <[0]>", tokenizer_info)
+    matcher = xgr.GrammarMatcher(compiled, terminate_without_stop_token=True)
+    assert not matcher.accept_string("a")
+
+
+@pytest.mark.parametrize(
+    "grammar, message",
+    [
+        pytest.param("", "no start rule found", id="empty-grammar"),
+        pytest.param("# only a comment\n", "no start rule found", id="comment-only-grammar"),
+        pytest.param('start: "a" ~ b\nb: "x"', "expected integer", id="tilde-followed-by-name"),
+        pytest.param('start: "a"{1.5}', "invalid repetition count", id="fractional-repetition"),
+        pytest.param('start: "a"~2..', "expected integer", id="tilde-range-missing-end"),
+        pytest.param('start: "a\nb"', "unterminated string literal", id="newline-inside-string"),
+        pytest.param(r'start: "\x41"', "invalid string literal", id="hex-escape-not-json"),
+        pytest.param(
+            '%ignore <[1]>\nstart: "a"',
+            "special tokens cannot be used in terminals",
+            id="ignore-of-special-token",
+        ),
+        pytest.param(
+            'start: "a" item: "b"', "expected grammar expression", id="two-definitions-one-line"
+        ),
+        pytest.param(
+            'start: "a"\n  "b"', "expected rule or terminal name", id="continuation-without-pipe"
+        ),
+        pytest.param(
+            'start: ("a" |\n "b")', "expected ')' after group", id="pipe-at-end-of-line-in-group"
+        ),
+        pytest.param(
+            'start: "a"i.."c"',
+            "case-insensitive string flags are not supported",
+            id="range-start-flag",
+        ),
+        pytest.param(
+            'start: "a".."c"i',
+            "case-insensitive string flags are not supported",
+            id="range-end-flag",
+        ),
+        pytest.param(
+            'start: head\nhead[lazy]: TEXT ""\nTEXT: /(\\n|.)*/',
+            "general lazy rules are not supported",
+            id="empty-string-lazy-trigger",
+        ),
+        pytest.param(
+            'start: head\nhead[lazy]: TEXT %json {"type":"integer"}\nTEXT: /(\\n|.)*/',
+            "general lazy rules are not supported",
+            id="json-lazy-trigger",
+        ),
+        pytest.param(
+            'start: head\nhead[lazy]: TEXT "<end>"\nTEXT: /(. |\\n)*/',
+            "general lazy rules are not supported",
+            id="whitespace-in-regex-is-not-any-text",
+        ),
+        pytest.param(
+            '%import common.INT -> item\nitem: "a"\nstart: item',
+            "duplicate rule or terminal 'item'",
+            id="import-alias-collides-with-rule",
+        ),
+        pytest.param(
+            "%import common.sub.INT\nstart: INT",
+            "unknown common import",
+            id="nested-unknown-import-path",
+        ),
+        pytest.param(
+            "start: TEXT\nTEXT: /(?s:.*)/",
+            "failed to compile regular expression",
+            id="dotall-group-terminal-is-rejected-by-regex-converter",
+        ),
+    ],
+)
+def test_lark_additional_errors(grammar: str, message: str) -> None:
+    _assert_lark_error(grammar, message)
+
+
+@pytest.mark.parametrize(
+    "grammar, alphabet, max_len",
+    [
+        pytest.param('start: "a" "b" | "c" ("d" | "e")', "abcde", 4, id="choice-groups"),
+        pytest.param('start: "x" | "(" start ")"', "x()", 5, id="recursive-start"),
+        pytest.param('start: ("ab" | "c")~2..4', "abc", 6, id="tilde-repetition"),
+        pytest.param('start: ("a".."c" | "z")+', "abcz", 4, id="ranges-plus"),
+        pytest.param('start: ("a"?)* "b"', "ab", 4, id="nullable-star-then-literal"),
+        pytest.param("start: A B\nA: /a+/\nB: /ab/", "ab", 5, id="overlapping-terminals"),
+        pytest.param("start: /a+/ /ab/ /b+/", "ab", 6, id="ambiguous-regex-split"),
+        pytest.param('start: item ("," item)*\nitem: /[ab]+/', "ab,", 5, id="separated-list"),
+        pytest.param('start: "a" [ "b" ] "c"', "abc", 4, id="optional-group"),
+        pytest.param('start: (A | B)+\nA: "aa"\nB: "ab"', "ab", 6, id="terminal-choice-plus"),
+        pytest.param("start: /a|b/ /(ab)+/", "ab", 5, id="alternation-then-group-plus"),
+        pytest.param('start: "a"~2..3 "b"?', "ab", 5, id="tilde-range-then-optional"),
+        pytest.param(
+            'start: e\ne: "a" | "(" f ")"\nf: e ("+" e)*', "a(+)", 5, id="expression-grammar"
+        ),
+        pytest.param("start: /[ab]*a[ab]/", "ab", 5, id="nondeterministic-regex"),
+    ],
+)
+def test_lark_language_matches_reference_lark_implementation(
+    grammar: str, alphabet: str, max_len: int
+) -> None:
+    """Differential test against the reference `lark` package.
+
+    Enumerates every string over a small alphabet up to a length bound and requires
+    xgrammar and lark (earley with the scannerless dynamic_complete lexer) to agree on
+    membership. Grammars avoid %ignore, whose placement semantics intentionally follow
+    LLGuidance rather than lark.
+    """
+    lark = pytest.importorskip("lark")
+
+    reference = lark.Lark(grammar, start="start", parser="earley", lexer="dynamic_complete")
+    compiled = _compile_lark(grammar)
+
+    for length in range(max_len + 1):
+        for candidate in itertools.product(alphabet, repeat=length):
+            value = "".join(candidate)
+            try:
+                reference.parse(value)
+                expected = True
+            except lark.exceptions.LarkError:
+                expected = False
+            assert _matches_string(compiled, value) == expected, value

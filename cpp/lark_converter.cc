@@ -855,11 +855,19 @@ class LarkParser {
       Node result = ParseStringNode(token);
       if (Match(TokenType::kDotDot)) {
         Token end = Consume(TokenType::kString, "expected string after '..'");
+        Node end_node = ParseStringNode(end);
+        if (!result.flags.empty() || !end_node.flags.empty()) {
+          RaiseLarkError(
+              source_,
+              result.flags.empty() ? end_node.location : result.location,
+              "case-insensitive string flags are not supported"
+          );
+        }
         Node range;
         range.kind = Node::Kind::kRange;
         range.location = token.location;
         range.text = result.text;
-        range.text2 = ParseStringNode(end).text;
+        range.text2 = end_node.text;
         return range;
       }
       return result;
@@ -1035,10 +1043,6 @@ class LarkCompiler {
 
     for (const auto& definition : document_.definitions) {
       if (definition.is_terminal) {
-        continue;
-      }
-      if (dynamic_unused_rules_.count(definition.name)) {
-        builder_.UpdateRuleBody(rule_ids_.at(definition.name), builder_.AddEmptyStr());
         continue;
       }
       int32_t body_expr_id;
@@ -1340,6 +1344,13 @@ class LarkCompiler {
     return builder_.AddSequence({expression, builder_.AddRuleRef(skip_rule_id_)});
   }
 
+  int32_t PrependSkip(int32_t expression) {
+    if (skip_rule_id_ == -1) {
+      return expression;
+    }
+    return builder_.AddSequence({builder_.AddRuleRef(skip_rule_id_), expression});
+  }
+
   SpecialTokenSet ResolveSpecialToken(const std::string& token, const Location& location) const {
     if (token.size() >= 4 && token.substr(0, 2) == "<[" && token.substr(token.size() - 2) == "]>") {
       std::string contents = token.substr(2, token.size() - 4);
@@ -1402,6 +1413,15 @@ class LarkCompiler {
           if (last - first > 1'000'000) {
             RaiseLarkError(source_, location, "special-token range is too large");
           }
+          if (tokenizer_info_.has_value() &&
+              last >= static_cast<int64_t>(tokenizer_info_->GetVocabSize())) {
+            RaiseLarkError(
+                source_,
+                location,
+                "special-token id " + std::to_string(last) + " is out of range for vocab size " +
+                    std::to_string(tokenizer_info_->GetVocabSize())
+            );
+          }
           for (int64_t token_id = first; token_id <= last; ++token_id) {
             result.token_ids.push_back(static_cast<int32_t>(token_id));
           }
@@ -1441,14 +1461,10 @@ class LarkCompiler {
 
   bool IsAnyText(const Node& node, std::unordered_set<std::string>* visiting = nullptr) const {
     if (node.kind == Node::Kind::kRegex && node.flags.empty()) {
-      std::string pattern;
-      for (char c : node.text) {
-        if (c != ' ' && c != '\t' && c != '\r') {
-          pattern.push_back(c);
-        }
-      }
-      return pattern == "(.|\\n)*" || pattern == "(\\n|.)*" || pattern == "(?s:.*)" ||
-             pattern == "[\\s\\S]*";
+      // Exact comparison: whitespace inside a regex is semantically significant, so a pattern
+      // like /(. |\n)*/ must not be treated as the any-text idiom.
+      return node.text == "(.|\\n)*" || node.text == "(\\n|.)*" || node.text == "(?s:.*)" ||
+             node.text == "[\\s\\S]*";
     }
     if (node.kind == Node::Kind::kSequence && node.children.size() == 1) {
       return IsAnyText(node.children[0], visiting);
@@ -1531,7 +1547,6 @@ class LarkCompiler {
   }
 
   std::optional<int32_t> CompileDynamicStart(const Definition& start) {
-    std::unordered_set<std::string> unused_rules;
     std::vector<Node> start_elements = FlattenSequence(start.body);
     if (start_elements.size() != 2) {
       return std::nullopt;
@@ -1564,7 +1579,6 @@ class LarkCompiler {
     if (tail_it == definition_by_name_.end() || !IsAnyText(tail_it->second->body)) {
       return std::nullopt;
     }
-    unused_rules.insert(tail_name->text);
 
     std::vector<DynamicAlternative> alternatives;
     for (const std::string& tool_name : tool_names) {
@@ -1572,7 +1586,6 @@ class LarkCompiler {
       if (tool_it == definition_by_name_.end() || tool_it->second->is_terminal) {
         return std::nullopt;
       }
-      unused_rules.insert(tool_name);
       std::vector<Node> tool_elements = FlattenSequence(tool_it->second->body);
       if (tool_elements.empty()) {
         return std::nullopt;
@@ -1586,7 +1599,6 @@ class LarkCompiler {
         if (head_it != definition_by_name_.end()) {
           trigger = ExtractLazyTrigger(*head_it->second);
           if (trigger.has_value()) {
-            unused_rules.insert(first->text);
             remainder_begin = 1;
           }
         }
@@ -1653,10 +1665,11 @@ class LarkCompiler {
         }
         int32_t body = remainder_choices.size() == 1 ? remainder_choices[0]
                                                      : builder_.AddChoices(remainder_choices);
-        int32_t body_rule = builder_.AddRuleWithHint("lark_dynamic_body", body);
+        // %ignore content is allowed between the trigger and the remainder, consistent with the
+        // skip appended after the trigger of a standalone lazy rule.
+        int32_t body_rule = builder_.AddRuleWithHint("lark_dynamic_body", PrependSkip(body));
         dispatch.tag_rule_pairs.push_back({trigger, body_rule});
       }
-      dynamic_unused_rules_ = std::move(unused_rules);
       return builder_.AddTagDispatch(dispatch);
     }
 
@@ -1681,10 +1694,9 @@ class LarkCompiler {
       }
       int32_t body = remainder_choices.size() == 1 ? remainder_choices[0]
                                                    : builder_.AddChoices(remainder_choices);
-      int32_t body_rule = builder_.AddRuleWithHint("lark_dynamic_token_body", body);
+      int32_t body_rule = builder_.AddRuleWithHint("lark_dynamic_token_body", PrependSkip(body));
       dispatch.trigger_rule_pairs.push_back({token_id, body_rule});
     }
-    dynamic_unused_rules_ = std::move(unused_rules);
     return builder_.AddTokenTagDispatch(dispatch);
   }
 
@@ -1696,7 +1708,6 @@ class LarkCompiler {
   std::unordered_map<std::string, int32_t> rule_ids_;
   int32_t skip_rule_id_ = -1;
   bool allow_initial_skip_ = false;
-  std::unordered_set<std::string> dynamic_unused_rules_;
 };
 
 }  // namespace

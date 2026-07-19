@@ -65,6 +65,32 @@ TEST(LarkConverterTest, NumericAndNamedSpecialTokens) {
   EXPECT_NE(printed.find("Token(1)"), std::string::npos);
 }
 
+TEST(LarkConverterTest, DeadRulesArePrunedFromDynamicGrammars) {
+  auto grammar = Grammar::FromLark(R"(
+    start: tool* tail
+    tail: TEXT
+    tool_head[lazy]: TEXT "<tool_call>"
+    tool: tool_head /[0-9]+/ "</tool_call>"
+    TEXT: /(\n|.)*/
+  )");
+  std::string printed = grammar.ToString();
+  EXPECT_NE(printed.find("TagDispatch"), std::string::npos);
+  EXPECT_EQ(printed.find("tool_head"), std::string::npos);
+  EXPECT_EQ(printed.find("TEXT ::="), std::string::npos);
+}
+
+TEST(LarkConverterTest, NumericTokenIdsValidatedAgainstTokenizer) {
+  TokenizerInfo tokenizer_info({"a", "b"}, VocabType::RAW, 2, std::vector<int32_t>{});
+  XGRAMMAR_EXPECT_THROW(
+      Grammar::FromLark("start: <[100]>", tokenizer_info),
+      XGrammarError,
+      "out of range for vocab size 2"
+  );
+  // Without tokenizer metadata the ids cannot be validated at conversion time.
+  auto grammar = Grammar::FromLark("start: <[100]>");
+  EXPECT_NE(grammar.ToString().find("Token(100)"), std::string::npos);
+}
+
 TEST(LarkConverterTest, ErrorsContainSourceLocations) {
   XGRAMMAR_EXPECT_THROW(
       Grammar::FromLark("item: \"a\""), XGrammarError, "line 1, column 1.*no start rule"
@@ -94,5 +120,15 @@ TEST(LarkConverterTest, ErrorsContainSourceLocations) {
   );
   XGRAMMAR_EXPECT_THROW(
       Grammar::FromLark("start: <[1-2-3]>"), XGrammarError, "invalid numeric special-token range"
+  );
+  XGRAMMAR_EXPECT_THROW(
+      Grammar::FromLark("start: \"a\"i..\"c\""),
+      XGrammarError,
+      "case-insensitive string flags are not supported"
+  );
+  XGRAMMAR_EXPECT_THROW(
+      Grammar::FromLark("start: head\nhead[lazy]: TEXT \"<end>\"\nTEXT: /(. |\\n)*/"),
+      XGrammarError,
+      "general lazy rules are not supported"
   );
 }
