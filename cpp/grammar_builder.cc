@@ -269,6 +269,7 @@ void GrammarBuilder::UpdateMaxTokens(std::string rule_name, int32_t max_tokens) 
   int32_t rule_id = GetRuleId(rule_name);
   XGRAMMAR_CHECK(rule_id != -1) << "Rule " << rule_name << " is not found.";
   UpdateMaxTokens(rule_id, max_tokens);
+}
 
 void GrammarBuilder::UpdateLazy(int32_t rule_id, bool is_lazy) {
   XGRAMMAR_CHECK(rule_id < static_cast<int32_t>(grammar_->rules_.size()))
