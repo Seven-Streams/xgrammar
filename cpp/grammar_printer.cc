@@ -13,6 +13,9 @@ namespace xgrammar {
 
 std::string GrammarPrinter::PrintRule(const Rule& rule) {
   std::string res = rule.name;
+  if (rule.is_lazy) {
+    res += "[lazy]";
+  }
   if (rule.max_tokens >= 0) {
     res += "[max_tokens=" + std::to_string(rule.max_tokens) + "]";
   }
