@@ -107,7 +107,7 @@ struct ParserState {
   /*! \brief The element is invalid when sequence_id is -1. */
   bool IsInvalid() const { return sequence_id == -1; }
 
-  static ParserState GetInvalidState() { return {-1, -1, -1, -1}; }
+  static ParserState GetInvalidState() { return {-1, -1, -1, -1, -1}; }
 
   bool operator==(const ParserState& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
