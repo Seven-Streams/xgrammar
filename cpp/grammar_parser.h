@@ -60,6 +60,8 @@ class EBNFLexer {
     int column;
     // The token budget attached to a rule-definition identifier via name[max_tokens=N], or -1.
     int32_t max_tokens = -1;
+    // Whether the identifier is a rule name carrying the [lazy] attribute, e.g. r[lazy] ::= ...
+    bool is_lazy = false;
   };
 
   EBNFLexer();
