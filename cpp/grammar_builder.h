@@ -192,6 +192,12 @@ class GrammarBuilder {
    */
   void UpdateLookaheadAssertion(std::string rule_name, int32_t lookahead_assertion_id);
 
+  /*! \brief Set whether the rule referred by the given rule_id is lazy (committed-shortest). */
+  void UpdateLazy(int32_t rule_id, bool is_lazy);
+
+  /*! \brief Set whether the rule referred by the given name is lazy (committed-shortest). */
+  void UpdateLazy(std::string rule_name, bool is_lazy);
+
   /*!
    * \brief Find a name for a new rule starting with the given name hint. Some integer suffix (_1,
    * _2, ...) may be added to avoid name conflict.

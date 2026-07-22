@@ -12,7 +12,8 @@
 namespace xgrammar {
 
 std::string GrammarPrinter::PrintRule(const Rule& rule) {
-  std::string res = rule.name + " ::= " + PrintGrammarExpr(rule.body_expr_id);
+  std::string res =
+      rule.name + (rule.is_lazy ? "[lazy]" : "") + " ::= " + PrintGrammarExpr(rule.body_expr_id);
   if (rule.lookahead_assertion_id != -1) {
     res += " (=" + PrintGrammarExpr(rule.lookahead_assertion_id) + ")";
   }

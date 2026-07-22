@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <variant>
 #include <vector>
@@ -142,8 +143,21 @@ EBNFLexer::Token EBNFLexer::Impl::ParseIdentifierOrBooleanToken() {
     };
   }
 
-  // Otherwise it's an identifier
-  return {TokenType::Identifier, identifier, identifier, start_line, start_column};
+  // Otherwise it's an identifier. Recognize the rule attribute form `name[lazy] ::=`; the
+  // bracket group is consumed only when it is followed by ::=, so it cannot be confused with a
+  // character class inside a rule body.
+  Token token{TokenType::Identifier, identifier, identifier, start_line, start_column};
+  if (std::strncmp(cur_, "[lazy]", 6) == 0) {
+    const char* probe = cur_ + 6;
+    while (*probe == ' ' || *probe == '\t' || *probe == '\n' || *probe == '\r') {
+      ++probe;
+    }
+    if (std::strncmp(probe, "::=", 3) == 0) {
+      Consume(6);
+      token.is_lazy = true;
+    }
+  }
+  return token;
 }
 
 // Parse string literal
@@ -1155,6 +1169,7 @@ EBNFParser::Rule EBNFParser::ParseRule() {
     ReportParseError("Expect rule name");
   }
   cur_rule_name_ = std::any_cast<std::string>(Peek().value);
+  bool is_lazy = Peek().is_lazy;
   Consume();
 
   PeekAndConsume(TokenType::Assign, "Expect ::=");
@@ -1166,7 +1181,9 @@ EBNFParser::Rule EBNFParser::ParseRule() {
     lookahead_id = ParseLookaheadAssertion();
   }
 
-  return {cur_rule_name_, body_id, lookahead_id};
+  Rule rule{cur_rule_name_, body_id, lookahead_id};
+  rule.is_lazy = is_lazy;
+  return rule;
 }
 
 void EBNFParser::InitRuleNames() {
@@ -1205,6 +1222,7 @@ Grammar EBNFParser::Parse(
     auto new_rule = ParseRule();
     builder_.UpdateRuleBody(new_rule.name, new_rule.body_expr_id);
     builder_.UpdateLookaheadAssertion(new_rule.name, new_rule.lookahead_assertion_id);
+    builder_.UpdateLazy(new_rule.name, new_rule.is_lazy);
   }
 
   return builder_.Get(root_rule_name);

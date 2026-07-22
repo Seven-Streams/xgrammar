@@ -58,6 +58,8 @@ class EBNFLexer {
                      // literal, etc.
     int line;
     int column;
+    // Whether the identifier is a rule name carrying the [lazy] attribute, e.g. r[lazy] ::= ...
+    bool is_lazy = false;
   };
 
   EBNFLexer();

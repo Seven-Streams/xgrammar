@@ -80,6 +80,9 @@ class Grammar::Impl {
     int32_t lookahead_assertion_id = -1;
     /*! \brief Whether the lookahead assertion is exact. */
     bool is_exact_lookahead = false;
+    /*! \brief Whether the rule matches with committed-shortest (lazy) semantics: at the first
+     * position where the body can complete, it must complete. */
+    bool is_lazy = false;
   };
 
   /*! \brief Get the number of rules. */
@@ -321,7 +324,8 @@ XGRAMMAR_MEMBER_ARRAY(
     &Grammar::Impl::Rule::name,
     &Grammar::Impl::Rule::body_expr_id,
     &Grammar::Impl::Rule::lookahead_assertion_id,
-    &Grammar::Impl::Rule::is_exact_lookahead
+    &Grammar::Impl::Rule::is_exact_lookahead,
+    &Grammar::Impl::Rule::is_lazy
 );
 
 XGRAMMAR_MEMBER_TABLE(
