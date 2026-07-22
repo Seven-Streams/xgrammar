@@ -78,9 +78,6 @@ void EarleyParser::Complete(const ParserState& state, bool debug_print) {
             parent_state.sequence_id,
             parent_state.element_id + 1,
             parent_state.rule_start_pos,
-            0,
-            0,
-            0,
             parent_state.budget_deadline
         });
         continue;
@@ -99,9 +96,6 @@ void EarleyParser::Complete(const ParserState& state, bool debug_print) {
             parent_state.sequence_id,
             parent_state.element_id + 1,
             parent_state.rule_start_pos,
-            0,
-            0,
-            0,
             parent_state.budget_deadline
         });
       }
@@ -131,9 +125,6 @@ void EarleyParser::Complete(const ParserState& state, bool debug_print) {
             parent_state.sequence_id,
             edge.target,
             parent_state.rule_start_pos,
-            0,
-            0,
-            0,
             parent_state.budget_deadline
         });
       }
@@ -143,10 +134,9 @@ void EarleyParser::Complete(const ParserState& state, bool debug_print) {
             parent_state.sequence_id,
             parent_state.element_id,
             parent_state.rule_start_pos,
+            parent_state.budget_deadline,
             0,
-            new_count,
-            0,
-            parent_state.budget_deadline
+            new_count
         });
       }
       break;
@@ -192,9 +182,6 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
             state.sequence_id,
             state.element_id + 1,
             state.rule_start_pos,
-            0,
-            0,
-            0,
             state.budget_deadline
         });
       }
@@ -213,9 +200,6 @@ std::pair</* scanable */ bool, /* completable */ bool> EarleyParser::Predict(
             state.sequence_id,
             state.element_id + 1,
             state.rule_start_pos,
-            0,
-            0,
-            0,
             state.budget_deadline
         });
       }
@@ -341,9 +325,6 @@ EarleyParser::EarleyParser(
         ParserState::kUnexpandedRuleStartSequenceId,
         0,
         ParserState::kNoPrevInputPos,
-        0,
-        0,
-        0,
         DeadlineForRule(grammar_->GetRootRuleId(), -1)
     );
   } else {
@@ -398,9 +379,6 @@ void EarleyParser::Reset() {
       ParserState::kUnexpandedRuleStartSequenceId,
       0,
       ParserState::kNoPrevInputPos,
-      0,
-      0,
-      0,
       DeadlineForRule(grammar_->GetRootRuleId(), -1)
   ));
 }
@@ -417,9 +395,6 @@ bool EarleyParser::ExpandAndEnqueueUnexpandedState(const ParserState& state) {
       cur_rule_body_id,
       grammar_->per_rule_fsms[state.rule_id]->GetFsm().GetStart(),
       ParserState::kNoPrevInputPos,
-      0,
-      0,
-      0,
       state.budget_deadline
   });
   return true;
@@ -490,9 +465,6 @@ void EarleyParser::ExpandNextRuleRefElement(
         state.sequence_id,
         state.element_id + 1,
         state.rule_start_pos,
-        0,
-        0,
-        0,
         state.budget_deadline
     });
   }
@@ -510,9 +482,6 @@ void EarleyParser::ExpandNextRuleRefElement(
         state.sequence_id,
         state.element_id + 1,
         state.rule_start_pos,
-        0,
-        0,
-        0,
         state.budget_deadline
     });
   }
@@ -523,9 +492,6 @@ void EarleyParser::ExpandNextRuleRefElement(
       ref_fsm.GetFsm().GetStart(),
       right_recursion_to_root ? ParserState::kNoPrevInputPos
                               : int32_t(rule_id_to_completable_states_.size() - 1),
-      0,
-      0,
-      0,
       DeadlineForRule(ref_rule_id, state.budget_deadline)
   });
 }
@@ -538,14 +504,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state, bool 
   for (const auto& edge : fsm.GetFsm().GetFsm().GetEdges(state.element_id)) {
     if (edge.IsEpsilon()) {
       Enqueue(ParserState{
-          state.rule_id,
-          state.sequence_id,
-          edge.target,
-          state.rule_start_pos,
-          0,
-          0,
-          0,
-          state.budget_deadline
+          state.rule_id, state.sequence_id, edge.target, state.rule_start_pos, state.budget_deadline
       });
       continue;
     }
@@ -566,14 +525,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state, bool 
 
       if (state.repeat_count >= repeat_info.Lower()) {
         Enqueue(ParserState{
-            state.rule_id,
-            state.sequence_id,
-            target,
-            state.rule_start_pos,
-            0,
-            0,
-            0,
-            state.budget_deadline
+            state.rule_id, state.sequence_id, target, state.rule_start_pos, state.budget_deadline
         });
       }
       if (state.repeat_count >= repeat_info.Upper()) {
@@ -629,10 +581,9 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state, bool 
                  state.sequence_id,
                  state.element_id,
                  state.rule_start_pos,
+                 state.budget_deadline,
                  0,
-                 state.repeat_count,
-                 0,
-                 state.budget_deadline
+                 state.repeat_count
              }}
         );
       } else {
@@ -644,9 +595,6 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state, bool 
                  state.sequence_id,
                  target,
                  state.rule_start_pos,
-                 0,
-                 0,
-                 0,
                  state.budget_deadline
              }}
         );
@@ -660,14 +608,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state, bool 
                           ref_rule_id
                       )) {
       Enqueue(ParserState{
-          state.rule_id,
-          state.sequence_id,
-          target,
-          state.rule_start_pos,
-          0,
-          0,
-          0,
-          state.budget_deadline
+          state.rule_id, state.sequence_id, target, state.rule_start_pos, state.budget_deadline
       });
     }
 
@@ -682,14 +623,7 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state, bool 
                           ref_rule_id
                       )) {
       Enqueue(ParserState{
-          state.rule_id,
-          state.sequence_id,
-          target,
-          state.rule_start_pos,
-          0,
-          0,
-          0,
-          state.budget_deadline
+          state.rule_id, state.sequence_id, target, state.rule_start_pos, state.budget_deadline
       });
     }
     const auto& ref_fsm = grammar_->per_rule_fsms[ref_rule_id].value();
@@ -699,9 +633,6 @@ void EarleyParser::ExpandNextRuleRefElementOnFSM(const ParserState& state, bool 
         ref_fsm.GetFsm().GetStart(),
         right_recursion_to_root ? ParserState::kNoPrevInputPos
                                 : int32_t(rule_id_to_completable_states_.size() - 1),
-        0,
-        0,
-        0,
         DeadlineForRule(ref_rule_id, state.budget_deadline)
     });
   }

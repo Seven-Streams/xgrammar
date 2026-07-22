@@ -47,19 +47,19 @@ struct ParserState {
       const int32_t& sequence_id,
       const int32_t& element_id,
       const int32_t& rule_start_pos,
-      const int32_t& sub_element_id,
+      const int32_t& budget_deadline = -1,
+      const int32_t& sub_element_id = 0,
       const int32_t& repeat_count = 0,
-      const int32_t& partial_codepoint = 0,
-      const int32_t& budget_deadline = -1
+      const int32_t& partial_codepoint = 0
   )
       : rule_id(rule_id),
         sequence_id(sequence_id),
         element_id(element_id),
         rule_start_pos(rule_start_pos),
+        budget_deadline(budget_deadline),
         sub_element_id(sub_element_id),
         repeat_count(repeat_count),
-        partial_codepoint(partial_codepoint),
-        budget_deadline(budget_deadline) {}
+        partial_codepoint(partial_codepoint) {}
 
   /*!
    * \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
@@ -90,6 +90,11 @@ struct ParserState {
   /*! \brief The position of the state, i.e. from which position, the rule starts. */
   int32_t rule_start_pos = -1;
 
+  /*! \brief The last token index this state's derivation may consume, from the token budget
+   * (Rule::max_tokens) of the rule it is inside; -1 means unlimited. Set when a budgeted rule
+   * is predicted and inherited by the states inside it. */
+  int32_t budget_deadline = -1;
+
   /*! \brief The id of the sub element in the current selement of the sequence. */
   int32_t sub_element_id = 0;
 
@@ -99,15 +104,10 @@ struct ParserState {
   /*! \brief Partial codepoint accumulated during UTF-8 decoding for positive character classes. */
   int32_t partial_codepoint = 0;
 
-  /*! \brief The last token index this state's derivation may consume, from the token budget
-   * (Rule::max_tokens) of the rule it is inside; -1 means unlimited. Set when a budgeted rule
-   * is predicted and inherited by the states inside it. */
-  int32_t budget_deadline = -1;
-
   /*! \brief The element is invalid when sequence_id is -1. */
   bool IsInvalid() const { return sequence_id == -1; }
 
-  static ParserState GetInvalidState() { return {-1, -1, -1, -1, -1}; }
+  static ParserState GetInvalidState() { return {-1, -1, -1, -1}; }
 
   bool operator==(const ParserState& other) const {
     return rule_id == other.rule_id && sequence_id == other.sequence_id &&
@@ -154,10 +154,10 @@ XGRAMMAR_MEMBER_ARRAY(
     &ParserState::sequence_id,
     &ParserState::element_id,
     &ParserState::rule_start_pos,
+    &ParserState::budget_deadline,
     &ParserState::sub_element_id,
     &ParserState::repeat_count,
-    &ParserState::partial_codepoint,
-    &ParserState::budget_deadline
+    &ParserState::partial_codepoint
 );
 
 /*!
