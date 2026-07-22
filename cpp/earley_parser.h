@@ -6,6 +6,7 @@
 
 #ifndef XGRAMMAR_EARLEY_PARSER_H_
 #define XGRAMMAR_EARLEY_PARSER_H_
+#include <algorithm>
 #include <cstdint>
 #include <ostream>
 #include <queue>
@@ -48,7 +49,8 @@ struct ParserState {
       const int32_t& rule_start_pos,
       const int32_t& sub_element_id,
       const int32_t& repeat_count = 0,
-      const int32_t& partial_codepoint = 0
+      const int32_t& partial_codepoint = 0,
+      const int32_t& budget_deadline = -1
   )
       : rule_id(rule_id),
         sequence_id(sequence_id),
@@ -56,7 +58,8 @@ struct ParserState {
         rule_start_pos(rule_start_pos),
         sub_element_id(sub_element_id),
         repeat_count(repeat_count),
-        partial_codepoint(partial_codepoint) {}
+        partial_codepoint(partial_codepoint),
+        budget_deadline(budget_deadline) {}
 
   /*!
    * \brief A sequence_id value of kUnexpandedRuleStartSequenceId means a rule hasn't been
@@ -96,6 +99,11 @@ struct ParserState {
   /*! \brief Partial codepoint accumulated during UTF-8 decoding for positive character classes. */
   int32_t partial_codepoint = 0;
 
+  /*! \brief The last token index this state's derivation may consume, from the token budget
+   * (Rule::max_tokens) of the rule it is inside; -1 means unlimited. Set when a budgeted rule
+   * is predicted and inherited by the states inside it. */
+  int32_t budget_deadline = -1;
+
   /*! \brief The element is invalid when sequence_id is -1. */
   bool IsInvalid() const { return sequence_id == -1; }
 
@@ -132,6 +140,9 @@ struct ParserState {
     if (partial_codepoint != 0) {
       result += ", partial_codepoint=" + std::to_string(partial_codepoint);
     }
+    if (budget_deadline != -1) {
+      result += ", budget_deadline=" + std::to_string(budget_deadline);
+    }
     result += ")";
     return result;
   }
@@ -145,7 +156,8 @@ XGRAMMAR_MEMBER_ARRAY(
     &ParserState::rule_start_pos,
     &ParserState::sub_element_id,
     &ParserState::repeat_count,
-    &ParserState::partial_codepoint
+    &ParserState::partial_codepoint,
+    &ParserState::budget_deadline
 );
 
 /*!
@@ -168,7 +180,8 @@ class StateEqualForParsing {
     return lhs.rule_id == rhs.rule_id && lhs.sequence_id == rhs.sequence_id &&
            lhs.element_id == rhs.element_id && lhs.rule_start_pos == rhs.rule_start_pos &&
            lhs.sub_element_id == rhs.sub_element_id && lhs.repeat_count == rhs.repeat_count &&
-           lhs.partial_codepoint == rhs.partial_codepoint;
+           lhs.partial_codepoint == rhs.partial_codepoint &&
+           lhs.budget_deadline == rhs.budget_deadline;
   }
 };
 
@@ -186,7 +199,8 @@ class StateHashForParsing {
         state.rule_start_pos,
         state.sub_element_id,
         state.repeat_count,
-        state.partial_codepoint
+        state.partial_codepoint,
+        state.budget_deadline
     );
   }
 };
@@ -275,6 +289,33 @@ class EarleyParser {
 
   /*! \brief Check if the stop token is accepted. */
   bool stop_token_is_accepted_ = false;
+
+  /*! \brief The index of the LLM token currently being accepted, set by the matcher; -1
+   * before any token. budget_deadline values are compared against it. */
+  int32_t current_token_index_ = -1;
+
+  /*! \brief Whether states past their budget deadline are skipped when scanning. Enabled by
+   * the matcher for accepts that follow an enforcing mask computation. */
+  bool skip_expired_states_ = false;
+
+  /*! \brief Whether any rule of the grammar has a token budget. */
+  bool has_budget_rules_ = false;
+
+  /*! \brief Whether the state's derivation may not consume the next token. */
+  bool IsExpiredState(const ParserState& state) const {
+    return state.budget_deadline >= 0 && current_token_index_ > state.budget_deadline;
+  }
+
+  /*! \brief The deadline for a newly predicted occurrence of the rule: its own budget counted
+   * from the current token, capped by the parent's deadline for nested budgets. */
+  int32_t DeadlineForRule(int32_t rule_id, int32_t parent_deadline) const {
+    int32_t own = grammar_->GetRule(rule_id).max_tokens;
+    if (own < 0) {
+      return parent_deadline;
+    }
+    int32_t deadline = current_token_index_ + own;
+    return parent_deadline >= 0 ? std::min(deadline, parent_deadline) : deadline;
+  }
 
   /*!
    * \brief Check if the state has been added into the queue.
