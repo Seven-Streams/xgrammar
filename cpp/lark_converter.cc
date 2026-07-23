@@ -519,6 +519,8 @@ struct Definition {
   bool lazy = false;
   std::optional<std::string> suffix;
   Location suffix_location;
+  std::optional<std::string> stop;
+  Location stop_location;
   Node body;
   Location location;
 };
@@ -706,8 +708,31 @@ class LarkParser {
         if (definition->suffix.has_value()) {
           RaiseLarkError(source_, key.location, "suffix attribute is specified more than once");
         }
+        if (definition->stop.has_value()) {
+          RaiseLarkError(source_, key.location, "suffix cannot be combined with stop");
+        }
         definition->suffix = std::move(suffix.text);
         definition->suffix_location = suffix.location;
+      } else if (key.text == "stop") {
+        Consume(TokenType::kEquals, "expected '=' after stop attribute");
+        Token stop_token = Consume(TokenType::kString, "expected string literal after stop=");
+        Node stop = ParseStringNode(stop_token);
+        if (!stop.flags.empty()) {
+          RaiseLarkError(
+              source_, stop.location, "case-insensitive flags are not supported on stop"
+          );
+        }
+        if (stop.text.empty()) {
+          RaiseLarkError(source_, stop.location, "stop must not be empty");
+        }
+        if (definition->stop.has_value()) {
+          RaiseLarkError(source_, key.location, "stop attribute is specified more than once");
+        }
+        if (definition->suffix.has_value()) {
+          RaiseLarkError(source_, key.location, "stop cannot be combined with suffix");
+        }
+        definition->stop = std::move(stop.text);
+        definition->stop_location = stop.location;
       } else {
         RaiseLarkError(
             source_,
@@ -1247,7 +1272,7 @@ class LarkCompiler {
   };
 
   static bool HasLazySemantics(const Definition& definition) {
-    return definition.lazy || definition.suffix.has_value();
+    return definition.lazy || definition.suffix.has_value() || definition.stop.has_value();
   }
 
   void ExpandImports() {
@@ -1795,6 +1820,14 @@ class LarkCompiler {
   }
 
   std::optional<Trigger> ExtractLazyTrigger(const Definition& definition) const {
+    if (definition.stop.has_value()) {
+      if (!IsAnyText(definition.body)) {
+        return std::nullopt;
+      }
+      return Trigger{
+          Trigger::Level::kString, definition.stop.value(), {}, definition.stop_location
+      };
+    }
     if (definition.suffix.has_value()) {
       if (!IsAnyText(definition.body)) {
         return std::nullopt;
@@ -1840,7 +1873,8 @@ class LarkCompiler {
       );
     }
     const Node* body = UnwrapSingle(&definition.body);
-    if (body->kind == Node::Kind::kRegex && ExtractLazyRegexTrigger(*body).has_value()) {
+    if (!definition.stop.has_value() && body->kind == Node::Kind::kRegex &&
+        ExtractLazyRegexTrigger(*body).has_value()) {
       RaiseLarkError(
           source_,
           definition.location,
@@ -1850,8 +1884,20 @@ class LarkCompiler {
     auto trigger = ExtractLazyTrigger(definition);
     if (!trigger.has_value()) {
       // General committed-shortest lazy rule: compiled like a terminal (no skip insertion);
-      // the terminal-like requirement is validated after grammar optimization.
+      // the terminal-like requirement is validated after grammar optimization. stop="s"
+      // desugars to the lazy rule over (body "s"): the rule commits at the first "s".
       builder_.UpdateLazy(rule_ids_.at(definition.name), true);
+      if (definition.stop.has_value()) {
+        Node marker;
+        marker.kind = Node::Kind::kString;
+        marker.text = definition.stop.value();
+        marker.location = definition.stop_location;
+        Node desugared;
+        desugared.kind = Node::Kind::kSequence;
+        desugared.location = definition.body.location;
+        desugared.children = {definition.body, std::move(marker)};
+        return CompileNode(desugared, definition.name, true);
+      }
       return CompileNode(definition.body, definition.name, true);
     }
     int32_t empty_rule = builder_.AddRuleWithHint("lark_lazy_end", builder_.AddEmptyStr());

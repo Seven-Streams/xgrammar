@@ -858,7 +858,9 @@ def test_lark_large_choice_grammar() -> None:
             'start[capture]: "a"', "attribute 'capture' is not supported", id="capture-attribute"
         ),
         pytest.param(
-            'start[stop="x"]: "a"', "attribute 'stop' is not supported", id="stop-attribute"
+            'start[temperature=0.7]: "a"',
+            "attribute 'temperature' is not supported",
+            id="unsupported-attribute",
         ),
         pytest.param(
             "TOKEN[lazy]: /a/\nstart: TOKEN",
@@ -1348,3 +1350,120 @@ def test_ebnf_lazy_mask_matches_lark_form() -> None:
     assert _mask_allowed_token_ids(matcher) == [2, 3, 5, 7]
     assert matcher.accept_token(2)
     assert _mask_allowed_token_ids(matcher) == [1]
+
+
+def test_lark_stop_general_body() -> None:
+    grammar = 'start: r "b"\nr[stop="<end>"]: /[a-z]*/'
+    _assert_language(
+        grammar, ["foo<end>b", "<end>b"], ["foob", "fo<end>o<end>b", "foo<end>", "foo<end>bb"]
+    )
+
+
+def test_lark_stop_commits_at_first_marker() -> None:
+    # The marker is inside the body's alphabet: the first occurrence still commits.
+    _assert_language('start: r "c"\nr[stop="b"]: /[a-z]*/', ["aabc", "bc"], ["abbc", "aac", "abab"])
+
+
+def test_lark_stop_desugars_to_lazy_marker_rule() -> None:
+    # stop="s" on a structured body is exactly the lazy rule over (body "s").
+    stop_form = xgr.Grammar.from_lark('start: r "b"\nr[stop=">"]: /[ab]*/')
+    lazy_form = xgr.Grammar.from_lark('start: r "b"\nr[lazy]: /[ab]*/ ">"')
+    assert str(stop_form) == str(lazy_form)
+    assert "r[lazy] ::=" in str(stop_form)
+
+
+def test_lark_stop_any_text_keeps_tag_dispatch() -> None:
+    grammar = 'start: head\nhead[stop="<end>"]: TEXT\nTEXT: /(\\n|.)*/'
+    grammar_obj = xgr.Grammar.from_lark(grammar)
+    assert "TagDispatch" in str(grammar_obj)
+    assert "[lazy]" not in str(grammar_obj)
+    # Same semantics as the equivalent [lazy] dispatch head: text until the first marker,
+    # marker consumed; generation may also end without the marker.
+    _assert_language(grammar, ["", "plain", "<end>", "plain<end>"], ["<end>x", "a<end>b"])
+
+
+def test_lark_dynamic_fixed_string_stop_attribute() -> None:
+    grammar = r"""
+        start: tool* tail
+        tail: TEXT
+        head[stop="<tool>"]: TEXT
+        tool: head /[a-z]+/ "</tool>"
+        TEXT: /(\n|.)*/
+    """
+    _assert_language(
+        grammar,
+        ["free", "x<tool>abc</tool>y", "partial <too"],
+        ["<tool>", "<tool>123</tool>", "<tool>abc"],
+    )
+
+
+def test_lark_stop_mask_commit_and_exit() -> None:
+    # Tokens: 0 "<", 1 ">", 2 "a", 3 "b", 4 "ab", 5 "a>", 6 "ab>", 7 "b>", 8 "bb", 9 " "
+    grammar_obj = xgr.Grammar.from_lark('start: r "b"\nr[stop=">"]: /[ab]*/')
+    matcher = _lazy_mask_matcher(grammar_obj)
+    # Before the marker the region extends freely; every token made of region chars, or
+    # crossing into the marker, is legal. Only "<" and " " are out.
+    assert _mask_allowed_token_ids(matcher) == [1, 2, 3, 4, 5, 6, 7, 8]
+    # "ab>" crosses the commit inside the token: two region chars, then the marker.
+    assert matcher.accept_token(6)
+    assert _mask_allowed_token_ids(matcher) == [3]
+    assert matcher.accept_token(3) and matcher.is_terminated()
+    # Committing via the bare marker: only the closing literal remains.
+    matcher = _lazy_mask_matcher(grammar_obj)
+    assert matcher.accept_token(1)
+    assert _mask_allowed_token_ids(matcher) == [3]
+
+
+def test_lark_stop_ignore_is_not_woven_into_stop_rules() -> None:
+    grammar = 'start: "<" r "b"\nr[stop=">"]: /[a-z]*/\n%ignore " "'
+    _assert_language(grammar, ["<a>b", "< a> b"], ["<a a>b"])
+
+
+def test_lark_stop_round_trips() -> None:
+    grammar_obj = xgr.Grammar.from_lark('start: r "b"\nr[stop="<end>"]: /[a-z]*/')
+    printed = str(grammar_obj)
+    assert "r[lazy] ::=" in printed
+    for candidate in (
+        xgr.Grammar.from_ebnf(printed),
+        xgr.Grammar.deserialize_json(grammar_obj.serialize_json()),
+    ):
+        _assert_grammar_language(candidate, ["foo<end>b"], ["foob"])
+    compiled = xgr.GrammarCompiler(LAZY_TOKENIZER, cache_enabled=True).compile_grammar(grammar_obj)
+    matcher = xgr.GrammarMatcher(compiled, terminate_without_stop_token=True)
+    assert matcher.accept_string("foo<end>b") and matcher.is_terminated()
+
+
+@pytest.mark.parametrize(
+    "grammar, message",
+    [
+        pytest.param('start: r\nr[stop=""]: /[a-z]*/', "stop must not be empty", id="empty"),
+        pytest.param(
+            'start: r\nr[stop="x", stop="y"]: /[a-z]*/',
+            "stop attribute is specified more than once",
+            id="duplicate",
+        ),
+        pytest.param(
+            'start: r\nr[stop="x", suffix="y"]: TEXT\nTEXT: /(\\n|.)*/',
+            "suffix cannot be combined with stop",
+            id="stop-then-suffix",
+        ),
+        pytest.param(
+            'start: r\nr[suffix="y", stop="x"]: TEXT\nTEXT: /(\\n|.)*/',
+            "stop cannot be combined with suffix",
+            id="suffix-then-stop",
+        ),
+        pytest.param(
+            'start: r\nr[stop="x"i]: /[a-z]*/',
+            "case-insensitive flags are not supported on stop",
+            id="case-insensitive",
+        ),
+        pytest.param(
+            'start: r\nR[stop="x"]: /a/\nr: R', "attributes are only supported", id="terminal"
+        ),
+        pytest.param(
+            'start: r\nr[stop="x"]: "a" r', "terminal cannot reference rule", id="rule-reference"
+        ),
+    ],
+)
+def test_lark_stop_errors(grammar: str, message: str) -> None:
+    _assert_lark_error(grammar, message)

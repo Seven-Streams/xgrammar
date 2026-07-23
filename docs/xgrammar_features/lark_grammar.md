@@ -474,3 +474,24 @@ Notes:
   across a commit exactly.
 - The same attribute is available in the EBNF frontend: `name[lazy] ::= ...`, and it round-trips
   through `Grammar.__str__()` / `Grammar.from_ebnf()`.
+
+### The `stop` Attribute
+
+`rule[stop="s"]` matches the rule's body lazily until the first occurrence of the marker string
+`s`; the marker is consumed as part of the match.
+
+```text
+start: answer "</answer>" summary
+answer[stop="."]: /[^<]*/     // free-ish text, ends at the first "."
+summary: /(\n|.)*/
+```
+
+- On an arbitrary-text body (`TEXT: /(\n|.)*/` and friends), `stop="s"` compiles to the same
+  efficient dispatch machinery as `head[lazy]: TEXT "s"`, with identical semantics (including
+  that generation may end without the marker).
+- On any other body, `rule[stop="s"]: body` is exactly the committed-shortest rule
+  `rule[lazy]: body "s"`: the rule commits at the first `s`, and the marker is required. The
+  terminal-like restriction and lexeme behavior of general lazy rules apply unchanged.
+- `stop` must be a non-empty string literal and cannot be combined with `suffix`. In the printed
+  EBNF form the attribute appears in its desugared shape (`rule[lazy] ::= body "s"`), which is
+  what round-trips.
