@@ -34,6 +34,12 @@ if(TVM_FFI_INCLUDES)
 endif()
 target_link_libraries(xgrammar_bindings PRIVATE python_methods)
 target_link_libraries(xgrammar_bindings PRIVATE tvm_ffi::header tvm_ffi::shared)
+# Keep symbols pulled from static archives (notably gcc-toolset's libstdc++_nonshared.a on
+# manylinux) out of the dynamic export table, so other libraries can never end up linking against
+# them.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_link_options(xgrammar_bindings PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
 
 if(DEFINED SKBUILD_PROJECT_NAME)
   set(LIB_OUTPUT_DIRECTORY xgrammar)
