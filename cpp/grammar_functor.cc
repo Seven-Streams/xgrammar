@@ -18,6 +18,8 @@
 #include <stack>
 #include <string>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "compiled_grammar_impl.h"
@@ -83,6 +85,7 @@ class SubGrammarAdderImpl : public GrammarMutator {
       }
       builder_->UpdateLazy(new_rule_ids_names[i].first, rule.is_lazy);
       builder_->UpdateRuleTemperature(new_rule_ids_names[i].first, rule.temperature);
+      builder_->UpdateExcludes(new_rule_ids_names[i].first, rule.excludes);
     }
     return new_rule_ids_names[base_grammar_->GetRootRuleId()].first;
   }
@@ -295,6 +298,7 @@ class StructureNormalizerImpl : public GrammarMutator {
       }
       builder_->UpdateLazy(i, rule.is_lazy);
       builder_->UpdateRuleTemperature(i, rule.temperature);
+      builder_->UpdateExcludes(i, rule.excludes);
     }
     return builder_->Get(base_grammar_->GetRootRule().name);
   }
@@ -807,7 +811,7 @@ class RuleInlinerImpl : public InPlaceGrammarRewriter {
     // Inlining a temperature rule would erase the rule its sampling temperature applies to.
     if (rule.max_tokens >= 0 || rule.max_chars >= 0 || !rule.capture_name.empty() ||
         (*grammar_)->GetSuffixStopInfo(rule_id) != nullptr || rule.is_lazy ||
-        rule.temperature.has_value()) {
+        rule.temperature.has_value() || !rule.excludes.empty()) {
       can_rule_be_inlined_[rule_id] = false;
       return false;
     }
@@ -939,6 +943,7 @@ class DeadCodeEliminatorImpl : public GrammarMutator {
       }
       builder_->UpdateLazy(rule_id_map_[rule_id], rule.is_lazy);
       builder_->UpdateRuleTemperature(rule_id_map_[rule_id], rule.temperature);
+      builder_->UpdateExcludes(rule_id_map_[rule_id], rule.excludes);
     }
     XGRAMMAR_CHECK(rule_id_map_.count(grammar->GetRootRuleId()) > 0);
     return builder_->Get(rule_id_map_[grammar->GetRootRuleId()]);
@@ -2043,7 +2048,7 @@ class RegularGrammarFSMBuilder {
     }
     if (rule.lookahead_assertion_id >= 0 || rule.max_tokens >= 0 || rule.max_chars >= 0 ||
         !rule.capture_name.empty() || rule.is_lazy || rule.temperature.has_value() ||
-        grammar_->GetSuffixStopInfo(rule_id) != nullptr) {
+        !rule.excludes.empty() || grammar_->GetSuffixStopInfo(rule_id) != nullptr) {
       return Fail("annotated rule " + rule.name + " is not a plain regular rule");
     }
     int entry = AddState();
@@ -2159,16 +2164,57 @@ class RegularGrammarFSMBuilder {
 
 class RepetitionRangeExpanderImpl : public GrammarMutator {
  public:
-  using GrammarMutator::Apply;
   using GrammarMutator::GrammarMutator;
 
+  Grammar Apply(const Grammar& grammar) final {
+    // An excluding rule whose whole body is one repetition is expanded in place, so that the rule
+    // itself is the expansion. Wrapping the expansion in a separate rule would leave the
+    // expansion without the lookahead assertion the analyzer derives from the excluding rule's
+    // context, which makes the masks of a bounded string an order of magnitude slower.
+    in_place_body_rules_.clear();
+    for (int32_t rule_id = 0; rule_id < grammar->NumRules(); ++rule_id) {
+      const auto& rule = grammar->GetRule(rule_id);
+      if (rule.excludes.empty()) {
+        continue;
+      }
+      const auto& body = grammar->GetGrammarExpr(rule.body_expr_id);
+      if (body.type != GrammarExprType::kChoices || body.size() != 1) {
+        continue;
+      }
+      const auto& sequence = grammar->GetGrammarExpr(body[0]);
+      if (sequence.type != GrammarExprType::kSequence || sequence.size() != 1) {
+        continue;
+      }
+      if (grammar->GetGrammarExpr(sequence[0]).type == GrammarExprType::kRepeat) {
+        in_place_body_rules_[rule.body_expr_id] = rule_id;
+      }
+    }
+    return GrammarMutator::Apply(grammar);
+  }
+
  private:
+  using GrammarMutator::VisitExpr;
+
+  int32_t VisitExpr(int32_t old_grammar_expr_id) final {
+    auto it = in_place_body_rules_.find(old_grammar_expr_id);
+    if (it == in_place_body_rules_.end()) {
+      return GrammarMutator::VisitExpr(old_grammar_expr_id);
+    }
+    const auto& body = base_grammar_->GetGrammarExpr(old_grammar_expr_id);
+    const auto& sequence = base_grammar_->GetGrammarExpr(body[0]);
+    const auto& repeat = base_grammar_->GetGrammarExpr(sequence[0]);
+    return HandleRepetitionRange(cur_rule_name_, repeat[0], repeat[1], repeat[2], it->second);
+  }
+
   int32_t VisitRepeat(const GrammarExpr& grammar_expr) final {
     int32_t ref_rule_id = grammar_expr[0];
     int64_t lower = grammar_expr[1];
     int64_t upper = grammar_expr[2];
     return HandleRepetitionRange(cur_rule_name_, ref_rule_id, lower, upper);
   }
+
+  /*! \brief Body expr id -> rule id of the rules whose body is expanded in place. */
+  std::unordered_map<int32_t, int32_t> in_place_body_rules_;
 
   /*!
    * \brief Handle repetition range by unzipping into explicit sequence/choice (for small bounds).
@@ -2189,10 +2235,17 @@ class RepetitionRangeExpanderImpl : public GrammarMutator {
    * \param rule_id The rule to repeat.
    * \param lower Minimum count (inclusive).
    * \param upper Maximum count (inclusive), or -1 for unbounded.
+   * \param in_place_rule_id When non-negative, the rule whose whole body is this repetition: the
+   * expansion's body is returned (and memoized as a reference to that rule) instead of a
+   * reference to a new rule.
    * \return grammar_expr_id of the repetition result.
    */
   int32_t HandleRepetitionRange(
-      const std::string& cur_rule_name, int32_t rule_id, int64_t lower, int64_t upper
+      const std::string& cur_rule_name,
+      int32_t rule_id,
+      int64_t lower,
+      int64_t upper,
+      int32_t in_place_rule_id = -1
   );
 
   /*!
@@ -2292,18 +2345,22 @@ int32_t RepetitionRangeExpanderImpl::LegacyHandleRepetitionRange(
 }
 
 int32_t RepetitionRangeExpanderImpl::HandleRepetitionRange(
-    const std::string& cur_rule_name, int32_t rule_id, int64_t lower, int64_t upper
+    const std::string& cur_rule_name,
+    int32_t rule_id,
+    int64_t lower,
+    int64_t upper,
+    int32_t in_place_rule_id
 ) {
   // Check if the referred rule is only one single element. If so, we can directly use the element
   // for further optimization.
   int32_t grammar_expr_id = builder_->AddRuleRef(rule_id);
   const auto& ref_rule = base_grammar_->GetRule(rule_id);
   const auto& ref_rule_body = base_grammar_->GetGrammarExpr(ref_rule.body_expr_id);
-  // Keep the reference to budgeted, suffix/stop, lazy, and temperature rules: replacing it with
-  // the rule's content would erase the rule that the runtime semantics apply to.
+  // Keep the reference to budgeted, suffix/stop, lazy, temperature, and excluding rules: replacing
+  // it with the rule's content would erase the rule that the runtime semantics apply to.
   if (ref_rule.max_tokens < 0 && ref_rule.max_chars < 0 &&
       base_grammar_->GetSuffixStopInfo(rule_id) == nullptr && !ref_rule.is_lazy &&
-      !ref_rule.temperature.has_value() &&
+      !ref_rule.temperature.has_value() && ref_rule.excludes.empty() &&
       ref_rule_body.type == GrammarBuilder::GrammarExprType::kChoices &&
       ref_rule_body.size() == 1) {
     const auto& ref_choice = base_grammar_->GetGrammarExpr(ref_rule_body[0]);
@@ -2325,10 +2382,21 @@ int32_t RepetitionRangeExpanderImpl::HandleRepetitionRange(
   cache_key.push_back(upper);
   auto it = repetition_cache_.find(cache_key);
   if (it != repetition_cache_.end()) {
+    if (in_place_rule_id >= 0) {
+      return builder_->AddChoices({builder_->AddSequence({it->second})});
+    }
     return it->second;
   }
 
   int32_t result = ExpandRepetitionRange(cur_rule_name, grammar_expr_id, lower, upper);
+  if (in_place_rule_id >= 0) {
+    // Take over the body of the rule the expansion created; that rule becomes unreferenced and
+    // is removed by the dead code elimination that follows.
+    const auto result_ref = builder_->GetGrammarExpr(result);
+    XGRAMMAR_DCHECK(result_ref.type == GrammarExprType::kRuleRef);
+    repetition_cache_.emplace(std::move(cache_key), builder_->AddRuleRef(in_place_rule_id));
+    return builder_->GetRule(result_ref[0]).body_expr_id;
+  }
   repetition_cache_.emplace(std::move(cache_key), result);
   return result;
 }
@@ -2481,6 +2549,7 @@ class LazyBodyFlattenerImpl : public GrammarMutator {
       }
       builder_->UpdateLazy(i, rule.is_lazy);
       builder_->UpdateRuleTemperature(i, rule.temperature);
+      builder_->UpdateExcludes(i, rule.excludes);
     }
     return builder_->Get(base_grammar_->GetRootRule().name);
   }
@@ -2995,6 +3064,7 @@ class GrammarOptimizerImpl {
     ValidateLazyRules(result);
     RepetitionNormalizer::Apply(&result);
     GrammarFSMBuilder::Apply(&result);
+    ExclusionAutomatonBuilder::Apply(&result);
     result->optimized = true;
     return result;
   }
@@ -3141,6 +3211,15 @@ class RootRuleRenamerImpl {
     return grammar_copy;
   }
 };
+
+/*! \brief Hash of a rule's excludes; 0 when the rule has none. */
+inline uint64_t HashRuleExcludes(const Grammar::Impl::Rule& rule) {
+  uint64_t hash = 0;
+  for (const auto& excluded : rule.excludes) {
+    hash = HashCombine(hash, std::hash<std::string>{}(excluded));
+  }
+  return hash;
+}
 
 class GrammarFSMHasherImpl {
  public:
@@ -3396,7 +3475,9 @@ void GrammarFSMHasherImpl::Apply(Grammar* grammar) {
 }
 
 std::pair<bool, uint64_t> GrammarFSMHasherImpl::IsPartialHashable(int fsm_index) {
-  uint64_t hash_result = 0;
+  // Excludes change the token masks at runtime without changing the FSM, so a rule with excludes
+  // must never share the rule-level mask cache with an otherwise identical rule.
+  uint64_t hash_result = HashRuleExcludes((*grammar_)->GetRule(fsm_index));
   XGRAMMAR_DCHECK(fsm_index >= 0 && fsm_index < (*grammar_)->NumRules())
       << "Invalid fsm index: " << fsm_index << " num_rules: " << (*grammar_)->NumRules();
   XGRAMMAR_DCHECK(grammar_->ImplPtr()->per_rule_fsms[fsm_index].has_value());
@@ -3509,7 +3590,9 @@ std::pair<bool, uint64_t> GrammarFSMHasherImpl::IsPartialHashable(int fsm_index)
 }
 
 uint64_t GrammarFSMHasherImpl::HashFsm(int fsm_index) {
-  uint64_t hash_result = 0;
+  // Excludes change the token masks at runtime without changing the FSM, so a rule with excludes
+  // must never share the rule-level mask cache with an otherwise identical rule.
+  uint64_t hash_result = HashRuleExcludes((*grammar_)->GetRule(fsm_index));
   XGRAMMAR_DCHECK(fsm_index >= 0 && fsm_index < (*grammar_)->NumRules())
       << "Invalid fsm index: " << fsm_index << " num_rules: " << (*grammar_)->NumRules();
   XGRAMMAR_DCHECK(grammar_->ImplPtr()->per_rule_fsms[fsm_index].has_value());
@@ -3907,6 +3990,145 @@ Grammar StructureNormalizer::Apply(const Grammar& grammar) {
 /*************************** Forward grammar optimizers to their impl ***************************/
 
 void GrammarFSMBuilder::Apply(Grammar* grammar) { GrammarFSMBuilderImpl::Apply(grammar); }
+
+/*!
+ * \brief Append the byte-level Aho-Corasick automaton of the patterns to the flat transition
+ * table (256 entries per state; -1 marks a transition that completes a pattern) and return the
+ * global id of its start state.
+ */
+static int32_t AppendExclusionAutomaton(
+    const std::vector<std::string>& patterns, std::vector<int32_t>* transitions
+) {
+  std::vector<std::array<int32_t, 256>> next;
+  std::vector<bool> completes_pattern;
+  auto add_state = [&]() {
+    next.emplace_back();
+    next.back().fill(-1);
+    completes_pattern.push_back(false);
+    return static_cast<int32_t>(next.size()) - 1;
+  };
+  add_state();  // The root.
+  for (const auto& pattern : patterns) {
+    int32_t state = 0;
+    for (unsigned char byte : pattern) {
+      if (next[state][byte] < 0) {
+        next[state][byte] = add_state();
+      }
+      state = next[state][byte];
+    }
+    completes_pattern[state] = true;
+  }
+  // Complete the transition function through the failure links in BFS order, and mark every
+  // state whose failure chain contains a pattern end as completing a pattern as well.
+  std::vector<int32_t> fail(next.size(), 0);
+  std::queue<int32_t> queue;
+  for (int byte = 0; byte < 256; ++byte) {
+    if (next[0][byte] >= 0) {
+      queue.push(next[0][byte]);
+    } else {
+      next[0][byte] = 0;
+    }
+  }
+  while (!queue.empty()) {
+    int32_t state = queue.front();
+    queue.pop();
+    completes_pattern[state] = completes_pattern[state] || completes_pattern[fail[state]];
+    for (int byte = 0; byte < 256; ++byte) {
+      int32_t child = next[state][byte];
+      if (child >= 0) {
+        fail[child] = next[fail[state]][byte];
+        queue.push(child);
+      } else {
+        next[state][byte] = next[fail[state]][byte];
+      }
+    }
+  }
+  const int32_t offset = static_cast<int32_t>(transitions->size() / 256);
+  transitions->reserve(transitions->size() + next.size() * 256);
+  for (const auto& row : next) {
+    for (int byte = 0; byte < 256; ++byte) {
+      transitions->push_back(completes_pattern[row[byte]] ? -1 : offset + row[byte]);
+    }
+  }
+  return offset;
+}
+
+/*!
+ * \brief The parser inherits the exclusion state into every rule reached from an excluding rule
+ * and does not advance it over token edges, so those rules must carry the same excludes or none,
+ * and must not use token edges.
+ */
+static void CheckExcludingRegions(const Grammar& grammar) {
+  const auto* impl = grammar.ImplPtr();
+  const int32_t num_rules = grammar->NumRules();
+  const auto& repeat_aux = impl->complete_fsm.GetEdgeAuxData();
+  for (int32_t root = 0; root < num_rules; ++root) {
+    const auto& root_rule = grammar->GetRule(root);
+    if (root_rule.excludes.empty()) continue;
+    std::vector<bool> visited(num_rules, false);
+    std::vector<int32_t> stack{root};
+    visited[root] = true;
+    while (!stack.empty()) {
+      const int32_t rule_id = stack.back();
+      stack.pop_back();
+      const auto& rule = grammar->GetRule(rule_id);
+      XGRAMMAR_CHECK(rule.excludes.empty() || rule.excludes == root_rule.excludes)
+          << "Rule " << rule.name << " is reachable from rule " << root_rule.name
+          << " but has different excludes; nested exclusions are not supported";
+      XGRAMMAR_CHECK(impl->per_rule_fsms[rule_id].has_value());
+      // The per-rule FSMs share one state space (complete_fsm), so only visit the states this
+      // rule can reach from its start.
+      const auto& rule_fsm = impl->per_rule_fsms[rule_id]->GetFsm();
+      const auto& fsm = rule_fsm.GetFsm();
+      std::unordered_set<int> reachable_states;
+      rule_fsm.GetReachableStates(&reachable_states);
+      for (int state : reachable_states) {
+        for (const auto& edge : fsm.GetEdges(state)) {
+          XGRAMMAR_CHECK(!edge.IsToken() && !edge.IsExcludeToken())
+              << "Rule " << rule.name << " uses token edges inside the excluding rule "
+              << root_rule.name << "; excludes only apply to byte-level rules";
+          int32_t target = -1;
+          if (edge.IsRuleRef()) {
+            target = edge.max;
+          } else if (edge.IsRepeatRef()) {
+            target = repeat_aux[edge.max];
+          }
+          if (target >= 0 && !visited[target]) {
+            visited[target] = true;
+            stack.push_back(target);
+          }
+        }
+      }
+    }
+  }
+}
+
+void ExclusionAutomatonBuilder::Apply(Grammar* grammar) {
+  auto* impl = grammar->ImplPtr();
+  impl->exclusion_transitions.clear();
+  impl->rule_exclusion_start_states.clear();
+  const int32_t num_rules = (*grammar)->NumRules();
+  bool has_excludes = false;
+  for (int32_t rule_id = 0; rule_id < num_rules && !has_excludes; ++rule_id) {
+    has_excludes = !(*grammar)->GetRule(rule_id).excludes.empty();
+  }
+  if (!has_excludes) return;
+
+  impl->rule_exclusion_start_states.assign(num_rules, -1);
+  std::map<std::vector<std::string>, int32_t> start_states;
+  for (int32_t rule_id = 0; rule_id < num_rules; ++rule_id) {
+    const auto& excludes = (*grammar)->GetRule(rule_id).excludes;
+    if (excludes.empty()) continue;
+    auto it = start_states.find(excludes);
+    if (it == start_states.end()) {
+      it = start_states
+               .emplace(excludes, AppendExclusionAutomaton(excludes, &impl->exclusion_transitions))
+               .first;
+    }
+    impl->rule_exclusion_start_states[rule_id] = it->second;
+  }
+  CheckExcludingRegions(*grammar);
+}
 
 void RepetitionNormalizer::Apply(Grammar* grammar) { RepetitionNormalizerImpl().Apply(grammar); }
 
